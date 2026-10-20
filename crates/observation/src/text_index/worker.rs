@@ -10,6 +10,7 @@ use std::{
 const BLOCK: usize = 64 * 1024;
 const OVERLAP: usize = 1024;
 const SCAN_ROWS: usize = 256;
+const SOURCE_SCAN_BUDGET: Duration = Duration::from_millis(50);
 const NEXT_SOURCE_SQL: &str = "SELECT b.rowid,b.workspace_id,b.blob_digest,b.object_path,b.byte_count,b.media_type FROM content_blobs_v2 b
              WHERE b.rowid>?1 AND b.rowid<=?2 AND b.state='complete' AND (b.media_type LIKE 'text/%' OR b.media_type='application/json' OR b.media_type LIKE 'application/vnd.hiroute.%')
                AND NOT EXISTS(SELECT 1 FROM observation_text_index_v2 i WHERE i.workspace=b.workspace_id AND i.digest=b.blob_digest)
@@ -32,6 +33,8 @@ pub struct TextIndexBuilder {
     _owner: crate::maintenance::LocalWorkerGuard,
     building: Option<Building>,
     scan_after: i64,
+    scan_checkpoint: Option<(u64, u64)>,
+    idle_checkpoint: Option<(u64, u64)>,
     lookup_backfill: super::lookup::Backfill,
 }
 impl TextIndexBuilder {
@@ -52,6 +55,8 @@ impl TextIndexBuilder {
         Ok(Self {
             building: None,
             scan_after: 0,
+            scan_checkpoint: None,
+            idle_checkpoint: None,
             lookup_backfill: Default::default(),
             _owner: owner,
         })
@@ -62,13 +67,31 @@ impl TextIndexBuilder {
     pub fn cycle(&mut self, store: &LocalObservationStore) -> Result<usize, Error> {
         let started = Instant::now();
         let mut bytes = self.lookup_backfill.cycle(store, started)?;
+        let checkpoint = source_checkpoint(store)?;
+        if self.building.is_none() && self.idle_checkpoint == Some(checkpoint) {
+            return Ok(0);
+        }
+        self.idle_checkpoint = None;
+        self.scan_checkpoint.get_or_insert(checkpoint);
         let mut completed = 0;
         while bytes < 8 * 1024 * 1024 && started.elapsed() < Duration::from_millis(500) {
             if self.building.is_none() {
+                // Empty metadata windows consume no byte budget. Do not spend
+                // the whole input-processing allowance rescanning ready history.
+                if started.elapsed() >= SOURCE_SCAN_BUDGET {
+                    break;
+                }
                 let (building, exhausted) = next(store, &mut self.scan_after)?;
                 self.building = building;
                 if self.building.is_none() {
                     if exhausted {
+                        // A liveness change behind this pass's cursor requires
+                        // another pass, even if the tail has already been read.
+                        let current = source_checkpoint(store)?;
+                        if self.scan_checkpoint == Some(current) {
+                            self.idle_checkpoint = Some(current);
+                        }
+                        self.scan_checkpoint = None;
                         break;
                     }
                     continue;
@@ -138,6 +161,18 @@ impl TextIndexBuilder {
     }
 }
 
+fn source_checkpoint(store: &LocalObservationStore) -> Result<(u64, u64), Error> {
+    let connection = store.connection.lock();
+    // Accepted fact/content mutations and deletion advance the persisted core
+    // revision, including compatible writers on other connections. Local changes
+    // also catch cache repair and liveness transitions during maintenance. Read
+    // scopes written by separate query connections do not restart an idle scan.
+    Ok((
+        crate::store::store_revision(&connection).map_err(|_| Error::Unavailable)?,
+        connection.total_changes(),
+    ))
+}
+
 fn next(store: &LocalObservationStore, after: &mut i64) -> Result<(Option<Building>, bool), Error> {
     let source = {
         let connection = store.connection.lock();
@@ -171,7 +206,7 @@ fn next(store: &LocalObservationStore, after: &mut i64) -> Result<(Option<Buildi
     let Some((_, workspace, digest, path, expected_bytes, media)) = source else {
         return Ok((None, false));
     };
-    let file = File::open(path);
+    let file = File::open(store.object_path(&path).map_err(|_| Error::Corrupt)?);
     store.connection.lock().execute(
         "INSERT OR IGNORE INTO observation_text_index_v2(workspace,digest,state) VALUES(?1,?2,?3)",
         params![workspace,digest,if file.is_ok() {"building"} else {"failed"}],

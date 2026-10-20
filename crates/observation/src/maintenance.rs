@@ -79,19 +79,57 @@ fn run(
     let mut blob_gc = BlobGcSchedule {
         next_due: Instant::now(),
     };
+    let mut interval = MAINTENANCE_INTERVAL;
     while matches!(
-        stop.recv_timeout(MAINTENANCE_INTERVAL),
+        stop.recv_timeout(interval),
         Err(mpsc::RecvTimeoutError::Timeout)
     ) {
         let Some(store) = store.upgrade() else {
             break;
         };
+        let capacity_failed = store
+            .capacity_cycle(
+                std::time::SystemTime::now()
+                    .duration_since(std::time::UNIX_EPOCH)
+                    .ok()
+                    .and_then(|t| i64::try_from(t.as_millis()).ok())
+                    .unwrap_or(0),
+            )
+            .is_err();
         let backfill_failed = store.backfill_inline_payloads().is_err();
         let settlement_failed = store.settle_pending_valuations(16).is_err();
         let now_ms = std::time::SystemTime::now()
             .duration_since(std::time::UNIX_EPOCH)
             .ok()
             .and_then(|time| i64::try_from(time.as_millis()).ok());
+        // Reuse this lifecycle without limiting catch-up to the settlement
+        // tick's sixteen requests. Release the writer after each <=200 batch.
+        let analysis_start = Instant::now();
+        let mut analysis_failed = false;
+        let mut analysis_backlog = false;
+        if let Some(now) = now_ms {
+            while analysis_start.elapsed() < Duration::from_millis(50) {
+                match store.reconcile_analysis_batch(now) {
+                    Ok(0) => {
+                        analysis_backlog = false;
+                        break;
+                    }
+                    Ok(_) => {
+                        analysis_backlog = true;
+                        std::thread::yield_now()
+                    }
+                    Err(_) => {
+                        analysis_failed = true;
+                        break;
+                    }
+                }
+            }
+        }
+        interval = if analysis_backlog && !analysis_failed {
+            Duration::from_millis(1)
+        } else {
+            MAINTENANCE_INTERVAL
+        };
         let retention_failed = now_ms
             .map(|now| {
                 store.managed_text_expire_pending(now, 16).is_err()
@@ -117,12 +155,14 @@ fn run(
                 index.is_none()
             }
         };
-        if backfill_failed
+        if capacity_failed
+            || backfill_failed
             || settlement_failed
             || retention_failed
             || gc_failed
             || hook_failed
             || index_failed
+            || analysis_failed
         {
             store
                 .maintenance_errors

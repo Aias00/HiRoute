@@ -35,6 +35,7 @@ pub struct CpaLoginSession {
     pub kind: CpaAccountKind,
     pub state: CpaLoginState,
     pub account_ref: Option<String>,
+    pub manual_callback_required: bool,
 }
 
 impl CpaLoginSession {
@@ -67,6 +68,7 @@ impl LoginRecord {
             kind: self.kind,
             state: self.state,
             account_ref: self.account_ref.clone(),
+            manual_callback_required: false,
         }
     }
 }
@@ -74,6 +76,16 @@ impl LoginRecord {
 struct Session {
     record: LoginRecord,
     runtime: Arc<ManagedCpaRuntime>,
+    manual_callback_required: bool,
+}
+
+impl Session {
+    fn safe(&self) -> CpaLoginSession {
+        let mut safe = self.record.safe();
+        safe.manual_callback_required =
+            safe.state == CpaLoginState::Pending && self.manual_callback_required;
+        safe
+    }
 }
 
 pub(crate) struct ManagedLoginRegistry {
@@ -161,7 +173,11 @@ impl ManagedLoginRegistry {
             return Err(CpaLifecycleError::OwnerState);
         }
         let runtime = self.make_runtime(templates, &record)?;
-        let mut session = Session { record, runtime };
+        let mut session = Session {
+            record,
+            runtime,
+            manual_callback_required: false,
+        };
         if session.record.state == CpaLoginState::Pending {
             // Stop only an authenticated existing owner. Recovery cannot start a new
             // refresh writer before saved management has granted execution.
@@ -249,14 +265,26 @@ impl ManagedLoginRegistry {
                 let _ = runtime.shutdown();
                 record.state = CpaLoginState::Failed;
                 self.save(&record)?;
-                sessions.insert(id, Session { record, runtime });
+                sessions.insert(
+                    id,
+                    Session {
+                        record,
+                        runtime,
+                        manual_callback_required: false,
+                    },
+                );
                 return Err(error);
             }
         };
         record.oauth_state = Some(login.state);
         self.save(&record)?;
-        let safe = record.safe();
-        sessions.insert(id, Session { record, runtime });
+        let session = Session {
+            record,
+            runtime,
+            manual_callback_required: login.manual_callback_required,
+        };
+        let safe = session.safe();
+        sessions.insert(id, session);
         Ok((safe, login.authorization_url))
     }
 
@@ -265,7 +293,7 @@ impl ManagedLoginRegistry {
             .lock()
             .values()
             .filter(|s| s.record.kind == kind)
-            .map(|s| s.record.safe())
+            .map(|s| s.safe())
             .collect()
     }
 
@@ -275,11 +303,11 @@ impl ManagedLoginRegistry {
             .get_mut(id)
             .ok_or(CpaLifecycleError::InvalidSourceManagement)?;
         if session.record.state != CpaLoginState::Pending {
-            return Ok(session.record.safe());
+            return Ok(session.safe());
         }
         if now()? >= session.record.expires_at {
             self.stop_session(session, CpaLoginState::Expired)?;
-            return Ok(session.record.safe());
+            return Ok(session.safe());
         }
         let oauth_state = session
             .record
@@ -306,7 +334,7 @@ impl ManagedLoginRegistry {
             }
             crate::CpaOAuthStatus::Failed => self.stop_session(session, CpaLoginState::Failed)?,
         }
-        Ok(session.record.safe())
+        Ok(session.safe())
     }
 
     /// Daemon-owned housekeeping continues even when the login client has disconnected.
@@ -364,7 +392,7 @@ impl ManagedLoginRegistry {
                 CpaLoginState::Cancelled
             },
         )?;
-        Ok(session.record.safe())
+        Ok(session.safe())
     }
 
     pub(crate) fn for_candidate(&self, candidate: &str) -> Option<Arc<ManagedCpaRuntime>> {
@@ -373,13 +401,13 @@ impl ManagedLoginRegistry {
             .values()
             .find(|session| {
                 session.record.state == CpaLoginState::Authorized
-                    && session.record.safe().candidate_ref() == candidate
+                    && session.safe().candidate_ref() == candidate
             })
             .map(|session| session.runtime.clone())
     }
 
     pub(crate) fn session(&self, id: &str) -> Option<CpaLoginSession> {
-        self.sessions.lock().get(id).map(|s| s.record.safe())
+        self.sessions.lock().get(id).map(|s| s.safe())
     }
 
     pub(crate) fn all_runtimes(&self) -> Vec<Arc<ManagedCpaRuntime>> {

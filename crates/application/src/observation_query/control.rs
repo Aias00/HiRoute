@@ -29,6 +29,8 @@ pub(crate) struct ObservationControl {
     clock: Arc<dyn ApplicationClockPort>,
     value_scope: Arc<dyn ValueScopePort>,
     workspace_id: WorkspaceId,
+    prices: Option<Arc<dyn crate::prices::SourcePriceControlPort>>,
+    routing: Option<Arc<dyn crate::control::RoutingFactsPort>>,
 }
 
 impl ObservationControl {
@@ -44,7 +46,25 @@ impl ObservationControl {
             clock,
             value_scope,
             workspace_id: WorkspaceId::default(),
+            prices: None,
+            routing: None,
         }
+    }
+
+    pub(crate) fn with_prices(
+        mut self,
+        prices: Option<Arc<dyn crate::prices::SourcePriceControlPort>>,
+    ) -> Self {
+        self.prices = prices;
+        self
+    }
+
+    pub(crate) fn with_routing(
+        mut self,
+        routing: Option<Arc<dyn crate::control::RoutingFactsPort>>,
+    ) -> Self {
+        self.routing = routing;
+        self
     }
 
     pub(crate) fn list(
@@ -67,7 +87,7 @@ impl ObservationControl {
                 "ListSessions"
             },
             &request,
-            request.query.is_none(),
+            true,
         )?;
         let cursor = request.cursor.as_deref().map(decode_cursor).transpose()?;
         let to_ms = match request.to_ms.or_else(|| cursor.as_ref().map(|c| c.to_ms)) {
@@ -115,6 +135,47 @@ impl ObservationControl {
         serde_json::to_value(page).map_err(|_| ObservationQueryError::Corrupt)
     }
 
+    pub(crate) fn capacity(
+        &self,
+        ambient: PrincipalKind,
+        grant: Option<&ProtectedClientGrantV2>,
+        payload: Value,
+        update: bool,
+    ) -> Result<Value, ObservationQueryError> {
+        if ambient == PrincipalKind::SealedCollaboration
+            || grant.is_some_and(|g| g.principal_kind.is_collaboration())
+        {
+            return Err(ObservationQueryError::Unauthorized);
+        }
+        let operation = if update {
+            "SetObservationCapacity"
+        } else {
+            "GetObservationCapacity"
+        };
+        // The local transport authenticates the OS owner, but deliberately maps
+        // an ambient CLI/Desktop peer to Skill rather than claiming a human
+        // identity. This narrow configuration operation admits that local peer;
+        // an explicitly supplied grant must still authorize this exact payload.
+        let principal = self.local_or_protected_principal(grant, operation, &payload, true)?;
+        super::require(
+            &principal,
+            hiroute_domain::ObservationCapabilityV1::ManageRetention,
+        )?;
+        let status = if update {
+            let input: hiroute_application_api::ObservationCapacityUpdateV1 =
+                serde_json::from_value(payload).map_err(|_| ObservationQueryError::InvalidQuery)?;
+            self.service
+                .port
+                .set_observation_capacity(input.max_active_bytes)?
+        } else {
+            if payload != json!({}) {
+                return Err(ObservationQueryError::InvalidQuery);
+            }
+            self.service.port.observation_capacity()?
+        };
+        serde_json::to_value(status).map_err(|_| ObservationQueryError::Corrupt)
+    }
+
     pub(crate) fn plan_quality(
         &self,
         grant: Option<&ProtectedClientGrantV2>,
@@ -141,7 +202,7 @@ impl ObservationControl {
         let principal = if content == ContentMode::None {
             self.local_or_protected_principal(grant, "GetSession", &lookup, true)?
         } else {
-            self.protected_principal(grant, "ReadSessionContent", &lookup)?
+            self.local_or_protected_principal(grant, "ReadSessionContent", &lookup, true)?
         };
         serde_json::to_value(self.service.get_session(&principal, &session_id, content)?)
             .map_err(|_| ObservationQueryError::Corrupt)
@@ -392,6 +453,7 @@ mod tests {
 
     struct FixedPorts {
         now_ms: AtomicI64,
+        capacity_limit: Mutex<Option<u64>>,
         queries: Mutex<Vec<SessionListQueryV1>>,
         content_modes: Mutex<Vec<ContentMode>>,
         plans: Vec<AgentPlanId>,
@@ -401,6 +463,7 @@ mod tests {
         fn new(now_ms: i64, plans: &[&str]) -> Self {
             Self {
                 now_ms: AtomicI64::new(now_ms),
+                capacity_limit: Mutex::new(None),
                 queries: Mutex::new(Vec::new()),
                 content_modes: Mutex::new(Vec::new()),
                 plans: plans
@@ -412,6 +475,35 @@ mod tests {
     }
 
     impl ControlStatePort for FixedPorts {
+        fn try_observation_revision(
+            &self,
+            _: &WorkspaceId,
+            _: std::time::Instant,
+        ) -> Result<crate::control::ControlReadAttempt<u64>, ControlReadError> {
+            Ok(crate::control::ControlReadAttempt::Ready(9))
+        }
+
+        fn try_validate_observation_capability(
+            &self,
+            capability: &str,
+            workspace: &WorkspaceId,
+            principal: PrincipalKind,
+            operation: &str,
+            digest: &CanonicalDigest,
+            deadline: std::time::Instant,
+        ) -> Result<crate::control::ControlReadAttempt<u64>, ControlReadError> {
+            let snapshot = self.snapshot(workspace)?;
+            self.validate_protected_capability(
+                capability,
+                workspace,
+                principal,
+                operation,
+                digest,
+                &snapshot.revisions,
+            )?;
+            self.try_observation_revision(workspace, deadline)
+        }
+
         fn snapshot(
             &self,
             _workspace_id: &WorkspaceId,
@@ -490,6 +582,22 @@ mod tests {
     }
 
     impl ObservationQueryPort for FixedPorts {
+        fn observation_capacity(
+            &self,
+        ) -> Result<hiroute_domain::ObservationCapacityStatusV1, ObservationQueryError> {
+            Ok(hiroute_domain::ObservationCapacityStatusV1 {
+                max_active_bytes: *self.capacity_limit.lock().unwrap(),
+                ..Default::default()
+            })
+        }
+        fn set_observation_capacity(
+            &self,
+            limit: Option<u64>,
+        ) -> Result<hiroute_domain::ObservationCapacityStatusV1, ObservationQueryError> {
+            *self.capacity_limit.lock().unwrap() = limit;
+            self.observation_capacity()
+        }
+
         fn list_sessions(
             &self,
             _workspace_id: &WorkspaceId,
@@ -558,7 +666,7 @@ mod tests {
     }
 
     #[test]
-    fn same_uid_peer_reads_facts_but_not_search_or_content_without_a_grant() {
+    fn same_uid_peer_reads_explicit_content_and_search_without_an_extra_grant() {
         let ports = Arc::new(FixedPorts::new(10 * DAY_MILLIS, &[]));
         let control = control(ports.clone());
         for kind in [
@@ -568,13 +676,11 @@ mod tests {
         ] {
             assert!(control.list(kind, None, json!({})).is_ok());
             assert!(control.show(kind, None, json!({"id":"session"})).is_ok());
-            assert_eq!(
-                control.list(kind, None, json!({"query":"secret"})),
-                Err(ObservationQueryError::Unauthorized)
-            );
-            assert_eq!(
-                control.show(kind, None, json!({"id":"session","content":"messages"})),
-                Err(ObservationQueryError::Unauthorized)
+            assert!(control.list(kind, None, json!({"query":"secret"})).is_ok());
+            assert!(
+                control
+                    .show(kind, None, json!({"id":"session","content":"messages"}))
+                    .is_ok()
             );
         }
         assert_eq!(
@@ -583,15 +689,93 @@ mod tests {
         );
         assert!(control.status(None).is_ok());
         assert!(control.value(None, json!({})).is_ok());
-        assert_eq!(ports.queries.lock().unwrap().len(), 3);
+        assert_eq!(ports.queries.lock().unwrap().len(), 6);
         assert_eq!(
             ports.content_modes.lock().unwrap().as_slice(),
-            [ContentMode::None; 3]
+            [
+                ContentMode::None,
+                ContentMode::Messages,
+                ContentMode::None,
+                ContentMode::Messages,
+                ContentMode::None,
+                ContentMode::Messages
+            ]
         );
     }
 
     fn control(ports: Arc<FixedPorts>) -> ObservationControl {
         ObservationControl::new(ports.clone(), ports.clone(), ports.clone(), ports)
+    }
+
+    #[test]
+    fn capacity_is_global_owner_authority_and_failed_or_delegated_input_cannot_change_it() {
+        let ports = Arc::new(FixedPorts::new(1000, &[]));
+        let controller = control(ports.clone());
+        assert_eq!(
+            controller
+                .capacity(
+                    hiroute_application_api::PrincipalV1::ambient_local_peer().kind,
+                    None,
+                    json!({"max_active_bytes":20_000_000_000u64}),
+                    true
+                )
+                .unwrap()["max_active_bytes"],
+            20_000_000_000u64
+        );
+        assert!(
+            controller
+                .capacity(
+                    PrincipalKind::SealedCollaboration,
+                    None,
+                    json!({"max_active_bytes":null}),
+                    true
+                )
+                .is_err()
+        );
+        let readonly = ProtectedClientGrantV2 {
+            principal_kind: PrincipalKind::InteractiveUser,
+            capability: "launcher-grant".into(),
+        };
+        assert!(
+            controller
+                .capacity(
+                    PrincipalKind::Skill,
+                    Some(&readonly),
+                    json!({"max_active_bytes":null}),
+                    true
+                )
+                .is_err()
+        );
+        let delegated = ProtectedClientGrantV2 {
+            principal_kind: PrincipalKind::SealedCollaboration,
+            capability: "launcher-grant".into(),
+        };
+        assert!(
+            controller
+                .capacity(
+                    PrincipalKind::SealedCollaboration,
+                    Some(&delegated),
+                    json!({"max_active_bytes":null}),
+                    true
+                )
+                .is_err()
+        );
+        assert!(
+            controller
+                .capacity(
+                    PrincipalKind::InteractiveUser,
+                    None,
+                    json!({"max_active_bytes":0}),
+                    true
+                )
+                .is_err()
+        );
+        assert_eq!(
+            controller
+                .capacity(PrincipalKind::InteractiveUser, None, json!({}), false)
+                .unwrap()["max_active_bytes"],
+            20_000_000_000u64
+        );
     }
 
     #[test]
@@ -618,17 +802,16 @@ mod tests {
     }
 
     #[test]
-    fn generated_content_spelling_reaches_handler_only_with_protected_grant() {
+    fn explicit_cli_content_and_valid_grant_reach_the_same_handler() {
         let ports = Arc::new(FixedPorts::new(10 * DAY_MILLIS, &[]));
         let payload = serde_json::to_value(SessionLookupV1 {
             id: "session-content".to_owned(),
             content: Some(SessionContentModeV1::MessagesAndTools),
         })
         .unwrap();
-        assert_eq!(
-            control(ports.clone()).show(PrincipalKind::Skill, None, payload.clone()),
-            Err(ObservationQueryError::Unauthorized)
-        );
+        control(ports.clone())
+            .show(PrincipalKind::Skill, None, payload.clone())
+            .unwrap();
         control(ports.clone())
             .show(
                 PrincipalKind::Skill,
@@ -641,7 +824,7 @@ mod tests {
             .unwrap();
         assert_eq!(
             *ports.content_modes.lock().unwrap(),
-            [ContentMode::MessagesAndTools]
+            [ContentMode::MessagesAndTools, ContentMode::MessagesAndTools]
         );
     }
 

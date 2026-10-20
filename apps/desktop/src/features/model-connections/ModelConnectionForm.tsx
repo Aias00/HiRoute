@@ -1,7 +1,8 @@
+import { SecretTransportWarning } from '../../host/ConsoleUi';
 import { connectionName, connectionTemplate } from '../../ui/provider-identity';
 import { ProviderIcon } from '../../ui/ProviderIcon';
 import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
-import { invoke } from '@tauri-apps/api/core';
+import { invoke, isTauriHost } from '../../host/index.ts';
 
 import { Dialog } from '../../ui/Dialog';
 import { Disclosure } from '../../ui/Disclosure';
@@ -44,6 +45,7 @@ import { ConnectionEditingSession } from './connection-session';
 import './connection-flow.css';
 import {
   connectionErrorMessage,
+  PlaintextHttpWarning,
   ManualModelEditor,
   manualModelError,
   manualModelIdError,
@@ -637,7 +639,7 @@ export function ModelConnectionForm(props: ModelConnectionFormProps) {
   }
 
   async function openDocumentation(event: React.MouseEvent<HTMLAnchorElement>, url?: string) {
-    if (!("__TAURI_INTERNALS__" in window)) return;
+    if (!isTauriHost()) return;
     event.preventDefault();
     setExternalLinkError(false);
     if (!url) {
@@ -693,7 +695,7 @@ export function ModelConnectionForm(props: ModelConnectionFormProps) {
           <fieldset className="connection-fields" disabled={!props.mutable || Boolean(props.appendTo)}>
             <div className="connection-config-heading"><ProviderIcon optionId={custom ? draft.display_template_id : registeredOption?.connection_option_id} language={language} /><div><h3>{custom ? (zh ? '自定义 API' : 'Custom API') : productName}</h3><p>{custom ? (zh ? '填写服务地址，连接兼容的模型服务' : 'Connect a compatible model service') : connectionTemplate(registeredOption?.connection_option_id)?.description[language]}</p></div></div>
             <label className="field"><span className="field-label">{zh ? '连接名称' : 'Connection name'}</span><input className="input" maxLength={60} data-autofocus={screen === 'connection' || undefined} value={draft.display_name} placeholder={zh ? '例如：团队模型服务' : 'e.g. Team models'} onChange={event => invalidate(current => ({ ...current, display_name: event.target.value }), false, 'connection')} /><span className="field-help">{zh ? '用于区分不同账号或用途，保存后可在模型列表中看到。' : 'Distinguish accounts or purposes. This name appears in your model list.'}</span></label>
-            {draft.authentication.kind !== 'none' && <label className="field"><span className="field-label">API Key</span><input className="input" disabled={!custom && (optionsLoading || !registeredOption)} ref={password} type="password" autoComplete="off" spellCheck={false} placeholder={protectedInputRef.current ? '••••••••••••••••' : draft.existing_source_id ? (zh ? '留空使用已保存的 Key' : 'Leave blank to use the saved key') : (zh ? '粘贴此产品的 API Key' : 'Paste this product’s API key')} onChange={() => invalidate(current => ({ ...current, candidate_ref: null }), true, 'connection')} /></label>}
+            {draft.authentication.kind !== 'none' && <label className="field"><SecretTransportWarning language={props.language} /><span className="field-label">API Key</span><input className="input" disabled={!custom && (optionsLoading || !registeredOption)} ref={password} type="password" autoComplete="off" spellCheck={false} placeholder={protectedInputRef.current ? '••••••••••••••••' : draft.existing_source_id ? (zh ? '留空使用已保存的 Key' : 'Leave blank to use the saved key') : (zh ? '粘贴此产品的 API Key' : 'Paste this product’s API key')} onChange={() => invalidate(current => ({ ...current, candidate_ref: null }), true, 'connection')} /></label>}
             {!custom && registeredOption && <div className="connection-key-help"><span className="field-help">{zh ? '请使用上方产品对应的 Key。' : 'Use the key for the product shown above.'}</span>{connectionTemplate(registeredOption.connection_option_id)?.documentation_url && <a href={connectionTemplate(registeredOption.connection_option_id)?.documentation_url} target="_blank" rel="noreferrer" onClick={event => void openDocumentation(event, connectionTemplate(registeredOption.connection_option_id)?.documentation_url)}>{zh ? '获取 API Key' : 'Get an API key'}<UiIcon name="arrow" /></a>}{externalLinkError && <div className="callout warn" role="alert"><UiIcon name="warning" /><span>{zh ? '无法打开默认浏览器；当前表单内容已保留。' : 'The default browser could not be opened. Your form input is retained.'}</span></div>}</div>}
             {custom ? <>
               {!optionsLoading && metadataPrefills.length > 0 && <Disclosure className="connection-details" language={language} label={zh ? '使用接入资料预填（可选）' : 'Use connection prefill (optional)'}><div className="connection-fields metadata-prefill-fields">
@@ -708,7 +710,7 @@ export function ModelConnectionForm(props: ModelConnectionFormProps) {
                   ? `已收录 ${metadataCandidates.length} 个模型，检查接入后统一选择；未知能力采用可编辑兜底：上下文 200K、输出 32K、工具与流式开启、视觉关闭、思考开关。`
                   : `${metadataCandidates.length} models in this catalog. Choose after checking the connection; missing capabilities use editable defaults (200K context, 32K output, tools and streaming on, vision off, reasoning toggle).`}</p>}
               </div></Disclosure>}
-              <label className="field"><span className="field-label">Base URL</span><input className="input" inputMode="url" value={draft.base_url} placeholder="https://example.com/v1" onChange={event => invalidate(current => ({ ...current, base_url: event.target.value }), true, 'connection')} /></label>
+              <label className="field"><span className="field-label">Base URL</span><input className="input" inputMode="url" value={draft.base_url} placeholder="https://example.com/v1" onChange={event => invalidate(current => ({ ...current, base_url: event.target.value }), true, 'connection')} /><PlaintextHttpWarning baseUrl={draft.base_url} zh={zh} /></label>
               <label className="field"><span className="field-label">{zh ? '协议' : 'Protocol'}</span><select className="select" value={draft.protocol} onChange={event => {
                 const protocol = event.target.value as UpstreamProtocol;
                 invalidate(current => {
@@ -759,7 +761,7 @@ export function ModelConnectionForm(props: ModelConnectionFormProps) {
                   return <section key={`${index}-${endpoint.protocol}`} className="connection-fields">
                     <div className="detail-section-head"><strong>{zh ? '端点' : 'Endpoint'} {index + 2}</strong><button className="btn btn-quiet" type="button" onClick={() => invalidate(current => ({ ...current, additional_endpoints: current.additional_endpoints.filter((_, position) => position !== index) }), true, 'connection')}>{zh ? '移除' : 'Remove'}</button></div>
                     <label className="field"><span className="field-label">{zh ? '协议' : 'Protocol'}</span><select className="select" value={endpoint.protocol} onChange={event => { const protocol = event.target.value as UpstreamProtocol; updateEndpoint({ protocol, protocol_profile_id: `profile/custom/${protocol}`, protocol_profile_revision: endpoint.protocol_profile_revision + 1 }); }}><option value="chat_completions">OpenAI Chat Completions</option><option value="responses">OpenAI Responses</option><option value="messages">Anthropic Messages</option></select></label>
-                    <label className="field"><span className="field-label">Base URL</span><input className="input" inputMode="url" value={endpoint.base_url} onChange={event => updateEndpoint({ base_url: event.target.value })} /></label>
+                    <label className="field"><span className="field-label">Base URL</span><input className="input" inputMode="url" value={endpoint.base_url} onChange={event => updateEndpoint({ base_url: event.target.value })} /><PlaintextHttpWarning baseUrl={endpoint.base_url} zh={zh} /></label>
                     <label className="field"><span className="field-label">{zh ? '请求路径' : 'Request path'}</span><input className="input" value={endpoint.request_path_override ?? ''} onChange={event => updateEndpoint({ request_path_override: event.target.value || null })} /></label>
                     <label className="field"><span className="field-label">{zh ? '认证方式' : 'Authentication'}</span><select className="select" value={endpoint.authentication.kind} onChange={event => updateEndpoint({ authentication: event.target.value === 'api_key_header' ? { kind: 'api_key_header', header: 'x-api-key' } : event.target.value === 'none' ? { kind: 'none' } : { kind: 'bearer' } })}><option value="none">{zh ? '无认证' : 'None'}</option><option value="bearer">Bearer Token</option><option value="api_key_header">{zh ? '自定义 Header' : 'Custom header'}</option></select></label>
                     {endpoint.authentication.kind === 'api_key_header' && <label className="field"><span className="field-label">Header</span><input className="input" value={endpoint.authentication.header} onChange={event => updateEndpoint({ authentication: { kind: 'api_key_header', header: event.target.value } })} /></label>}

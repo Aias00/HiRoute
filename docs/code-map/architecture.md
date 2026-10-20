@@ -3,6 +3,40 @@
 [Code map](README.md) · [Agent/Worker map](worker-context.md) ·
 [Decision map](decision-foundation.md) · [Test map](testing.md)
 
+## Web console and Windows host
+
+`crates/daemon/src/console` owns the separate HTTP listener, origin/asset admission,
+credential stores and per-client product contexts. Service startup exclusively
+binds configured sockets, including the local companion in network mode; launch
+minting selects live state and never enables listening. Linux installer options
+and `console init` persist scope/port in the host-runtime listener store. A wildcard
+bind requires a concrete advertised IP for its one-use URL. Launch codes bind that
+origin and actual port; the Windows shell explicitly requests the local endpoint.
+Request deadlines cover each request independently of connection age; incomplete
+headers and bodies have their own bounds. Shared confirmation permits and broker
+prompts release on caller cancellation, without approving or affecting another context.
+The console transport reserves separate 64-connection pools for loopback and network
+peers. Socket writes close after 30 seconds without byte progress; successful writes
+reset that deadline, and operation/confirmation waits do not arm it.
+Its private in-process Client
+Core transport shares Local Control budgets, operation admission and upgrade
+drain; external Local Control retains its released-command gate. The frontend
+`apps/desktop/src/host` selects the Tauri, browser or Windows-shell transport and
+host capabilities. Browser product requests use explicit Bearer/context headers;
+native host actions stay in their host adapter.
+
+[`apps/shell`](../../apps/shell/README.md) owns the Windows Tauri window, exact-origin
+host IPC, startup/reconnect, tray/login preference and NSIS hooks. The
+[Rust standalone transaction](../../crates/host-runtime/src/standalone_install)
+owns architecture-matched Task installation and current-schema journal recovery; the shell's separate
+inventory/finisher owns its program files and update outcome. Neither owns business
+transactions or exposes Local Control to WebView. The
+[release catalog](../../apps/website/src/lib/releases.mjs) emits V3 and the registered
+Windows-free V2 projection for supported macOS readers. Public Windows artifacts
+are x64 NSIS installers only; headless x64/ARM64 archives stay internal. The
+installer and tests invoke `__windows-install` / `__windows-uninstall`, with no
+Python installer or offered SCM installation entry.
+
 ## Shared layers
 
 | Responsibility | Production owner | Boundary |
@@ -21,6 +55,20 @@ CLI JSON request sources (`--request-file` / `--request-stdin`) share the bounde
 [strict input reader](../../crates/cli/src/request_input.rs). Command codecs retain
 typed intent, selector and byte-limit ownership; see the [CLI input guide](../../crates/cli/INPUT.md)
 and [production argv regressions](../../crates/cli/tests/request_input.rs).
+Connection-test help and native/registered templates come from
+[Application API](../../crates/application-api/src/command_schemas.rs); the
+[installed-example regression](../../crates/cli/tests/connection_test_examples.rs)
+executes the displayed commands with those request documents. The
+[real-process recipe regression](../../crates/daemon/tests/support/connection_test_examples_product.py)
+checks their current-catalog results and protected-input cleanup through CLI/daemon.
+
+[Quickstart and Preview convenience inputs](../../crates/cli/src/quickstart.rs) compose existing
+queries and transactions. They use [Application authoring options](../../crates/application/src/routing/editor_options.rs)
+for both initial and reopened editors, also consumed by Desktop. Exact Apply files are ordinary
+user-selected requests, not another journal or authority. [Offline schemas](../../crates/application-api/src/command_schemas.rs)
+come from shared wire DTOs, including [discovery](../../crates/application-api/src/agent_discovery.rs)
+and [settings Preview](../../crates/application-api/src/agent_settings_preview.rs); Application
+still owns discovery/planning and the daemon supplies adapters.
 
 CLI/Desktop → client-core → daemon control → Application → storage/native adapters
 is the control path. Published plans and grants feed Gateway execution. Worker
@@ -31,6 +79,22 @@ Observation records what actually ran and supplies authorized reads and continua
 module before extending it; a local feature does not require a facade-wide rewrite.
 
 ## Model sources and native configuration
+
+Custom API [target normalization](../../crates/integrations/src/model_connections/target.rs)
+is pure for HTTP and HTTPS, retaining the configured hostname until bounded request
+transport resolves it. Explicit LAN/remote HTTP uses the ordinary check/save flow.
+The [durable target](../../crates/domain/src/compute/management/mod.rs) and
+[user-configured Gateway target](../../crates/domain/src/routing/gateway_execution.rs)
+admit the same explicit transports while retaining exact credential destinations
+and the separate registered/managed-connector scopes.
+[Control error translation](../../crates/daemon/src/control/runtime/model_connections/error.rs)
+retains closed target reasons in the existing error envelope; the Desktop form owns
+localized corrections and plaintext notices. The [real-process regression](../../crates/daemon/tests/support/custom_http_product.py)
+covers omitted-directory save/restart/recheck and safe error propagation.
+
+Branch execution keys distinguish reasoning selections. The derived Gateway candidate
+also retains its original source binding for current credential membership and exact
+leases; routing, retry and context identities continue using the execution key.
 
 CLI secret entry uses the shared local [protected input socket](../../crates/daemon/src/control/standalone.rs)
 in both standalone and Desktop-owned `role=all` processes. The [CLI input owner](../../crates/cli/src/host_commands.rs)
@@ -43,12 +107,12 @@ The name must fit any runtime root that supports `hiroute/control.sock`, includi
 | User step | Owners to follow | Representative guard |
 | --- | --- | --- |
 | Add an API connection and choose its models | [Connection directory](../../apps/desktop/src/features/model-connections/ConnectionDirectory.tsx), [form and draft ownership](../../apps/desktop/src/features/model-connections/README.md), [registered check](../../crates/daemon/src/control/runtime/model_connections/registered.rs) | The executable catalog supplies the complete directory. A source name survives check/save; per-product credentials stay in the dialog and protected input. Released public registered probes may omit the name and use the authenticated option label; the current Desktop check requires an explicit label. |
-| Discover a native source without executing it | [Native model connections](../../crates/integrations/src/model_connections), [Pi reader](../../crates/integrations/src/agents/pi_sources.rs), [DSH reader](../../crates/integrations/src/agents/dsh_sources.rs), [OpenCode reader](../../crates/integrations/src/agents/opencode_sources.rs) | Static declarations and supported credential references only; OAuth/helpers are not executed by discovery |
-| Display, prepare and save the selected source | [Safe Desktop projection](../../apps/desktop/src-tauri/src/bridge/model_connection_web.rs), [daemon preparation](../../crates/daemon/src/control/runtime/model_connections/pi_discovered.rs) | Provider/model identity remains visible; privileged scan material stays private; source changes invalidate the prepared candidate |
+| Discover a native source without executing it | [Native model connections](../../crates/integrations/src/model_connections), [Pi reader](../../crates/integrations/src/agents/pi_sources.rs), [DSH reader](../../crates/integrations/src/agents/dsh_sources.rs), [OpenCode reader](../../crates/integrations/src/agents/opencode_sources.rs), [Hermes reader](../../crates/integrations/src/agents/hermes_sources.rs) | Shared [point grouping](../../crates/integrations/src/agents/native_points.rs) keeps scope/provider/address/protocol/authentication distinct; static scan never executes helpers |
+| Display, prepare and save the selected source | [Safe shared product projection](../../crates/product-session/src/commands/model_connection_web.rs), [V2 points/catalog qualification](../../crates/daemon/src/control/runtime/model_connections/points.rs), [daemon preparation](../../crates/daemon/src/control/runtime/model_connections/pi_discovered.rs) | Exact native/catalog provenance and explicit model selection remain visible; privileged locators stay private; stale facts cannot expand an accepted selection; legacy one-model handles retain their meaning |
 | Rename a connection, append models or remove saved configuration | [Shared lifecycle planner](../../crates/application/src/compute_management/mutations/lifecycle.rs), [transactional reference guards](../../crates/local-storage/src/control/compute/management/references.rs), [Desktop lifecycle dialog](../../apps/desktop/src/features/models/ConnectionLifecycleDialog.tsx) | Templates do not own credentials. Explicit append preserves saved members; enabled/disabled routes and retained recovery versions block removal. Removing the last model requires explicit connection deletion; owned secrets follow the same recoverable operation. |
 | Save Key order or use current Keys with an older plan | [Single-save edits](../../apps/desktop/src/features/models/model-draft.ts), [request admission](../../crates/gateway/src/core_runtime/credentials.rs), [current pool authority](../../crates/local-storage/src/control/compute/management/runtime_pool.rs), [safe Key masks](../../crates/daemon/src/control/runtime/model_connections/key_masks.rs) | A request owns its admitted Key IDs and order; later exact leases enforce current source/Key eligibility and generation. Admission retains closed permission denials in the existing request summary. Shared Plan content stays frozen. Masks are a separate authenticated query; saved plaintext never reaches Desktop. |
 | Connect a native Codex or Claude subscription | [Source discovery](../../crates/integrations/src/agents/subscription_sources.rs), [credential adapters](../../crates/cpa-bridge/src), [shared lifecycle](../../crates/daemon/src/control/runtime/subscriptions.rs), [provider runtimes](../../crates/cpa-bridge/src/runtime_set.rs) | Native clients retain refresh authority; only access leases enter isolated CPA instances. Claude Keychain interaction is limited to an explicit check; discovery reads metadata only. Codex borrowing reads file storage only and rejects a configured non-file store even if stale auth.json remains. |
-| Sign in independently to a Codex or Claude subscription | [Shared login control](../../crates/application/src/control_plane/subscription_login.rs), [protected lifecycle](../../crates/daemon/src/control/runtime/subscriptions/login.rs), [private sessions](../../crates/cpa-bridge/src/managed_sessions.rs), [Desktop sign-in](../../apps/desktop/src/features/subscriptions/SubscriptionSignIn.tsx) | Device scan explains native credential-refresh dependence and opens the existing independent sign-in. CPA owns the new authorization and refresh; login is separate from Check/Save and routing. Daemon maintenance owns pending completion/expiry, and saved revisions own runtime selection. [The pinned CPA adapter](../../vendor/cpa/README.md) explains refresh ownership and request recovery. |
+| Sign in independently to a Codex or Claude subscription | [Shared login control](../../crates/application/src/control_plane/subscription_login.rs), [protected lifecycle](../../crates/daemon/src/control/runtime/subscriptions/login.rs), [private sessions](../../crates/cpa-bridge/src/managed_sessions.rs), [Desktop sign-in](../../apps/desktop/src/features/subscriptions/SubscriptionSignIn.tsx) | CPA receives browser callbacks on temporary loopback listeners; an unavailable listener uses explicit protected manual input. Login is separate from Check/Save and routing. Daemon maintenance owns pending completion/expiry, and saved revisions own runtime selection. [The pinned CPA adapter](../../vendor/cpa/README.md) owns callback admission, authorization and refresh. |
 | Lease a subscription credential without blocking Gateway workers | [Async adapter](../../crates/daemon/src/gateway_ports/credential/cpa.rs), [request budget](../../crates/cpa-bridge/src/request_context.rs), [admission and observations](../../crates/cpa-bridge/src/runtime/admission.rs), [Claude identity resolution](../../crates/cpa-bridge/src/claude_profile.rs) | Bounded provider executors own compatibility I/O. Short admission updates revoke before lifecycle work; identity lookup runs outside the lifecycle owner. Cancellation and saved revisions guard later publication. Follow [concurrency regressions](../../crates/cpa-bridge/src/runtime/tests/request_io.rs) for races with disable, replacement and delayed I/O. |
 | Inspect saved subscription mode and repair sign-in | [V3 query](../../crates/application/src/compute_management/query_v3.rs), [mode and repair copy](../../apps/desktop/src/features/models/subscription-copy.ts) | Mode derives from the committed source selection and survives missing credentials. Desktop consumes V3; published V2 queries retain their strict response shape. Existing release-version matching still applies; an external service without V3 requires an update. |
 | Configure a subscription connection proxy | [Device scan](../../apps/desktop/src/product/ModelManagementPage.tsx), [inline proxy editor](../../apps/desktop/src/features/SubscriptionProxySettings.tsx), [native apply](../../apps/desktop/src-tauri/src/bridge/subscription_proxy.rs) | Scan retains results while editing; cancel restores its actions, and explicit save/restart returns to a fresh scan. Settings has no proxy entry; host policy remains shared by all subscriptions. |
@@ -66,7 +130,10 @@ Do not move either rule into a generic provider merge.
 
 [Model settings status](../../crates/daemon/src/control/runtime/settings_status.rs)
 joins owned native configuration with the current Gateway endpoint as well as
-grant/publication evidence. [CLI listener status](../../crates/cli/src/host_commands.rs)
+grant/publication evidence. Its opt-in [effective-state projection](../../crates/daemon/src/control/runtime/agent_effective_state.rs)
+uses existing Observation queries and authenticated receipts with the same current Plan/publication/grant identity.
+It does not infer loading from saved files, persist new state, restart Agents or send inference requests.
+[CLI listener status](../../crates/cli/src/host_commands.rs)
 uses that read and, for unconfigured/restored targets, the
 [released V1 connection join](../../crates/daemon/src/control/runtime/agent_connection_discovery.rs)
 to request explicit reconfiguration; listener operation history alone
@@ -78,6 +145,8 @@ Follow discovery through an ordinary request using the saved source. The
 [DSH](../../tools/product-e2e/tests/DSH_INTEGRATION.md) and
 [OpenCode](../../tools/product-e2e/tests/OPENCODE_INTEGRATION.md) acceptance entries cover
 Scan → Prepare → Save → restart → native use, including stale-source rejection.
+
+The shared product-session layer in `crates/product-session` owns Preview composition, confirmation permits, retry identity and protected-input lifetime. Desktop supplies its inherited-channel `HostAuthority` adapter in `apps/desktop/src-tauri/src/bootstrap/authority.rs`; native startup, updater and window authority stay with the Desktop host.
 
 ## State and lifecycle boundaries
 
@@ -106,12 +175,34 @@ Scan → Prepare → Save → restart → native use, including stale-source rej
 | Upstream fault attribution | [Wire projection](../../crates/gateway/src/observation/provider/wire_diagnostic.rs), [attempt association](../../crates/gateway/src/observation/request/diagnostic.rs), [decision calls](../../crates/gateway/src/core_runtime/classification/diagnostic.rs) | Actual bounded model/control fields, negotiated HTTP protocol, closed error codes, hashed request IDs and separate client headers/body commit facts must preserve the real outcome without prompts or provider error text |
 | Source disabled before an upstream attempt | [Exact permission gate](../../crates/local-storage/src/secrets/runtime.rs), [product preparation reply](../../crates/gateway/src/runtime/driver/selection/preparation.rs), [Gateway error guide](../../crates/gateway/README.md#candidate-preparation-errors) | Preserve the closed lease denial in the request fact and local JSON response; a frozen route does not grant current source/Key permission, and rejected preparation remains zero attempts |
 | Inspect CPA authentication recovery | [Private response metadata](../../crates/gateway/src/observation/provider/cpa_execution.rs), [pinned CPA adapter](../../vendor/cpa/README.md) | Logical attempts and actual HTTP sends differ; only verified CPA targets can supply recovery counters. Missing evidence remains unknown and does not create token usage. |
+| Same-user CLI analysis | [Read admission](../../crates/application/src/observation_query/control/v2.rs), [scoped analysis](../../crates/observation/src/analysis/read.rs), [CLI codec](../../crates/cli/src/observation.rs), [installed journey](../../crates/daemon/tests/support/quickstart_analysis.py) | Conversation, switch/reason, expense ranking and savings paths share retained scopes; control/price composition and indexed content reads keep one 500 ms budget. Supplied grants, current deletion/visibility and legacy calls remain checked. |
+| Current API-equivalent comparison | [Analysis price capture](../../crates/application/src/observation_query/control/v2/analysis.rs), [numeric comparison](../../crates/observation/src/analysis/comparison.rs), [legacy adapter](../../crates/observation/src/analysis/legacy.rs) | Source-matched attempt inputs and immutable scoped prices use the same per-attempt arithmetic as the explicit-reference report. Unknown coverage is not zero; recorded valuation remains unchanged. |
+| Native compression and actual transitions | [Hermes adapter](../../assets/agents/hermes/__init__.py), [private carrier](../../crates/domain/src/observation/native_continuation.rs), [relationship owner](../../crates/observation/src/analysis/native.rs), [transition reader](../../crates/observation/src/analysis/routing.rs) | Authenticated bounded ancestry does not change physical session identity or prove adjacent user turns. Shared member resolution and current source/deletion guards apply to content and monetary readers. |
+| Analysis upgrades and deleted-history revival | [Schema/SQL triggers](../../crates/observation/src/analysis/schema.rs), [native creation proof](../../crates/observation/src/analysis/native_origin.rs), [joint deletion regression](../../crates/observation/src/store/tests/analysis_delete_tests.rs) | Core-table triggers also execute for supported released writers; replace dependent triggers/tables atomically. Full deletion cuts historical edges. Fresh native creation evidence can prove a new child after the cut; unknown origins remain gaps. Strict retained native-event bodies exclude the optional creation extension. |
 | Search and gaps | [Live session search](../../crates/observation/src/query_v2/session_search.rs), [query contract](../../crates/observation/src/query_v2/README.md), [keyword lookup](../../crates/observation/src/text_index/lookup.rs) | Fresh authorized pages count matching sessions; bounded background backfill and explicit gaps distinguish pending indexes from complete empty results. The released occurrence-search interface remains separate. |
 | Business relations and visibility | [Relation owner](../../crates/observation/src/query_v2/relation.rs), [managed content](../../crates/observation/src/managed_text/README.md) | `query_v2` also writes relations; every content read checks current authorization and visibility |
 | Native tool-history continuation | [Responses ingress](../../crates/gateway/src/adapters/responses_ingress.rs), [real continuation journey](../../tools/e2e-harness/tests/p0_gateway_protocol/continuation.rs) | Preserve model-generated empty tool names in native history without relaxing declarations/call IDs; unsafe conversion, ContextHold and reasoning cleanup stay disabled for that history |
 | Decision and competence attribution | [Decision observation map](decision-foundation.md#observation-and-public-consumers) | Attribute scores to the stage that actually ran, with its frozen category/group/candidate and rubric |
 
 ## Changing boundaries
+
+Compact Observation format admission and fresh-generation initialization belong to
+[`store/upgrade`](../../crates/observation/src/store/upgrade.rs) and the
+[`store` factory](../../crates/observation/src/store/mod.rs); complete original-source
+preservation remains in the existing
+[startup coordinator](../../crates/local-storage/src/migrations/observation_source.rs).
+The [sealed-source publisher](../../crates/local-storage/src/backup/source_snapshot/seal.rs)
+uses same-filesystem directory publication without traversing historical contents.
+The optional capacity threshold uses the
+[existing maintenance lifecycle](../../crates/observation/src/maintenance.rs) and
+[bounded retirement owner](../../crates/observation/src/store/capacity.rs).
+Representative scenarios cover
+[format admission](../../crates/observation/src/store/upgrade/tests.rs),
+[interrupted sealing](../../crates/local-storage/src/backup/source_snapshot/seal/tests.rs),
+[production startup/restart](../../crates/daemon/src/control/runtime/history_cutover_tests.rs),
+and [shared survivors and rollback](../../crates/observation/src/store/capacity/tests.rs).
+Operating and recovery details are in the
+[Observation guide](../../crates/observation/README.md#compact-storage-and-capacity-retention).
 
 Windows process defaults and private handle validation belong to
 [native security](../../crates/platform/src/windows/security.rs), with suspended-child

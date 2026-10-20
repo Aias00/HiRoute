@@ -1,0 +1,699 @@
+{
+  "scope": "retrospective offline annotation audit; no relabeling or new API calls",
+  "sample": {
+    "records": 96,
+    "pairs": 48,
+    "families": [
+      "E002",
+      "E006",
+      "E009",
+      "E015",
+      "E020",
+      "E023",
+      "E029",
+      "E032",
+      "E035",
+      "E038",
+      "E042",
+      "E048"
+    ],
+    "languages": {
+      "en": 48,
+      "zh": 48
+    },
+    "panels": {
+      "boundary": 12,
+      "clear": 78,
+      "insufficient": 6
+    },
+    "patterns": {
+      "A": 8,
+      "B": 16,
+      "C": 8,
+      "D": 8,
+      "E": 8,
+      "F": 16,
+      "G": 16,
+      "H": 16
+    },
+    "clear_actions": {
+      "economy": 40,
+      "primary": 38
+    },
+    "fully_matching_records": 92,
+    "disagreement_ids": [
+      "E020_s3_en",
+      "E020_s3_zh",
+      "E020_s4_en",
+      "E020_s4_zh"
+    ],
+    "new_consensus_determinate": [
+      "E006_s3_en",
+      "E006_s3_zh",
+      "E038_s3_en",
+      "E038_s3_zh"
+    ]
+  },
+  "optional_realism_completed": [
+    0,
+    0
+  ],
+  "reviewer_agreement": {
+    "current_demand": {
+      "n": 96,
+      "agree": 94,
+      "rate": 0.9791666666666666,
+      "cohen_kappa": 0.94,
+      "confusion": {
+        "insufficient": {
+          "insufficient": 4
+        },
+        "reasoning": {
+          "reasoning": 14,
+          "uncertain": 2
+        },
+        "routine": {
+          "routine": 76
+        }
+      }
+    },
+    "stage_grade": {
+      "n": 96,
+      "agree": 94,
+      "rate": 0.9791666666666666,
+      "cohen_kappa": 0.9662209711470795,
+      "confusion": {
+        "0": {
+          "0": 40
+        },
+        "1": {
+          "1": 12,
+          "insufficient": 2
+        },
+        "2": {
+          "2": 42
+        }
+      }
+    },
+    "applicability": {
+      "n": 96,
+      "agree": 94,
+      "rate": 0.9791666666666666,
+      "cohen_kappa": 0.9588336192109778,
+      "confusion": {
+        "applicable": {
+          "applicable": 42,
+          "insufficient": 2
+        },
+        "not_applicable": {
+          "not_applicable": 52
+        }
+      }
+    },
+    "action": {
+      "n": 96,
+      "agree": 92,
+      "rate": 0.9583333333333334,
+      "cohen_kappa": 0.9323943661971832,
+      "confusion": {
+        "boundary": {
+          "boundary": 6,
+          "insufficient": 2
+        },
+        "economy": {
+          "economy": 40
+        },
+        "insufficient": {
+          "insufficient": 4
+        },
+        "primary": {
+          "primary": 42,
+          "boundary": 2
+        }
+      }
+    },
+    "joint_unique_grade": {
+      "n": 94,
+      "agree": 94,
+      "rate": 1.0,
+      "cohen_kappa": 1.0,
+      "confusion": {
+        "0": {
+          "0": 40
+        },
+        "1": {
+          "1": 12
+        },
+        "2": {
+          "2": 42
+        }
+      }
+    },
+    "joint_determinate_action": {
+      "n": 82,
+      "agree": 82,
+      "rate": 1.0,
+      "cohen_kappa": 1.0,
+      "confusion": {
+        "economy": {
+          "economy": 40
+        },
+        "primary": {
+          "primary": 42
+        }
+      }
+    }
+  },
+  "agreement_by_language": {
+    "en": {
+      "current_demand": {
+        "n": 48,
+        "agree": 47,
+        "rate": 0.9791666666666666,
+        "cohen_kappa": 0.94,
+        "confusion": {
+          "insufficient": {
+            "insufficient": 2
+          },
+          "reasoning": {
+            "reasoning": 7,
+            "uncertain": 1
+          },
+          "routine": {
+            "routine": 38
+          }
+        }
+      },
+      "stage_grade": {
+        "n": 48,
+        "agree": 47,
+        "rate": 0.9791666666666666,
+        "cohen_kappa": 0.9662209711470795,
+        "confusion": {
+          "0": {
+            "0": 20
+          },
+          "1": {
+            "1": 6,
+            "insufficient": 1
+          },
+          "2": {
+            "2": 21
+          }
+        }
+      },
+      "applicability": {
+        "n": 48,
+        "agree": 47,
+        "rate": 0.9791666666666666,
+        "cohen_kappa": 0.9588336192109778,
+        "confusion": {
+          "applicable": {
+            "applicable": 21,
+            "insufficient": 1
+          },
+          "not_applicable": {
+            "not_applicable": 26
+          }
+        }
+      },
+      "action": {
+        "n": 48,
+        "agree": 46,
+        "rate": 0.9583333333333334,
+        "cohen_kappa": 0.9323943661971832,
+        "confusion": {
+          "boundary": {
+            "boundary": 3,
+            "insufficient": 1
+          },
+          "economy": {
+            "economy": 20
+          },
+          "insufficient": {
+            "insufficient": 2
+          },
+          "primary": {
+            "primary": 21,
+            "boundary": 1
+          }
+        }
+      }
+    },
+    "zh": {
+      "current_demand": {
+        "n": 48,
+        "agree": 47,
+        "rate": 0.9791666666666666,
+        "cohen_kappa": 0.94,
+        "confusion": {
+          "insufficient": {
+            "insufficient": 2
+          },
+          "reasoning": {
+            "reasoning": 7,
+            "uncertain": 1
+          },
+          "routine": {
+            "routine": 38
+          }
+        }
+      },
+      "stage_grade": {
+        "n": 48,
+        "agree": 47,
+        "rate": 0.9791666666666666,
+        "cohen_kappa": 0.9662209711470795,
+        "confusion": {
+          "0": {
+            "0": 20
+          },
+          "1": {
+            "1": 6,
+            "insufficient": 1
+          },
+          "2": {
+            "2": 21
+          }
+        }
+      },
+      "applicability": {
+        "n": 48,
+        "agree": 47,
+        "rate": 0.9791666666666666,
+        "cohen_kappa": 0.9588336192109778,
+        "confusion": {
+          "applicable": {
+            "applicable": 21,
+            "insufficient": 1
+          },
+          "not_applicable": {
+            "not_applicable": 26
+          }
+        }
+      },
+      "action": {
+        "n": 48,
+        "agree": 46,
+        "rate": 0.9583333333333334,
+        "cohen_kappa": 0.9323943661971832,
+        "confusion": {
+          "boundary": {
+            "boundary": 3,
+            "insufficient": 1
+          },
+          "economy": {
+            "economy": 20
+          },
+          "insufficient": {
+            "insufficient": 2
+          },
+          "primary": {
+            "primary": 21,
+            "boundary": 1
+          }
+        }
+      }
+    }
+  },
+  "human_vs_original": [
+    {
+      "current_demand": {
+        "n": 90,
+        "agree": 90,
+        "rate": 1.0,
+        "cohen_kappa": 1.0,
+        "confusion": {
+          "reasoning": {
+            "reasoning": 14
+          },
+          "routine": {
+            "routine": 76
+          }
+        }
+      },
+      "stage_grade": {
+        "n": 88,
+        "agree": 88,
+        "rate": 1.0,
+        "cohen_kappa": 1.0,
+        "confusion": {
+          "0": {
+            "0": 36
+          },
+          "1": {
+            "1": 10
+          },
+          "2": {
+            "2": 42
+          }
+        }
+      },
+      "applicability": {
+        "n": 94,
+        "agree": 94,
+        "rate": 1.0,
+        "cohen_kappa": 1.0,
+        "confusion": {
+          "applicable": {
+            "applicable": 42
+          },
+          "not_applicable": {
+            "not_applicable": 52
+          }
+        }
+      },
+      "action": {
+        "n": 78,
+        "agree": 78,
+        "rate": 1.0,
+        "cohen_kappa": 1.0,
+        "confusion": {
+          "economy": {
+            "economy": 40
+          },
+          "primary": {
+            "primary": 38
+          }
+        }
+      },
+      "action_with_uncertainty_panels": {
+        "n": 96,
+        "agree": 88,
+        "rate": 0.9166666666666666,
+        "cohen_kappa": 0.868131868131868,
+        "confusion": {
+          "boundary": {
+            "primary": 6,
+            "boundary": 6
+          },
+          "economy": {
+            "economy": 40
+          },
+          "insufficient": {
+            "boundary": 2,
+            "insufficient": 4
+          },
+          "primary": {
+            "primary": 38
+          }
+        }
+      },
+      "grade_allowed_set": {
+        "n": 6,
+        "compatible": 6
+      },
+      "action_panel_changes": {
+        "E006_s3_en": {
+          "old": "boundary",
+          "review": "primary"
+        },
+        "E006_s3_zh": {
+          "old": "boundary",
+          "review": "primary"
+        },
+        "E020_s3_en": {
+          "old": "boundary",
+          "review": "primary"
+        },
+        "E020_s3_zh": {
+          "old": "boundary",
+          "review": "primary"
+        },
+        "E020_s4_en": {
+          "old": "insufficient",
+          "review": "boundary"
+        },
+        "E020_s4_zh": {
+          "old": "insufficient",
+          "review": "boundary"
+        },
+        "E038_s3_en": {
+          "old": "boundary",
+          "review": "primary"
+        },
+        "E038_s3_zh": {
+          "old": "boundary",
+          "review": "primary"
+        }
+      },
+      "unique_action_count": 84
+    },
+    {
+      "current_demand": {
+        "n": 90,
+        "agree": 90,
+        "rate": 1.0,
+        "cohen_kappa": 1.0,
+        "confusion": {
+          "reasoning": {
+            "reasoning": 14
+          },
+          "routine": {
+            "routine": 76
+          }
+        }
+      },
+      "stage_grade": {
+        "n": 88,
+        "agree": 88,
+        "rate": 1.0,
+        "cohen_kappa": 1.0,
+        "confusion": {
+          "0": {
+            "0": 36
+          },
+          "1": {
+            "1": 10
+          },
+          "2": {
+            "2": 42
+          }
+        }
+      },
+      "applicability": {
+        "n": 94,
+        "agree": 94,
+        "rate": 1.0,
+        "cohen_kappa": 1.0,
+        "confusion": {
+          "applicable": {
+            "applicable": 42
+          },
+          "not_applicable": {
+            "not_applicable": 52
+          }
+        }
+      },
+      "action": {
+        "n": 78,
+        "agree": 78,
+        "rate": 1.0,
+        "cohen_kappa": 1.0,
+        "confusion": {
+          "economy": {
+            "economy": 40
+          },
+          "primary": {
+            "primary": 38
+          }
+        }
+      },
+      "action_with_uncertainty_panels": {
+        "n": 96,
+        "agree": 92,
+        "rate": 0.9583333333333334,
+        "cohen_kappa": 0.9347826086956524,
+        "confusion": {
+          "boundary": {
+            "primary": 4,
+            "boundary": 8
+          },
+          "economy": {
+            "economy": 40
+          },
+          "insufficient": {
+            "insufficient": 6
+          },
+          "primary": {
+            "primary": 38
+          }
+        }
+      },
+      "grade_allowed_set": {
+        "n": 6,
+        "compatible": 6
+      },
+      "action_panel_changes": {
+        "E006_s3_en": {
+          "old": "boundary",
+          "review": "primary"
+        },
+        "E006_s3_zh": {
+          "old": "boundary",
+          "review": "primary"
+        },
+        "E038_s3_en": {
+          "old": "boundary",
+          "review": "primary"
+        },
+        "E038_s3_zh": {
+          "old": "boundary",
+          "review": "primary"
+        }
+      },
+      "unique_action_count": 82
+    }
+  ],
+  "within_reviewer_bilingual": [
+    {
+      "current_demand": {
+        "n": 48,
+        "agree": 48,
+        "rate": 1.0,
+        "cohen_kappa": 1.0,
+        "confusion": {
+          "insufficient": {
+            "insufficient": 2
+          },
+          "reasoning": {
+            "reasoning": 8
+          },
+          "routine": {
+            "routine": 38
+          }
+        }
+      },
+      "stage_grade": {
+        "n": 48,
+        "agree": 48,
+        "rate": 1.0,
+        "cohen_kappa": 1.0,
+        "confusion": {
+          "0": {
+            "0": 20
+          },
+          "1": {
+            "1": 7
+          },
+          "2": {
+            "2": 21
+          }
+        }
+      },
+      "applicability": {
+        "n": 48,
+        "agree": 48,
+        "rate": 1.0,
+        "cohen_kappa": 1.0,
+        "confusion": {
+          "applicable": {
+            "applicable": 22
+          },
+          "not_applicable": {
+            "not_applicable": 26
+          }
+        }
+      },
+      "action": {
+        "n": 48,
+        "agree": 48,
+        "rate": 1.0,
+        "cohen_kappa": 1.0,
+        "confusion": {
+          "boundary": {
+            "boundary": 4
+          },
+          "economy": {
+            "economy": 20
+          },
+          "insufficient": {
+            "insufficient": 2
+          },
+          "primary": {
+            "primary": 22
+          }
+        }
+      }
+    },
+    {
+      "current_demand": {
+        "n": 48,
+        "agree": 48,
+        "rate": 1.0,
+        "cohen_kappa": 1.0,
+        "confusion": {
+          "insufficient": {
+            "insufficient": 2
+          },
+          "reasoning": {
+            "reasoning": 7
+          },
+          "routine": {
+            "routine": 38
+          },
+          "uncertain": {
+            "uncertain": 1
+          }
+        }
+      },
+      "stage_grade": {
+        "n": 48,
+        "agree": 48,
+        "rate": 1.0,
+        "cohen_kappa": 1.0,
+        "confusion": {
+          "0": {
+            "0": 20
+          },
+          "1": {
+            "1": 6
+          },
+          "2": {
+            "2": 21
+          },
+          "insufficient": {
+            "insufficient": 1
+          }
+        }
+      },
+      "applicability": {
+        "n": 48,
+        "agree": 48,
+        "rate": 1.0,
+        "cohen_kappa": 1.0,
+        "confusion": {
+          "applicable": {
+            "applicable": 21
+          },
+          "insufficient": {
+            "insufficient": 1
+          },
+          "not_applicable": {
+            "not_applicable": 26
+          }
+        }
+      },
+      "action": {
+        "n": 48,
+        "agree": 48,
+        "rate": 1.0,
+        "cohen_kappa": 1.0,
+        "confusion": {
+          "boundary": {
+            "boundary": 4
+          },
+          "economy": {
+            "economy": 20
+          },
+          "insufficient": {
+            "insufficient": 3
+          },
+          "primary": {
+            "primary": 21
+          }
+        }
+      }
+    }
+  ]
+}

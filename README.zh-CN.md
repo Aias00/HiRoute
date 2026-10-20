@@ -7,8 +7,8 @@
 </p>
 
 <p align="center">
-  <strong>按任务选择 Agent，按阶段选择模型。</strong><br>
-  面向长程 Agent 工作、本地优先的智能路由与协作引擎。
+  <strong>让 Codex 和 Claude Code 的订阅更耐用。</strong><br>
+  在本地运行的模型路由：常规工作交给经济模型，难题留给最强的模型。
 </p>
 
 <p align="center">
@@ -31,17 +31,19 @@
   </a>
 </p>
 
-HiRoute 是长程 Agent 的本地控制与执行层。它把模型来源、可复用路由计划、Agent 接入、有边界的
-故障接力和执行证据放在同一套系统里，同时提供 Desktop 应用以及无界面 CLI 和后台服务。
+继续使用你熟悉的 Codex、Claude Code、Qoder、Pi 或 DeepSeek Harness。使用智能省钱计划时，
+HiRoute 会在每条新消息到来时判断接下来的工作：读代码、查资料这类常规工作可以交给经济模型，
+设计取舍和疑难修复留给订阅或主力模型。订阅、API Key 和本地模型集中管理，每个会话实际用了哪个
+模型、用量和成本都可以查看；独立任务还可以委派给其他 Agent。
 
-使用决策的路由会在每个新用户轮次重新判断，同轮工具续接保持冻结决策，让模型持续复用增长中的
-上下文前缀。上下文重建后，如果 HiRoute 无法识别原来的续接关系或复用此前决策，才需要再次判断。
-重新判断也可以继续原模型；缓存实际能否复用取决于供应商。
+同一轮里的工具调用通常沿用本轮决策，让增长中的上下文前缀持续复用缓存；新用户消息到来，或上下文
+重建打断原有续接时，HiRoute 才重新判断，也可能继续原模型。缓存实际能否复用取决于供应商。HiRoute
+在本地运行，提供 Desktop 应用以及无界面 CLI 和后台服务。
 
 ## News · 最新动态
 
 - **最新稳定版本** — 提供 macOS Desktop 与 Linux 无界面版的 x86_64 / ARM64 安装包。[版本说明](https://github.com/higress-group/HiRoute/releases/latest) · [下载](https://hiroute.ai/download/)
-- **2026-10-14** — [切换模型会丢缓存，但省下的钱丢不掉](news/2026-10-14-routing-cache-cost.zh-CN.md)。[官网阅读](https://hiroute.ai/news/routing-cache-cost/)
+- **2026-10-14** — [切换模型会损失缓存，智能路由还省钱吗？](news/2026-10-14-routing-cache-cost.zh-CN.md) · [官网阅读](https://hiroute.ai/news/routing-cache-cost/)
 - **2026-10-04** — [HiRoute 智能路由实战：GPT-6 Astra × Qwen-3.8 Flash，同等质量下成本降低 90%](news/2026-10-04-astra-qwen.zh-CN.md)。[官网阅读](https://hiroute.ai/news/astra-qwen-smart-routing/) · [复现实验](experiments/README.md)
 - [让 AI Agent 更能干，让模型订阅更耐用：HiRoute 正式开源](news/hiroute-open-source.zh-CN.md)。[官网阅读](https://hiroute.ai/news/hiroute-open-source/)
 - [全部新闻](news/README.md)

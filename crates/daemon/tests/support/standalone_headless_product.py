@@ -195,6 +195,7 @@ try:
     response = client.getresponse()
     payload = response.read()
     if response.status != 200:
+        print(json.dumps({'status': response.status, 'body': payload.decode(errors='replace')}), file=sys.stderr)
         raise SystemExit(1)
     if probe:
         raise SystemExit(0)
@@ -342,6 +343,13 @@ for line in sys.stdin:
             'packages': [{'id': 'fixture:cpa@1'}],
             'documents': [{'sha256': '0' * 64}],
         }, sort_keys=True) + '\n')
+        console_assets = self.repo / 'apps/desktop/dist'
+        assert (console_assets / 'index.html').is_file(), 'build the candidate console frontend before installed-product acceptance'
+        staged_console = package_source / 'console'
+        shutil.copytree(console_assets, staged_console, symlinks=True)
+        for path in staged_console.rglob('*'):
+            if path.is_file() and not path.is_symlink():
+                path.chmod(0o600)
         candidate_hiroute = self.root / 'candidate-hiroute'
         candidate_hirouted = self.root / 'candidate-hirouted'
         shutil.copy2(source_bin / 'hiroute', candidate_hiroute)
@@ -369,9 +377,10 @@ for line in sys.stdin:
             '--version', '0.1.0-headless-product', '--revision', self.sha,
             '--hiroute', str(candidate_hiroute),
             '--hirouted', str(candidate_hirouted),
-            '--cpa-binary', str(cpa), '--cpa-version', '8.0.4-hiroute.4',
+            '--cpa-binary', str(cpa), '--cpa-version', '8.0.4-hiroute.5',
             '--cpa-license', str(license_path),
-            '--notices', str(package_source / 'notices'), '--output', str(self.package),
+            '--notices', str(package_source / 'notices'), '--console-assets', str(staged_console),
+            '--output', str(self.package),
         ], cwd=self.repo, env=self.env, capture_output=True, timeout=90)
         self.outputs.extend((package.stdout, package.stderr))
         assert package.returncode == 0, package.stderr.decode(errors='replace')
@@ -420,20 +429,46 @@ for line in sys.stdin:
         gateway = self.cli('gateway', 'show')
         assert gateway['data']['ready'] and gateway['data']['connect_address'], gateway
 
-    def cli(self, *arguments, payload=None, expected=0, pass_fds=()):
+    def cli(self, *arguments, payload=None, expected=0, pass_fds=(), retry_reader_busy=False):
+        # Observation reads may report temporary contention. Opt in explicitly;
+        # mutations and their idempotency assertions must still run exactly once.
+        if retry_reader_busy:
+            assert expected == 0 and not pass_fds and (
+                arguments[:2] in (('sessions', 'list'), ('sessions', 'show'),
+                                  ('sessions', 'receipt'), ('value', 'show'))
+                or arguments[:3] == ('observation', 'plan-quality', 'samples')
+            ), 'reader_busy retry requires an observation read'
         command = [str(self.cli_path), *arguments]
         if '--output' not in command:
             command.extend(['--output', 'json'])
-        result = subprocess.run(
-            command, cwd=self.project, env=self.env,
-            input=(None if payload is None else
-                   payload.encode() if isinstance(payload, str) else wire(payload)),
-            pass_fds=pass_fds, capture_output=True, timeout=90)
-        self.outputs.extend((result.stdout, result.stderr))
-        try:
-            envelope = json.loads(result.stdout)
-        except json.JSONDecodeError as error:
-            raise AssertionError((command, result.returncode, result.stdout, result.stderr)) from error
+        body = (None if payload is None else
+                payload.encode() if isinstance(payload, str) else wire(payload))
+        deadline = time.monotonic() + 5
+        while True:
+            result = subprocess.run(
+                command, cwd=self.project, env=self.env, input=body,
+                pass_fds=pass_fds, capture_output=True,
+                timeout=max(.001, deadline - time.monotonic()) if retry_reader_busy else 90)
+            self.outputs.extend((result.stdout, result.stderr))
+            try:
+                envelope = json.loads(result.stdout)
+            except json.JSONDecodeError as error:
+                raise AssertionError((command, result.returncode, result.stdout, result.stderr)) from error
+            error = envelope.get('error') or {}
+            failure = error.get('observation_read') or {}
+            delay_ms = failure.get('retry_after_ms')
+            if (retry_reader_busy and result.returncode == 6
+                    and envelope.get('status') == 'unavailable'
+                    and error.get('code') == 'OBSERVATION_UNAVAILABLE'
+                    and error.get('retryable') is True
+                    and error.get('details_schema') == 'hiroute.observation.read-failure/v1'
+                    and failure.get('reason') == 'reader_busy'
+                    and failure.get('action') == 'retry_read'
+                    and type(delay_ms) is int and delay_ms > 0
+                    and time.monotonic() + delay_ms / 1000 < deadline):
+                time.sleep(delay_ms / 1000)
+                continue
+            break
         daemon_failure = None
         if (result.returncode != expected and self.daemon is not None
                 and self.daemon.poll() is not None):

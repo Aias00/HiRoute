@@ -1,0 +1,233 @@
+{
+  "source_revision": "13856abd873da5b4373d39322493b4cc105c4867",
+  "source_release": "v0.3.1",
+  "source_artifact_sha256": "dfa35ada12fcef9d0d2e10e680422cd0bf6a0454a8809c27879b74ba932d21aa",
+  "events": [
+    {
+      "envelope_digest": "sha256:7b2b219a10a234316e9d3b649d9958ec9ec8a6dff3ec8669be44ecf7d200bfac",
+      "envelope": {
+        "schema_version": "hiroute.observation.product-execution-envelope/v2",
+        "schema_digest": "sha256:80b4ff13af8abc79d7721fea42141300beade2acf1d2659983ceaafcdc6e4799",
+        "channel": "execution_fact",
+        "producer": {
+          "component": "gateway-execution",
+          "revision": "hiroute-gateway-observation/1",
+          "stream": {
+            "producer_id": "execution_fact-producer-3e8480ed452938f328fe341cd5061a0b27e29de31e22be03f92b5677528b38f4",
+            "producer_epoch": "execution_fact-epoch-24614700d81f1c4cb011093a69db05e415c7426cc952f7657efbdcc680070005",
+            "stream_id": "execution_fact-stream-c8d9e9246a447671d64ad6a62d420cf2352e4672533075fbb51fd7ce17353627"
+          }
+        },
+        "sequence": 1,
+        "event_id": "fact-event-9e2af1a23dcc7346c407db80b245c262d1400d8fbaf2f77d2c67b74c45daed60",
+        "correlation": {
+          "workspace_id": "personal/default",
+          "conversation_id": "observation-session-1826b1b784b8d046a4e55c8e9b6a0428cfc7ef73f8157365ca797de46ea44809",
+          "session_scope": "conversation",
+          "correlation_provenance": "agent_supplied",
+          "turn_id": "turn-24d70d6437fff73d5d837579ae753bb0509d266f156b3f39d1302df296c6a4d6",
+          "request_id": "request-e042d6649673fcfd26799b58b416a763183aac7aba81e5ff7b0fb362e0451f64"
+        },
+        "trust": {
+          "authority_id": "personal/default",
+          "authority_epoch": 1,
+          "served_model_id": "hiroute-richangbianma",
+          "selector_source": "trusted_model_alias",
+          "agent_plan_id": "plan/56b0df6ca77e8df83b819fff",
+          "route": {
+            "kind": "plan",
+            "revision": 2,
+            "semantic_digest": "sha256:f854cd3d47380f2521b94d330dceecf4b642775b573d77b7eb956a83d5bdba89"
+          },
+          "plan_display_name": "日常编码",
+          "gateway_publication_revision": "3",
+          "gateway_publication_digest": "sha256:03af208531035bd6d5132db4ab448013e293d75dae8aaf561b7804ca2c5b94f6",
+          "grant_id": "grant_200d69caeb17d1b559851d8a366ed1e1",
+          "grant_generation": 1,
+          "ingress_protocol": "responses"
+        },
+        "occurred_at_unix_nanos": 1792312861283449624,
+        "fact": {
+          "kind": "route_decision",
+          "planner_version": "hiroute-deterministic-planner/v1",
+          "plan_id": "plan/56b0df6ca77e8df83b819fff",
+          "route": {
+            "kind": "plan",
+            "revision": 2,
+            "semantic_digest": "sha256:f854cd3d47380f2521b94d330dceecf4b642775b573d77b7eb956a83d5bdba89"
+          },
+          "input_digest": "sha256:87bf09b9366e27fe64e351c98477780ab75ba39a27e205dd82093f35d98aa27d",
+          "policy_digest": "sha256:fadcdab4595959162af552a5add6efca709902dbe2acccbe5ba88c6d295c8d6e",
+          "output_digest": "sha256:dec9e10cd7f4b0ce144d0adf7865db24de9aad380f3fa32d6ea0b53fbf151f69",
+          "branch": "smart_saving_simple",
+          "complexity": {
+            "policy": {
+              "name": "Smart saving",
+              "floor_millis": 500,
+              "criteria_digest": "sha256:ece003e12d95024dbfb37f2d5b2163a0f38f12c4f6abe665c908250334c7f454"
+            },
+            "execution_group": "regular",
+            "simple_probability": 0.9,
+            "simple_threshold_millis": 800,
+            "selection_reason": "simple_task",
+            "strategy_id": "hiroute-complexity-v1",
+            "schema_version": "hiroute-route-strategy-v1",
+            "payload_digest": "sha256:d0a93383522c7668994f7f336feca4541c590e86df123cd6aa0f9c274ec92929",
+            "branch_id": "smart_saving",
+            "complexity_score": null,
+            "threshold": null,
+            "decision_source": "external_classifier",
+            "reason_codes": [],
+            "matched_user_phrase_ids": [],
+            "fallback_used": false,
+            "classification_duration_micros": 6568,
+            "fallback_reason": null
+          },
+          "groups": [
+            {
+              "ordinal": 0,
+              "group_id": "economy",
+              "ranked_candidate_ids": [
+                "binding/managed-b2c67db3a8d9ee12960da97f"
+              ]
+            },
+            {
+              "ordinal": 1,
+              "group_id": "primary",
+              "ranked_candidate_ids": []
+            }
+          ],
+          "reason_ledger": [
+            {
+              "ordinal": 0,
+              "code": "SMART_SAVING_SIMPLE",
+              "group_id": null
+            },
+            {
+              "ordinal": 1,
+              "code": "GROUP_EXHAUSTED_FALLBACK",
+              "group_id": "primary"
+            }
+          ],
+          "requirements": {
+            "ingress_protocol": "responses",
+            "text": true,
+            "initial_instructions": false,
+            "mid_conversation_instructions": false,
+            "image_url": false,
+            "image_base64": false,
+            "image_media_types": [],
+            "function_tools": false,
+            "strict_tools": false,
+            "tool_choice": {
+              "kind": "auto"
+            },
+            "parallel_tools": false,
+            "tool_roundtrip": false,
+            "tool_result_text": false,
+            "tool_result_json": false,
+            "logical_tool_id_mapping": false,
+            "streaming": true,
+            "stream_text": true,
+            "stream_tool_arguments": false,
+            "stream_reasoning": true,
+            "stream_usage": true,
+            "provider_state": false
+          },
+          "requested_reasoning_disposition": "absent",
+          "requested_reasoning_value": null,
+          "requested_max_output_tokens": null,
+          "stream": true,
+          "outcome": "ready",
+          "outcome_code": null,
+          "max_attempts": 1
+        }
+      }
+    },
+    {
+      "envelope_digest": "sha256:f63c8c150b648e7715c72e750ef9779c2b01c204cd9bcf89a17b35921cf331e2",
+      "envelope": {
+        "schema_version": "hiroute.observation.product-execution-envelope/v2",
+        "schema_digest": "sha256:80b4ff13af8abc79d7721fea42141300beade2acf1d2659983ceaafcdc6e4799",
+        "channel": "execution_fact",
+        "producer": {
+          "component": "gateway-execution",
+          "revision": "hiroute-gateway-observation/1",
+          "stream": {
+            "producer_id": "execution_fact-producer-3e8480ed452938f328fe341cd5061a0b27e29de31e22be03f92b5677528b38f4",
+            "producer_epoch": "execution_fact-epoch-24614700d81f1c4cb011093a69db05e415c7426cc952f7657efbdcc680070005",
+            "stream_id": "execution_fact-stream-c8d9e9246a447671d64ad6a62d420cf2352e4672533075fbb51fd7ce17353627"
+          }
+        },
+        "sequence": 2,
+        "event_id": "fact-event-d0937e136b7f08ca35806cd11a9025f2d041bbf551fd1866af075657bdfc2817",
+        "correlation": {
+          "workspace_id": "personal/default",
+          "conversation_id": "observation-session-1826b1b784b8d046a4e55c8e9b6a0428cfc7ef73f8157365ca797de46ea44809",
+          "session_scope": "conversation",
+          "correlation_provenance": "agent_supplied",
+          "turn_id": "turn-24d70d6437fff73d5d837579ae753bb0509d266f156b3f39d1302df296c6a4d6",
+          "request_id": "request-e042d6649673fcfd26799b58b416a763183aac7aba81e5ff7b0fb362e0451f64"
+        },
+        "trust": {
+          "authority_id": "personal/default",
+          "authority_epoch": 1,
+          "served_model_id": "hiroute-richangbianma",
+          "selector_source": "trusted_model_alias",
+          "agent_plan_id": "plan/56b0df6ca77e8df83b819fff",
+          "route": {
+            "kind": "plan",
+            "revision": 2,
+            "semantic_digest": "sha256:f854cd3d47380f2521b94d330dceecf4b642775b573d77b7eb956a83d5bdba89"
+          },
+          "plan_display_name": "日常编码",
+          "gateway_publication_revision": "3",
+          "gateway_publication_digest": "sha256:03af208531035bd6d5132db4ab448013e293d75dae8aaf561b7804ca2c5b94f6",
+          "grant_id": "grant_200d69caeb17d1b559851d8a366ed1e1",
+          "grant_generation": 1,
+          "ingress_protocol": "responses"
+        },
+        "occurred_at_unix_nanos": 1792312861283470785,
+        "fact": {
+          "kind": "candidate_decision",
+          "candidate_id": "binding/managed-b2c67db3a8d9ee12960da97f",
+          "stable_binding_id": "binding/managed-b2c67db3a8d9ee12960da97f",
+          "group_id": "economy",
+          "declared_order": 0,
+          "profile_digest": "sha256:a09fb5baec675701bba92666c61a82f20045cd9cdad101855a274d037b069292",
+          "ingress_protocol": "responses",
+          "upstream_protocol": "responses",
+          "path_id": "responses-to-responses",
+          "provider_id": "openai",
+          "endpoint_id": "endpoint.cpa.codex",
+          "entitlement_id": "codex-subscription",
+          "connector_id": "connector.cpa.codex",
+          "connector_revision": "1",
+          "capability_id": "cap.openai.gpt-5.5.codex.responses",
+          "capability_revision": "1",
+          "model_configuration_id": "model.openai.gpt-5.5",
+          "native_model": "hiroute-codex-current/gpt-5.5",
+          "adapter_revision": "adapter/native/responses@1",
+          "serializer_revision": "hiroute-target-json/v1",
+          "decoder_revision": "hiroute-native-response/v1",
+          "target_serialized_bytes": 162,
+          "eligible": true,
+          "exclusion_reason": null,
+          "reasoning_profile_id": "low",
+          "overall_score_tenths": null,
+          "effective_cost_micros": null,
+          "api_equivalent_cost_micros": null,
+          "cost_class": "free",
+          "cache_cost": {
+            "kind": "none"
+          },
+          "cache_affinity": false,
+          "compute_scope_order": 0,
+          "ranking_reasons": [
+            "PUBLISHED_MANUAL_ORDER"
+          ]
+        }
+      }
+    }
+  ]
+}

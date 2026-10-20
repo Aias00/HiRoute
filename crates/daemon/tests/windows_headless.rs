@@ -908,6 +908,38 @@ fn actual_windows_public_routing_modes() {
     windows_routing_modes::focused();
 }
 
+/// Bounded payload/credential acceptance, independent of native Agent accounts.
+#[test]
+#[ignore = "focused installed decision service and C capability acceptance"]
+fn actual_windows_decision_services_c_capability() {
+    let product = InstalledProduct::create();
+    let mut first = product.start();
+    gateway_ready(first.listen);
+    windows_decision_business::roundtrip(&product);
+    lifecycle::stop(
+        &product.layout.lifecycle_endpoint(),
+        &product.daemon,
+        IO_BOUND,
+    )
+    .unwrap();
+    first.wait(true);
+    let mut reopened = product.start();
+    gateway_ready(reopened.listen);
+    assert!(
+        product.cli(&["decision", "services", "list"])["data"]["services"]
+            .as_array()
+            .unwrap()
+            .is_empty()
+    );
+    lifecycle::stop(
+        &product.layout.lifecycle_endpoint(),
+        &product.daemon,
+        IO_BOUND,
+    )
+    .unwrap();
+    reopened.wait(true);
+}
+
 fn public_headless_business(include_claude: bool) {
     let product = InstalledProduct::create();
     let contexts = windows_user_models::Contexts::prepare(&product);
@@ -922,7 +954,19 @@ fn public_headless_business(include_claude: bool) {
             .unwrap()
             .starts_with("sha256:")
     );
-    assert_eq!(manifest["commands"].as_array().unwrap().len(), 51);
+    let commands = manifest["commands"].as_array().unwrap();
+    assert_eq!(commands.len(), 59);
+    for command_id in [
+        "prices.effective",
+        "prices.override.preview",
+        "prices.override.apply",
+    ] {
+        assert!(
+            commands
+                .iter()
+                .any(|command| command["command_id"] == command_id)
+        );
+    }
     let descriptor = product.cli(&["schema", "show", "--command-id", "compute.connection.login"]);
     assert_eq!(descriptor["data"]["command_id"], "compute.connection.login");
     assert_eq!(descriptor["data"]["lifecycle"], "released");

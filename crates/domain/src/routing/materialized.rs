@@ -23,7 +23,19 @@ thread_local! {
     pub(crate) static CANDIDATE_VALIDATIONS: std::cell::Cell<usize> = const { std::cell::Cell::new(0) };
 }
 
-#[derive(Clone, Copy, Debug, Deserialize, Eq, Hash, Ord, PartialEq, PartialOrd, Serialize)]
+#[derive(
+    schemars::JsonSchema,
+    Clone,
+    Copy,
+    Debug,
+    Deserialize,
+    Eq,
+    Hash,
+    Ord,
+    PartialEq,
+    PartialOrd,
+    Serialize,
+)]
 #[serde(rename_all = "snake_case")]
 pub enum MaterializedGroupId {
     Economy,
@@ -47,7 +59,7 @@ impl MaterializedGroupId {
     }
 }
 
-#[derive(Clone, Debug, Deserialize, Eq, PartialEq, Serialize)]
+#[derive(schemars::JsonSchema, Clone, Debug, Deserialize, Eq, PartialEq, Serialize)]
 #[serde(deny_unknown_fields)]
 pub struct MaterializedBranchV1 {
     pub id: String,
@@ -64,16 +76,20 @@ impl MaterializedBranchV1 {
     }
 }
 
-#[derive(Clone, Debug, Deserialize, Eq, PartialEq, Serialize)]
+#[derive(schemars::JsonSchema, Clone, Debug, Deserialize, Eq, PartialEq, Serialize)]
 #[serde(tag = "strategy", rename_all = "snake_case", deny_unknown_fields)]
 pub enum RequestOwnedRouteV1 {
     Branches {
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        native_protocol: Option<super::FrozenNativeProtocolV1>,
         classifier: ComplexityClassifierV1,
         branches: Vec<MaterializedBranchV1>,
         default_branch_id: String,
         reselect_on_user_message: bool,
     },
     Classified {
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        native_protocol: Option<super::FrozenNativeProtocolV1>,
         classifier: ComplexityClassifierV1,
         judgment: super::JudgmentSettingsV1,
         reselect_on_user_message: bool,
@@ -86,14 +102,14 @@ pub enum RequestOwnedRouteV1 {
     },
 }
 
-#[derive(Clone, Copy, Debug, Deserialize, Eq, PartialEq, Serialize)]
+#[derive(schemars::JsonSchema, Clone, Copy, Debug, Deserialize, Eq, PartialEq, Serialize)]
 #[serde(rename_all = "snake_case")]
 pub enum MaterializedCostPolicyV1 {
     ApiEquivalent,
     StrictFree,
 }
 
-#[derive(Clone, Debug, Deserialize, Eq, PartialEq, Serialize)]
+#[derive(schemars::JsonSchema, Clone, Debug, Deserialize, Eq, PartialEq, Serialize)]
 #[serde(tag = "kind", rename_all = "snake_case", deny_unknown_fields)]
 pub enum MaterializedOrderingV1 {
     QualityFirst,
@@ -105,7 +121,7 @@ pub enum MaterializedOrderingV1 {
     ExplicitOrder,
 }
 
-#[derive(Clone, Debug, Deserialize, Eq, PartialEq, Serialize)]
+#[derive(schemars::JsonSchema, Clone, Debug, Deserialize, Eq, PartialEq, Serialize)]
 #[serde(deny_unknown_fields)]
 pub struct MaterializedModelGroupV1 {
     pub group_id: MaterializedGroupId,
@@ -119,7 +135,7 @@ pub struct MaterializedModelGroupV1 {
     pub candidates: Vec<AttemptOwnedCandidateV1>,
 }
 
-#[derive(Clone, Debug, Deserialize, Eq, PartialEq, Serialize)]
+#[derive(schemars::JsonSchema, Clone, Debug, Deserialize, Eq, PartialEq, Serialize)]
 #[serde(deny_unknown_fields)]
 pub struct MaterializedRatingFactV1 {
     pub model_configuration_id: String,
@@ -127,7 +143,7 @@ pub struct MaterializedRatingFactV1 {
     pub rating_count: u64,
 }
 
-#[derive(Clone, Debug, Deserialize, Eq, PartialEq, Serialize)]
+#[derive(schemars::JsonSchema, Clone, Debug, Deserialize, Eq, PartialEq, Serialize)]
 #[serde(deny_unknown_fields)]
 pub struct MaterializedFreeOfferRefV1 {
     pub free_offer_id: String,
@@ -137,7 +153,7 @@ pub struct MaterializedFreeOfferRefV1 {
     pub evidence_digest: CanonicalDigest,
 }
 
-#[derive(Clone, Debug, Deserialize, Eq, PartialEq, Serialize)]
+#[derive(schemars::JsonSchema, Clone, Debug, Deserialize, Eq, PartialEq, Serialize)]
 #[serde(deny_unknown_fields)]
 pub struct AttemptOwnedCandidateV1 {
     pub binding_id: String,
@@ -302,20 +318,20 @@ impl AttemptOwnedCandidateV1 {
     }
 }
 
-#[derive(Clone, Debug, Deserialize, Eq, PartialEq, Serialize)]
+#[derive(schemars::JsonSchema, Clone, Debug, Deserialize, Eq, PartialEq, Serialize)]
 #[serde(deny_unknown_fields)]
 pub struct AttemptOwnedRouteV1 {
     pub limits: RoutingLimitsV1,
     pub groups: Vec<MaterializedModelGroupV1>,
 }
 
-#[derive(Clone, Debug, Deserialize, Eq, PartialEq, Serialize)]
+#[derive(schemars::JsonSchema, Clone, Debug, Deserialize, Eq, PartialEq, Serialize)]
 #[serde(rename_all = "snake_case")]
 pub enum PriceTrackingMode {
     FollowLatest,
 }
 
-#[derive(Clone, Debug, Deserialize, Eq, PartialEq, Serialize)]
+#[derive(schemars::JsonSchema, Clone, Debug, Deserialize, Eq, PartialEq, Serialize)]
 #[serde(deny_unknown_fields)]
 pub struct AgentPlanFactRefsV1 {
     pub connector_registry_version: String,
@@ -408,7 +424,7 @@ pub enum ReplanReason {
     InventoryChanged,
 }
 
-#[derive(Clone, Debug, Deserialize, Eq, PartialEq, Serialize)]
+#[derive(schemars::JsonSchema, Clone, Debug, Deserialize, Eq, PartialEq, Serialize)]
 #[serde(deny_unknown_fields)]
 pub struct MaterializedAgentPlanV1 {
     pub fact_refs: AgentPlanFactRefsV1,
@@ -548,11 +564,19 @@ fn validate_request_groups(
     };
     match request {
         RequestOwnedRouteV1::Branches {
+            native_protocol,
             classifier,
             branches,
             default_branch_id,
             ..
         } => {
+            if let Some(p) = native_protocol {
+                p.validate_branches(branches, default_branch_id)
+                    .map_err(CompiledPlanError::NativeProtocol)?;
+                if !super::native_mode(&classifier.mode) {
+                    return Err(CompiledPlanError::InvalidClassifier);
+                }
+            }
             classifier
                 .validate()
                 .map_err(|_| CompiledPlanError::InvalidClassifier)?;
@@ -579,12 +603,20 @@ fn validate_request_groups(
             Ok(())
         }
         RequestOwnedRouteV1::Classified {
+            native_protocol,
             classifier,
             judgment,
             simple_groups,
             complex_groups,
             ..
         } => {
+            if let Some(p) = native_protocol {
+                p.validate_smart(judgment)
+                    .map_err(CompiledPlanError::NativeProtocol)?;
+                if !super::native_mode(&classifier.mode) {
+                    return Err(CompiledPlanError::InvalidClassifier);
+                }
+            }
             classifier
                 .validate()
                 .map_err(|_| CompiledPlanError::InvalidClassifier)?;
@@ -630,7 +662,7 @@ fn validate_request_groups(
     }
 }
 
-#[derive(Clone, Debug, Deserialize, Eq, PartialEq, Serialize)]
+#[derive(schemars::JsonSchema, Clone, Debug, Deserialize, Eq, PartialEq, Serialize)]
 #[serde(deny_unknown_fields)]
 pub struct CompiledAgentPlanBodyV1 {
     pub schema: String,
@@ -643,7 +675,7 @@ pub struct CompiledAgentPlanBodyV1 {
 
 /// A sealed body is shared immutably. Copy-on-write edits detach from the proof and must
 /// pass full validation again; deserialization never imports an in-memory proof.
-#[derive(Clone, Debug, Serialize)]
+#[derive(schemars::JsonSchema, Clone, Debug, Serialize)]
 #[serde(deny_unknown_fields)]
 pub struct CompiledAgentPlanV1 {
     #[serde(serialize_with = "crate::operation::shared_input::serialize")]
@@ -788,6 +820,8 @@ fn invalid_digest(value: &CanonicalDigest) -> bool {
 
 #[derive(Clone, Debug, Error, Eq, PartialEq)]
 pub enum CompiledPlanError {
+    #[error(transparent)]
+    NativeProtocol(super::NativeProtocolError),
     #[error("compiled AgentPlan schema is unsupported")]
     UnsupportedSchema,
     #[error("compiled AgentPlan compiler revision is unsupported")]

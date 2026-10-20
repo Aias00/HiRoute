@@ -13,7 +13,7 @@ a prerequisite, not a model call, installed Skill invocation or resumable task.
 | --- | --- | --- |
 | Scan, prepare and import model sources | [Source admission map](architecture.md#model-sources-and-native-configuration), [model connection assembly](../../crates/daemon/src/control/runtime/model_connections.rs) | [Pi acceptance](../../tools/product-e2e/tests/PI_INTEGRATION.md), [DSH acceptance](../../tools/product-e2e/tests/DSH_INTEGRATION.md) |
 | Configure, edit and restore models | [Settings transaction](../../crates/application/src/agent_connection/settings), [typed facts](../../crates/daemon/src/control/runtime/settings_facts), [Desktop Agent feature](../../apps/desktop/src/features/agents/README.md) | [Additional native provider guide](../../crates/integrations/src/agents/additional_native/README.md), [saved-model journey](../../crates/daemon/tests/support/additional_model_product.py), [Windows ordinary Pi/DSH clients](../../crates/daemon/tests/support/windows_user_models.rs), [Windows Qoder official-account journey](../../crates/daemon/tests/support/windows_qoder_user_models.rs) |
-| Enable, edit or disable task collaboration independently | [CLI intent workflow](../../crates/cli/src/collaboration.rs), [Skill effects](../../crates/application/src/agent_connection), [local checks](../../apps/desktop/src-tauri/src/agent_check_session.rs) | [CLI workflow regressions](../../crates/cli/src/collaboration/tests.rs), [real main-Agent → public CLI → Worker journey](../../crates/daemon/tests/support/collaboration_product.py) |
+| Enable, edit or disable task collaboration independently | [CLI intent workflow](../../crates/cli/src/collaboration.rs), [Skill effects](../../crates/application/src/agent_connection), [shared session checks](../../crates/product-session/src/agent_check_session.rs) | [CLI workflow regressions](../../crates/cli/src/collaboration/tests.rs), [real main-Agent → public CLI → Worker journey](../../crates/daemon/tests/support/collaboration_product.py) |
 
 Qoder/Pi/DSH/OpenCode saved models use one owned provider per Plan with an explicit
 Responses/Messages choice. [Route grants](../../crates/domain/src/agents/model_grant.rs)
@@ -29,11 +29,27 @@ the physical JSON/JSONC file verified by existing recovery markers;
 [effective model facts](../../crates/integrations/src/agents/opencode_scanner.rs)
 also feed the shared configured/drift status.
 
+Hermes uses an [explicit effective profile](../../crates/integrations/src/agents/hermes/README.md)
+and one default main-model Plan. Desktop keeps Hermes in the common Agent list;
+its native host resolves the caller's existing default profile and its details can
+select another through the same target-read flow before settings become available.
+The common [discovery preference](../../apps/desktop/src/features/agents/discovery.ts)
+remembers explicit targets as hints, with backend revalidation and per-profile failure isolation.
+Its bundled native middleware carries the real
+session into trusted Gateway correlation. The managed provider also uses the same
+scoped model grant as its native API key for auxiliary Chat requests; global model
+headers are not a credential carrier. All six supported Agents have independent management and collaboration Skills;
+[shared Skill facts](../../crates/daemon/src/control/runtime/settings_facts/skills.rs)
+resolve their native roots through the existing ownership/Operation engine. Legacy
+primary roles retain their original resource meanings; the second Skill has a separate
+registered effect and per-facet restore reference. Hermes initiates delegation through
+the existing local Worker CLI and does not become a Worker executor.
+
 ## Follow a task through its owners
 
 | Step / question | Production owner | Boundary to preserve |
 | --- | --- | --- |
-| Select and confirm an installation | [Desktop preparation](../../apps/desktop/src-tauri/src/bridge/worker_tasks.rs), [protected confirmation](../../apps/desktop/src-tauri/src/session/worker_dependencies.rs), [launch type](../../crates/domain/src/delegation/installation.rs), [storage](../../crates/local-storage/src/control/worker_dependencies.rs) | Exact canonical components, window-bound single-use confirmation and durable selection; discovery is not authority |
+| Select and confirm an installation | [Desktop preparation](../../apps/desktop/src-tauri/src/bridge/worker_tasks.rs), [protected confirmation](../../crates/product-session/src/session/worker_dependencies.rs), [launch type](../../crates/domain/src/delegation/installation.rs), [storage](../../crates/local-storage/src/control/worker_dependencies.rs) | Exact canonical components, window-bound single-use confirmation and durable selection; discovery is not authority |
 | Publish the machine-readable request shape | [Worker producer](../../crates/application-api/src/generated/worker.rs), [Plan producer](../../crates/application-api/src/generated/plan_authoring.rs), [CLI generator](../../crates/cli/src/bin/generate_cli_contract.rs) | Typed producer sources generate [CLI contracts](../../contracts/cli); retain native-only forbidden fields and adapter requirements |
 | Submit and admit work | [CLI submission](../../crates/cli/src/worker.rs), [daemon admission](../../crates/daemon/src/control/runtime/delegation_tasks.rs), [Application](../../crates/application/src/delegation) | Daemon admission owns durable key/intent deduplication; CLI preserves returned locators and uses no local receipt |
 | Resolve resources and construct a run | [Installation](../../crates/daemon/src/delegation/installation.rs), [native context](../../crates/daemon/src/delegation/profile/native_context.rs), [profile guide](../../crates/daemon/src/delegation/profile/README.md) | Effective instance HOME/config root supplies resources; per-run overrides supply route, credential and permission policy |
@@ -220,7 +236,7 @@ retain independent execution.
 
 | Behavior | Start with |
 | --- | --- |
-| Installation confirmation, one-shot authority and exact saved selection | [Native bridge tests](../../apps/desktop/src-tauri/src/bridge/worker_dependencies_tests.rs), [Desktop scenario map](../../apps/desktop/tests/README.md) |
+| Installation confirmation, one-shot authority and exact saved selection | [Shared session tests](../../crates/product-session/src/commands/worker_dependencies_tests.rs), [Desktop scenario map](../../apps/desktop/tests/README.md) |
 | Actual user/project Skills and exact Continue after restart or source replacement | [Native context journey](../../crates/daemon/tests/support/native_context_product.py), ecosystem acceptance guide above |
 | Concurrent routes, cancellation isolation and missing-history rejection | [Shared boundary journey](../../crates/daemon/tests/support/native_context_boundaries.py), [assertion guide](../../crates/daemon/tests/support/NATIVE_CONTEXT_BOUNDARIES.md) |
 | Native tool summarization and compaction remain on the frozen route | [Compaction journey](../../crates/daemon/tests/support/native_compaction_product.py), [Qoder native leaf](../../crates/daemon/tests/support/qoder_compaction_product.py) |
@@ -231,6 +247,6 @@ retain independent execution.
 Use the [test map](testing.md) and selected ecosystem run guide for inputs, writable
 roots, required outcomes and cleanup. Shared request changes require the configured
 Mac `desktop-pilot --all-targets` compile gate; ignored native targets need explicit
-execution. Native bridge filters are `bridge::worker_tasks::tests`,
-`session::checks::tests` and `bridge::model_connection_web::tests`; zero selected
+execution. Shared Product Session filters are `commands::worker_tasks::tests`,
+`session::checks::tests` and `commands::model_connection_web::tests`; zero selected
 tests prove nothing about those consumers.

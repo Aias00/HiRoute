@@ -27,7 +27,7 @@ semantics, explicit focused/final run associations and the required agent feedba
 | Integrations | Integrations, application, CPA bridge, storage, release-facts, daemon and CLI tests, plus smoke. |
 | Storage | Storage, observation, application, daemon, client core and CLI tests, plus smoke. |
 | Observation | Observation, daemon, client core and CLI tests, plus smoke. |
-| Daemon | Daemon and CLI tests, plus smoke. |
+| Daemon | Daemon and CLI tests, plus smoke. Plans running the daemon package suite also build the candidate console required by installed management tests. |
 | CPA bridge | CPA bridge, daemon, integrations and CLI tests, plus smoke. |
 | Gateway/core | Both Gateway packages, protocol E2E, integrations, CPA bridge, storage, release-facts, daemon, CLI and smoke; retain the distinct no-default-features loopback. |
 | Native Desktop | Frontend, CLI/client core/daemon and core smoke, plus the configured-Mac `desktop.compile` gate and affected native behavior checks; do not automatically expand to all backend packages. Hosted success does not prove native behavior. |

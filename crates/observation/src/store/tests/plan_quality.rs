@@ -9,6 +9,8 @@ use crate::query_v2::ObservationReaderContext;
 
 use super::support::{Fixture, fact_channel, offer_fact, open_store, writer};
 
+mod routing_observations;
+mod routing_observations_released;
 mod summary;
 
 const PLAN: &str = "plan/codex-daily";
@@ -128,6 +130,7 @@ fn assessment_for_model(
 
 fn query(plan_revision: Option<u64>) -> PlanQualitySamplesQuery {
     PlanQualitySamplesQuery {
+        include_routing_observations: false,
         competence: None,
         plan_id: Some(PLAN.into()),
         session_id: None,

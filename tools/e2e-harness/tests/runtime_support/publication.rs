@@ -127,6 +127,7 @@ pub(super) fn snapshot(
         );
         (
             AliasRequestOwnedRouteV1::Classified {
+                native_protocol: None,
                 judgment: Default::default(),
                 // Retained legacy value has no effect on fresh group judgment
                 // or candidate continuity within the selected group.
@@ -234,6 +235,7 @@ pub(super) fn snapshot(
             ]
             .into_iter()
             .map(|(protocol, token)| GrantV1 {
+                consumer: None,
                 route_protocols: Default::default(),
                 grant_id: format!("runtime-grant-{}", protocol.path()),
                 generation: 1,
@@ -244,6 +246,7 @@ pub(super) fn snapshot(
             .collect()
         } else {
             vec![GrantV1 {
+                consumer: None,
                 route_protocols: Default::default(),
                 grant_id: "runtime-grant".into(),
                 generation: 1,
@@ -339,6 +342,7 @@ pub(super) fn make_isolated_fixed_grants(snapshot: &mut GatewayPublicationSnapsh
                 })
                 .collect();
             GrantV1 {
+                consumer: None,
                 route_protocols: Default::default(),
                 grant_id: format!("isolated-grant-{index}"),
                 generation: 1,
@@ -406,6 +410,7 @@ pub(super) fn use_builtin_branch_decision(
     };
     let judgment = |id: &str| hiroute_domain::JudgmentSettingsV1 {
         competence: CompetencePolicyV1 {
+            standard: None,
             instructions: format!("Evaluate actual {id} execution"),
             floor_millis: 500,
             criteria: [
@@ -418,6 +423,7 @@ pub(super) fn use_builtin_branch_decision(
     };
     if smart {
         routing.request_owned = AliasRequestOwnedRouteV1::Classified {
+            native_protocol: None,
             classifier,
             judgment: judgment(hiroute_domain::SMART_SAVING_SCOPE_ID),
             reselect_on_user_message: false,
@@ -444,6 +450,7 @@ pub(super) fn use_builtin_branch_decision(
         },
     ];
     routing.request_owned = AliasRequestOwnedRouteV1::Branches {
+        native_protocol: None,
         classifier,
         branches: ids
             .into_iter()

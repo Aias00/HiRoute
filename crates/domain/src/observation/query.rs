@@ -63,7 +63,9 @@ pub enum ContentMode {
     MessagesAndTools,
 }
 
-#[derive(Clone, Copy, Debug, Default, Deserialize, Eq, PartialEq, Serialize)]
+#[derive(
+    schemars::JsonSchema, Clone, Copy, Debug, Default, Deserialize, Eq, PartialEq, Serialize,
+)]
 #[serde(rename_all = "snake_case")]
 pub enum ModelSwitchFilter {
     #[default]
@@ -89,7 +91,7 @@ pub struct SessionListQueryV1 {
     pub include_unlinked: bool,
 }
 
-#[derive(Clone, Debug, Deserialize, Eq, PartialEq, Serialize)]
+#[derive(schemars::JsonSchema, Clone, Debug, Deserialize, Eq, PartialEq, Serialize)]
 #[serde(deny_unknown_fields)]
 pub struct SessionSummaryV1 {
     pub session_id: SessionId,
@@ -114,7 +116,7 @@ pub struct SessionListV1 {
     pub sessions: Vec<SessionSummaryV1>,
 }
 
-#[derive(Clone, Debug, Deserialize, Eq, PartialEq, Serialize)]
+#[derive(schemars::JsonSchema, Clone, Debug, Deserialize, Eq, PartialEq, Serialize)]
 #[serde(deny_unknown_fields)]
 pub struct TurnDetailV1 {
     pub turn_id: TurnId,
@@ -124,7 +126,7 @@ pub struct TurnDetailV1 {
     pub messages: Vec<StoredMessageV1>,
 }
 
-#[derive(Clone, Debug, Deserialize, Eq, PartialEq, Serialize)]
+#[derive(schemars::JsonSchema, Clone, Debug, Deserialize, Eq, PartialEq, Serialize)]
 #[serde(deny_unknown_fields)]
 pub struct SessionDetailV1 {
     pub summary: SessionSummaryV1,
@@ -132,7 +134,9 @@ pub struct SessionDetailV1 {
     pub content_access: ContentAccess,
 }
 
-#[derive(Clone, Copy, Debug, Default, Deserialize, Eq, PartialEq, Serialize)]
+#[derive(
+    schemars::JsonSchema, Clone, Copy, Debug, Default, Deserialize, Eq, PartialEq, Serialize,
+)]
 #[serde(rename_all = "snake_case")]
 pub enum ValueGroupByV1 {
     #[default]
@@ -202,7 +206,7 @@ pub struct ValueGroupedSummaryV1 {
     pub detail_available: bool,
 }
 
-#[derive(Clone, Debug, Deserialize, Eq, PartialEq, Serialize)]
+#[derive(schemars::JsonSchema, Clone, Debug, Deserialize, Eq, PartialEq, Serialize)]
 #[serde(deny_unknown_fields)]
 pub struct ObservationGapV1 {
     pub channel: super::ObservationChannel,
@@ -216,7 +220,7 @@ pub struct ObservationGapV1 {
     pub session_id: Option<SessionId>,
 }
 
-#[derive(Clone, Debug, Deserialize, Eq, PartialEq, Serialize)]
+#[derive(schemars::JsonSchema, Clone, Debug, Deserialize, Eq, PartialEq, Serialize)]
 #[serde(deny_unknown_fields)]
 pub struct ObservationStatusV1 {
     pub retention: RetentionPolicyV1,
@@ -231,7 +235,37 @@ pub struct ObservationStatusV1 {
     pub production_exporter: String,
 }
 
+#[derive(schemars::JsonSchema, Clone, Debug, Default, Deserialize, Serialize, PartialEq, Eq)]
+#[serde(deny_unknown_fields)]
+pub struct ObservationCapacityStatusV1 {
+    pub max_active_bytes: Option<u64>,
+    pub active_bytes: Option<u64>,
+    pub measured_at_ms: Option<i64>,
+    pub state: String,
+    pub reason: String,
+}
+
 pub trait ObservationQueryPort: Send + Sync {
+    fn observation_capacity(&self) -> Result<ObservationCapacityStatusV1, ObservationQueryError> {
+        Err(ObservationQueryError::Unavailable)
+    }
+    fn set_observation_capacity(
+        &self,
+        _max_active_bytes: Option<u64>,
+    ) -> Result<ObservationCapacityStatusV1, ObservationQueryError> {
+        Err(ObservationQueryError::Unavailable)
+    }
+
+    fn observation_analysis(
+        &self,
+        _reader: &super::ObservationReaderContext,
+        _query: &super::ObservationAnalysisQueryV1,
+        _range: Option<&super::AnalysisTimeRangeV1>,
+        _prices: Option<&super::AnalysisPricesV1>,
+        _now_ms: i64,
+    ) -> Result<super::ObservationAnalysisPageV1, ObservationQueryError> {
+        Err(ObservationQueryError::Unavailable)
+    }
     fn observed_maintenance_status(
         &self,
         _reader: &super::ObservationReaderContext,
@@ -255,6 +289,17 @@ pub trait ObservationQueryPort: Send + Sync {
         _accepted: &CanonicalDigest,
         _now_ms: i64,
     ) -> Result<super::SessionDeletionOutcomeV2, ObservationQueryError> {
+        Err(ObservationQueryError::Unavailable)
+    }
+
+    fn observed_api_equivalent_value(
+        &self,
+        _reader: &super::ObservationReaderContext,
+        _query: &super::ObservationValueQueryV2,
+        _reference: &super::ApiEquivalentPriceV1,
+        _prices: &[super::ApiEquivalentPriceV1],
+        _now_ms: i64,
+    ) -> Result<super::ApiEquivalentValueReportV1, ObservationQueryError> {
         Err(ObservationQueryError::Unavailable)
     }
 
@@ -458,6 +503,12 @@ pub enum ObservationQueryError {
     InvalidQuery,
     #[error("observation store is unavailable")]
     Unavailable,
+    #[error("observation query reached its deadline")]
+    ReadTimeout,
+    #[error("observation query readers are busy")]
+    ReaderBusy,
+    #[error("observation text index is unavailable")]
+    IndexUnavailable,
     #[error("observation store is corrupt or incompatible")]
     Corrupt,
     #[error("observation deletion preview is stale")]

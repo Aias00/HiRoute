@@ -1,4 +1,4 @@
-import { invoke } from '@tauri-apps/api/core';
+import { invoke } from '../host/index.ts';
 
 let readers = 0;
 const queue: (() => void)[] = [];
@@ -13,7 +13,7 @@ export async function observationRead<T>(view: string, query: object, signal?: A
     return await invoke<T>('observation_read', {
       request: {
         schema: 'hiroute.observation.query/v2',
-        intent: { view, query },
+        intent: { view, query: view === 'facts' || view === 'plan_quality' ? { ...query, include_routing_observations: true } : query },
       },
     });
   } finally {

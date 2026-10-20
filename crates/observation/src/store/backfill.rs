@@ -1,4 +1,4 @@
-//! Supported activity-v4 inline carriers only. Preserve exact original bytes
+//! Supported activity-v4 carriers and rebuildable safe routing evidence. Preserve original bytes
 //! and digests; malformed/oversized rows remain unavailable, not reinterpreted.
 use super::*;
 use hiroute_domain::{CanonicalDigest, ExecutionFactEnvelopeV1, RoutingReceiptV1};
@@ -12,6 +12,7 @@ impl LocalObservationStore {
             .transaction()
             .map_err(|_| ObservationStoreError::ActivityUnavailable)?;
         let mut completed = 0;
+        let mut visibility_changed = false;
         let mut bytes = 0;
         for (table, column, digest_column, kind) in [
             (
@@ -22,7 +23,13 @@ impl LocalObservationStore {
             ),
             ("routing_receipts", "body_json", "body_digest", "receipt"),
         ] {
-            let key = format!("inline-backfill-{kind}-rowid");
+            // Revisit existing managed fact carriers once for supported-format evidence.
+            // The old cursor remains intact; no SQL or authenticated payload migration.
+            let key = if kind == "fact" {
+                "inline-backfill-fact-protocol-evidence-rowid".to_owned()
+            } else {
+                format!("inline-backfill-{kind}-rowid")
+            };
             let after: i64 = tx
                 .query_row(
                     "SELECT CAST(value AS INTEGER) FROM observation_meta WHERE key=?1",
@@ -49,9 +56,25 @@ impl LocalObservationStore {
                 {
                     break;
                 }
-                let (workspace,session,request,digest,body):(String,String,String,String,String)=tx.query_row(&format!("SELECT workspace_id,session_id,request_id,{digest_column},CASE WHEN length(CAST({column} AS BLOB))<=1048576 THEN {column} ELSE '' END FROM {table} WHERE rowid=?1"),[id],|r|Ok((r.get(0)?,r.get(1)?,r.get(2)?,r.get(3)?,r.get(4)?))).map_err(|_|ObservationStoreError::Corrupt)?;
+                let (workspace,session,request,digest,stored):(String,String,String,String,String)=tx.query_row(&format!("SELECT workspace_id,session_id,request_id,{digest_column},CASE WHEN length(CAST({column} AS BLOB))<=1048576 THEN {column} ELSE '' END FROM {table} WHERE rowid=?1"),[id],|r|Ok((r.get(0)?,r.get(1)?,r.get(2)?,r.get(3)?,r.get(4)?))).map_err(|_|ObservationStoreError::Corrupt)?;
+                let (body, unavailable) = if kind == "fact" {
+                    match super::sensitive::hydrate_bounded(
+                        &tx,
+                        kind,
+                        &digest,
+                        &stored,
+                        1024 * 1024,
+                    ) {
+                        Ok(body) => (body, false),
+                        Err(ObservationStoreError::ContentUnavailable) => (String::new(), true),
+                        Err(error) => return Err(error),
+                    }
+                } else {
+                    (stored.clone(), false)
+                };
                 bytes += body.len();
-                if !body.contains("\"managed_sensitive_ref\"") {
+                if !unavailable && (kind == "fact" || !body.contains("\"managed_sensitive_ref\"")) {
+                    let mut projection_changes = 0;
                     let verified = if kind == "fact" {
                         serde_json::from_str::<ExecutionFactEnvelopeV1>(&body)
                             .ok()
@@ -63,7 +86,15 @@ impl LocalObservationStore {
                                     && CanonicalDigest::of(fact).is_ok_and(|d| d.as_str() == digest)
                             })
                             .map(|fact| {
-                                super::safe_facts::project(
+                                let inserted = super::safe_facts::project(
+                                    &tx,
+                                    &fact,
+                                    &CanonicalDigest::parse(&digest)
+                                        .map_err(|_| ObservationStoreError::Corrupt)?,
+                                )?;
+                                projection_changes += inserted;
+                                visibility_changed |= inserted > 0;
+                                projection_changes += super::safe_facts::refresh_pre_applicability(
                                     &tx,
                                     &fact,
                                     &CanonicalDigest::parse(&digest)
@@ -87,15 +118,22 @@ impl LocalObservationStore {
                             .map(|receipt| receipt.frozen_at_ms)
                     };
                     if let Some(created) = verified {
-                        let marker = super::sensitive::put(
-                            &tx, kind, &digest, &workspace, &session, &request, created, &body,
-                        )?;
-                        tx.execute(
-                            &format!("UPDATE {table} SET {column}=?2 WHERE rowid=?1"),
-                            params![id, marker],
-                        )
-                        .map_err(|_| ObservationStoreError::ActivityUnavailable)?;
-                        completed += 1;
+                        if stored.contains("\"managed_sensitive_ref\"") {
+                            // Internal evidence enrichment keeps source membership, row IDs
+                            // and reader authority intact. Existing cursors remain valid.
+                            completed += projection_changes;
+                        } else {
+                            let marker = super::sensitive::put(
+                                &tx, kind, &digest, &workspace, &session, &request, created, &body,
+                            )?;
+                            tx.execute(
+                                &format!("UPDATE {table} SET {column}=?2 WHERE rowid=?1"),
+                                params![id, marker],
+                            )
+                            .map_err(|_| ObservationStoreError::ActivityUnavailable)?;
+                            completed += 1;
+                            visibility_changed = true;
+                        }
                     } else {
                         tx.execute("INSERT INTO observation_meta(key,value) VALUES('inline_backfill_errors','1') ON CONFLICT(key) DO UPDATE SET value=CAST(value AS INTEGER)+1",[]).map_err(|_|ObservationStoreError::ActivityUnavailable)?;
                     }
@@ -107,9 +145,11 @@ impl LocalObservationStore {
                 .map_err(|_| ObservationStoreError::ActivityUnavailable)?;
             }
         }
-        if completed > 0 {
+        if visibility_changed {
             crate::query_v2::invalidate_visibility(&tx)
                 .map_err(|_| ObservationStoreError::ActivityUnavailable)?;
+        }
+        if completed > 0 {
             increment_store_revision(&tx)?;
         }
         tx.commit()

@@ -4,6 +4,7 @@
 //! results use the C0 safe candidate view and never expose those bytes or their source locator.
 
 mod inference;
+mod point_discovery;
 mod probe;
 mod target;
 #[cfg(test)]
@@ -19,7 +20,7 @@ use std::{
     collections::BTreeMap,
     fmt::{self, Write as _},
     sync::Mutex,
-    time::{Duration, Instant, SystemTime, UNIX_EPOCH},
+    time::{Instant, SystemTime, UNIX_EPOCH},
 };
 
 use hiroute_application::compute_management::{
@@ -477,20 +478,17 @@ where
         // Allocate before DNS or request I/O. If an older request completes after a newer one for
         // the same candidate lineage, the candidate directory rejects its lower backend revision.
         let (candidate_ref, revision) = self.issue_candidate(draft.candidate_ref.as_deref())?;
-        let target = normalize_model_connection_target_with_timeout(
-            ModelConnectionTargetInputV1 {
-                base_url: &draft.base_url,
-                base_kind: draft.base_kind,
-                protocol: draft.protocol,
-                request_path_override: draft.request_path_override.as_deref(),
-                inventory_path_override: draft.inventory_path_override.as_deref(),
-                protocol_profile_id: &draft.protocol_profile_id,
-                protocol_profile_revision: draft.protocol_profile_revision,
-                protocol_header_semantics: &draft.protocol_header_semantics,
-                authentication: &draft.authentication,
-            },
-            self.limits.total_timeout.min(Duration::from_secs(2)),
-        )?;
+        let target = normalize_model_connection_target(ModelConnectionTargetInputV1 {
+            base_url: &draft.base_url,
+            base_kind: draft.base_kind,
+            protocol: draft.protocol,
+            request_path_override: draft.request_path_override.as_deref(),
+            inventory_path_override: draft.inventory_path_override.as_deref(),
+            protocol_profile_id: &draft.protocol_profile_id,
+            protocol_profile_revision: draft.protocol_profile_revision,
+            protocol_header_semantics: &draft.protocol_header_semantics,
+            authentication: &draft.authentication,
+        })?;
         let input_digest = input_digest(&draft, &credential)?;
         let remaining = self
             .limits

@@ -1,6 +1,7 @@
 [workspace]
 members = [
     "apps/desktop/src-tauri",
+    "apps/shell/src-tauri",
     "crates/application",
     "crates/application-api",
     "crates/cli",
@@ -17,6 +18,7 @@ members = [
     "crates/local-storage",
     "crates/observation",
     "crates/platform",
+    "crates/product-session",
     "crates/platform/test-support",
     "tools/e2e-harness",
     "tools/product-e2e",
@@ -45,7 +47,8 @@ http = "1.3.1"
 nix = { version = "0.31.3", features = ["fs", "socket", "user"] }
 parking_lot = "0.12.4"
 semver = "1.0.28"
-rusqlite = { version = "0.32.1", features = ["backup", "bundled"] }
+rusqlite = { version = "0.32.1", features = ["backup", "bundled", "hooks"] }
+zstd = "0.13.3"
 rustix = { version = "1.1.4", features = ["process"] }
 serde = { version = "1.0.219", features = ["derive", "rc"] }
 serde_json = "1.0.143"

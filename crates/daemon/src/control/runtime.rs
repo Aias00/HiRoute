@@ -2,7 +2,6 @@ use std::collections::BTreeMap;
 use std::path::{Path, PathBuf};
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::{Arc, Mutex, Weak};
-use std::time::{SystemTime, UNIX_EPOCH};
 
 use hiroute_application::control::{
     AgentConfigPermissionFindingV1, AgentDiscoveryPort, AgentModelCatalogMetadataSourceV1,
@@ -53,9 +52,11 @@ use crate::delegation::run_authority::DelegationRunAuthority;
 
 mod additional_model_budget;
 mod agent_connection;
+mod agent_effective_state;
 mod agent_live_check;
 mod candidate_execution;
 mod client_access;
+mod clock;
 mod collaboration_installation;
 mod collaboration_status;
 mod compute_routing;
@@ -70,11 +71,13 @@ mod delegation_task_queries;
 mod delegation_tasks;
 mod delegation_worker;
 mod effects;
+mod hermes_management_status;
 mod model_catalog;
 mod model_connections;
 mod mutation;
 mod native_additional_model;
 mod native_claude_model;
+mod native_hermes;
 mod native_model;
 mod observation_key;
 use observation_key::observation_workspace_key;
@@ -332,11 +335,19 @@ impl ProductionControlRuntime {
         recover: bool,
         overrides: RuntimeOpenOverrides,
     ) -> Result<Self, String> {
-        let stores = LocalStorageSet::open_for_daemon_startup_with_options(
-            storage_root,
-            &overrides.storage_startup,
-        )
-        .map_err(|error| error.to_string())?;
+        observation_key::validate_existing_authority(storage_root)?;
+        let mut startup = overrides.storage_startup.clone();
+        startup.preserve_observation_source =
+            LocalObservationStore::legacy_history_requires_seal(storage_root.join("observation"))
+                .map_err(|error| format!("{error}; preserve all storage generations and use the original whole-group recovery guide"))?
+                || LocalStorageSet::observation_cutover_pending(storage_root);
+        if startup.preserve_observation_source
+            && let Some(progress) = &startup.upgrade_progress
+        {
+            let _ = progress.send(hiroute_host_runtime::StorageUpgradePhase::SourceCheck);
+        }
+        let stores = LocalStorageSet::open_for_daemon_startup_with_options(storage_root, &startup)
+            .map_err(|error| error.to_string())?;
         stores
             .control()
             .begin_plan_version_recovery()
@@ -430,6 +441,48 @@ impl ProductionControlRuntime {
         let opencode_model_target = AgentConnectionEffectRoleV1::ManagedConfiguration
             .target_for(&opencode_subject)
             .map_err(|e| e.to_string())?;
+        let mut scoped_targets = Vec::new();
+        let mut hermes_scan_targets = BTreeMap::new();
+        for target in stores
+            .control()
+            .agent_settings_native_targets(&WorkspaceId::default())
+            .map_err(|e| e.to_string())?
+        {
+            let context = hiroute_integrations::hermes_context_id(target.config_root());
+            if !context.starts_with("agent-context/hermes/") {
+                return Err("invalid native target".into());
+            }
+            hermes_scan_targets.insert(context.clone(), target.clone());
+            scoped_targets.extend(
+                hiroute_integrations::hermes_external_targets(target.config_root())
+                    .map_err(|e| e.to_string())?,
+            );
+        }
+        for (subject, collaboration) in [
+            (
+                &codex_subject,
+                home.join(".agents/skills/hiroute-collaboration/SKILL.md"),
+            ),
+            (
+                &claude_subject,
+                home.join(".claude/skills/hiroute-collaboration/SKILL.md"),
+            ),
+            (&qoder_subject, scanner.qoder_user_skill_target()),
+            (&pi_subject, scanner.pi_user_skill_target()),
+            (&dsh_subject, scanner.dsh_user_skill_target()),
+            (&opencode_subject, scanner.opencode_user_skill_target()),
+        ] {
+            let root = collaboration
+                .parent()
+                .and_then(|p| p.parent())
+                .ok_or("invalid Skill root")?;
+            scoped_targets.push((
+                AgentConnectionEffectRoleV1::ManagementSkill
+                    .settings_target_for(subject)
+                    .map_err(|e| e.to_string())?,
+                root.join("hiroute-management/SKILL.md"),
+            ));
+        }
         let mut external_targets = [
             (
                 opencode_model_target.clone(),
@@ -494,6 +547,7 @@ impl ProductionControlRuntime {
             ),
         ]
         .into_iter()
+        .chain(scoped_targets)
         .filter(|(_, path)| path.is_absolute())
         .collect::<Vec<_>>();
         let mut alternatives = scanner
@@ -530,10 +584,23 @@ impl ProductionControlRuntime {
         };
         let observation_workspace_key = observation_workspace_key(storage_root)?;
         let digest_authority = DigestAuthority::new(*observation_workspace_key);
+        let observation_root = storage_root.join("observation");
         let observation = Arc::new(
-            LocalObservationStore::open(storage_root.join("observation"), digest_authority.clone())
-                .map_err(|error| error.to_string())?,
+            if startup.preserve_observation_source {
+                LocalObservationStore::open_fresh_after_seal(
+                    observation_root,
+                    digest_authority.clone(),
+                )
+            } else {
+                LocalObservationStore::open(observation_root, digest_authority.clone())
+            }
+            .map_err(|error| error.to_string())?,
         );
+        if startup.preserve_observation_source
+            && let Some(progress) = &startup.upgrade_progress
+        {
+            let _ = progress.send(hiroute_host_runtime::StorageUpgradePhase::Validation);
+        }
         let delegation_epoch = delegation_epoch()?;
         let plan_admission =
             Arc::new(hiroute_application::publication::admission::SharedAdmissionGate::new());
@@ -567,6 +634,7 @@ impl ProductionControlRuntime {
             ),
             model_connection_cancellations: Mutex::new(BTreeMap::new()),
             prepared_discoveries: Mutex::new(BTreeMap::new()),
+            hermes_scan_targets: Mutex::new(hermes_scan_targets),
             permission_findings: Mutex::new(BTreeMap::new()),
             admission: hiroute_application::TransactionRuntime::default(),
             plan_admission,
@@ -827,15 +895,10 @@ impl ProductionControlRuntime {
     /// Application receives this registrar or can mint a capability.
     pub(crate) fn register_apply_capability(
         &self,
-        registration: ApplyCapabilityRegistrationV1,
+        registration: hiroute_local_storage::ApplyCapabilityRegistrationV1,
     ) -> Result<(), String> {
-        self.adapter
-            .stores
-            .lock()
-            .map_err(|_| "capability registrar is unavailable".to_owned())?
-            .apply_capability_registrar()
-            .register(registration)
-            .map_err(|error| error.to_string())
+        self.protected_authority()
+            .register_apply_capability(registration)
     }
 }
 
@@ -875,6 +938,7 @@ struct LocalControlAdapter {
     model_connection_cancellations:
         Mutex<BTreeMap<String, hiroute_integrations::ModelConnectionProbeCancellationV1>>,
     prepared_discoveries: Mutex<BTreeMap<String, PrepareDiscoveredModelConnectionRequestV1>>,
+    hermes_scan_targets: Mutex<BTreeMap<String, hiroute_domain::AgentNativeTargetV1>>,
     permission_findings: Mutex<BTreeMap<String, PermissionHardeningRequiredV1>>,
     admission: hiroute_application::TransactionRuntime,
     plan_admission: Arc<hiroute_application::publication::admission::SharedAdmissionGate>,
@@ -1083,6 +1147,72 @@ impl WorkerInstallationSelectionSource for LocalControlAdapter {
 }
 
 impl ControlStatePort for LocalControlAdapter {
+    fn try_observation_revision(
+        &self,
+        workspace: &WorkspaceId,
+        deadline: std::time::Instant,
+    ) -> Result<hiroute_application::control::ControlReadAttempt<u64>, ControlReadError> {
+        use hiroute_application::control::ControlReadAttempt;
+        let stores = match self.stores.try_lock() {
+            Ok(stores) => stores,
+            Err(std::sync::TryLockError::WouldBlock) => return Ok(ControlReadAttempt::Busy),
+            Err(std::sync::TryLockError::Poisoned(_)) => return Err(ControlReadError::Unavailable),
+        };
+        if std::time::Instant::now() >= deadline {
+            return Err(ControlReadError::Unavailable);
+        }
+        stores
+            .control()
+            .current_revisions(workspace)
+            .map(|r| ControlReadAttempt::Ready(r.target))
+            .map_err(map_port)
+    }
+
+    fn try_validate_observation_capability(
+        &self,
+        raw: &str,
+        workspace: &WorkspaceId,
+        principal: PrincipalKind,
+        operation: &str,
+        digest: &CanonicalDigest,
+        deadline: std::time::Instant,
+    ) -> Result<hiroute_application::control::ControlReadAttempt<u64>, ControlReadError> {
+        use hiroute_application::control::ControlReadAttempt;
+        let capability =
+            ProtectedApplyCapability::new(raw.to_owned()).map_err(|_| ControlReadError::Denied)?;
+        let principal = match principal {
+            PrincipalKind::InteractiveUser => "interactive-user",
+            PrincipalKind::Desktop => "desktop",
+            PrincipalKind::Skill | PrincipalKind::SealedCollaboration => {
+                return Err(ControlReadError::Denied);
+            }
+        };
+        let stores = match self.stores.try_lock() {
+            Ok(stores) => stores,
+            Err(std::sync::TryLockError::WouldBlock) => return Ok(ControlReadAttempt::Busy),
+            Err(std::sync::TryLockError::Poisoned(_)) => return Err(ControlReadError::Unavailable),
+        };
+        if std::time::Instant::now() >= deadline {
+            return Err(ControlReadError::Unavailable);
+        }
+        let revisions = stores
+            .control()
+            .current_revisions(workspace)
+            .map_err(map_port)?;
+        stores
+            .control()
+            .verify_apply_authorization(
+                &capability,
+                workspace,
+                principal,
+                operation,
+                digest,
+                &revisions,
+            )
+            .map_err(map_port)?;
+        Ok(ControlReadAttempt::Ready(revisions.target))
+    }
+
     fn snapshot(
         &self,
         workspace_id: &WorkspaceId,
@@ -1202,6 +1332,83 @@ impl ControlStatePort for LocalControlAdapter {
 }
 
 impl AgentDiscoveryPort for LocalControlAdapter {
+    fn list(&self) -> Result<Vec<DiscoveredAgentV1>, ControlReadError> {
+        let mut agents = self.discover()?;
+        let targets = self
+            .stores_lock()
+            .map_err(map_port)?
+            .control()
+            .agent_settings_native_targets(&WorkspaceId::default())
+            .map_err(map_port)?;
+        for target in targets {
+            match self.discover_target(&target) {
+                Ok(rows) => agents.extend(rows),
+                Err(_) => {
+                    let subject = hiroute_integrations::hermes_subject(target.config_root())
+                        .map_err(|_| ControlReadError::Corrupt)?;
+                    agents.push(DiscoveredAgentV1 {
+                        native_target: Some(target.clone()),
+                        codex_access: None,
+                        context_id: Some(hiroute_integrations::hermes_context_id(
+                            target.config_root(),
+                        )),
+                        agent_id: subject.agent_id().into(),
+                        profile_id: subject.profile_id().into(),
+                        version: "unknown".into(),
+                        supported: false,
+                        configuration_state: "selected_target_unavailable".into(),
+                        available_surfaces: Default::default(),
+                        native_model_catalog: None,
+                        registered_configuration: None,
+                        discovered_credential: None,
+                        permission_hardening: None,
+                    });
+                }
+            }
+        }
+        Ok(agents)
+    }
+    fn discover_target(
+        &self,
+        target: &hiroute_domain::AgentNativeTargetV1,
+    ) -> Result<Vec<DiscoveredAgentV1>, ControlReadError> {
+        let target = hiroute_integrations::canonical_hermes_target(target)
+            .map_err(|_| ControlReadError::Denied)?;
+        let (installation, config_available) =
+            match hiroute_integrations::hermes_settings_installation(&target) {
+                Ok(installation) => (installation, true),
+                Err(_) => (
+                    hiroute_integrations::hermes_management_installation(&target)
+                        .map_err(|_| ControlReadError::Denied)?,
+                    false,
+                ),
+            };
+        let supported = config_available
+            && installation
+                .require_action(hiroute_domain::AgentAction::ConfigureModel)
+                .is_ok();
+        let context_id = hiroute_integrations::hermes_context_id(target.config_root());
+        Ok(vec![DiscoveredAgentV1 {
+            native_target: Some(target),
+            context_id: Some(context_id),
+            codex_access: None,
+            agent_id: installation.agent_id,
+            profile_id: installation.profile.profile_id,
+            version: installation.version,
+            supported,
+            configuration_state: if supported {
+                "registered"
+            } else {
+                "unsupported_native_feature"
+            }
+            .into(),
+            available_surfaces: [hiroute_domain::AgentModelSurfaceV2::HermesCli].into(),
+            native_model_catalog: None,
+            registered_configuration: None,
+            discovered_credential: None,
+            permission_hardening: None,
+        }])
+    }
     fn discover(&self) -> Result<Vec<DiscoveredAgentV1>, ControlReadError> {
         let fixed_candidates =
             hiroute_application::control::RoutingFactsPort::routing_compilation_snapshot(
@@ -1316,27 +1523,6 @@ impl AgentDiscoveryPort for LocalControlAdapter {
     }
 }
 
-impl ApplicationClockPort for LocalControlAdapter {
-    fn local_day_start_ms(&self, at_ms: i64) -> Result<i64, ControlReadError> {
-        if at_ms < 0 {
-            return Err(ControlReadError::Corrupt);
-        }
-        // SQLite delegates local calendar conversion to the host timezone. No
-        // observation rows or configurable Plan timezone affect "Today".
-        let clock =
-            rusqlite::Connection::open_in_memory().map_err(|_| ControlReadError::Unavailable)?;
-        clock.query_row("SELECT CAST(strftime('%s',?1,'unixepoch','localtime','start of day','utc') AS INTEGER)*1000",[at_ms/1000],|r|r.get(0)).map_err(|_|ControlReadError::Unavailable)
-    }
-
-    fn now_ms(&self) -> Result<i64, ControlReadError> {
-        let milliseconds = SystemTime::now()
-            .duration_since(UNIX_EPOCH)
-            .map_err(|_| ControlReadError::Corrupt)?
-            .as_millis();
-        i64::try_from(milliseconds).map_err(|_| ControlReadError::Corrupt)
-    }
-}
-
 impl ValueScopePort for LocalControlAdapter {
     fn value_plan_ids(
         &self,
@@ -1440,6 +1626,7 @@ fn release_agent_scanner(
             AgentKindV1::Pi => &mut layout.pi_executable,
             AgentKindV1::DeepseekHarness => &mut layout.dsh_executable,
             AgentKindV1::OpenCode => &mut layout.opencode_executable,
+            AgentKindV1::Hermes => continue,
         };
         *target = executable.clone();
     }
@@ -1476,6 +1663,7 @@ fn discovered_agent(
                 AgentKindV1::Pi => hiroute_integrations::PI_PROFILE_ID_V1,
                 AgentKindV1::DeepseekHarness => hiroute_integrations::DSH_PROFILE_ID_V1,
                 AgentKindV1::OpenCode => hiroute_integrations::OPENCODE_PROFILE_ID_V1,
+                AgentKindV1::Hermes => hiroute_integrations::HERMES_PROFILE_ID_V1,
             }
             .to_owned(),
             version.clone(),
@@ -1503,6 +1691,7 @@ fn discovered_agent(
         })
         .transpose()?;
     Ok(DiscoveredAgentV1 {
+        native_target: None,
         codex_access: None,
         context_id: None,
         agent_id,
@@ -1554,9 +1743,32 @@ fn map_port(error: PortError) -> ControlReadError {
 mod tests;
 
 #[cfg(test)]
+mod history_cutover_tests;
+
+#[cfg(test)]
+#[path = "runtime_startup_progress_tests.rs"]
+mod startup_progress_tests;
+
+#[cfg(test)]
 #[path = "runtime_worker_dependencies_tests.rs"]
 mod worker_dependencies_tests;
 
 #[cfg(test)]
 #[path = "runtime_early_cancel_tests.rs"]
 mod early_cancel_tests;
+
+pub(crate) use protected_inputs::RuntimeAuthority;
+impl RuntimeAuthority {
+    pub(crate) fn register_apply_capability(
+        &self,
+        registration: ApplyCapabilityRegistrationV1,
+    ) -> Result<(), String> {
+        self.adapter
+            .stores
+            .lock()
+            .map_err(|_| "capability registrar is unavailable".to_owned())?
+            .apply_capability_registrar()
+            .register(registration)
+            .map_err(|error| error.to_string())
+    }
+}

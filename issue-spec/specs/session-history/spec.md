@@ -25,6 +25,7 @@ Ordinary native correlation uses these current inputs:
 | Pi / branded pi-ai | Native Responses `x-client-request-id` / optional `session_id`, or configured `x-session-id` / Messages `x-session-affinity` |
 | DeepSeek Harness | `x-deepseek-harness-session-id`; branded pi-ai fields when actually sent |
 | OpenCode | `x-opencode-session-id` across all three ingress protocols |
+| Hermes | `X-Hermes-Session-Id` from the actual native conversation on the managed main-request path |
 
 Pi `pi (...)` and DSH `deepseek-harness/<version>` User-Agent qualify interpretation
 of their pi-ai fields, not authentication. Generic request IDs/cache keys/affinity
@@ -40,6 +41,16 @@ Absent native fields use conservative complete-first-real-user inference when le
 empty/unreliable/incomplete/generic wrapper input remains request-scoped. Raw native
 IDs are not persisted. Equal content cannot merge distinct native IDs; rewriting
 content does not change an established native session.
+
+Hermes SHALL use a distinct HMAC namespace scoped to the trusted managed connection/authorization. Equal raw native IDs under distinct connections cannot merge conversations. For a trusted registered Hermes consumer, absent or invalid native identity remains request-scoped without first-user content inference. A caller-supplied header or user-agent does not establish managed-consumer authority; session identity itself grants no model or management access. Native cache/root affinity is not Hermes conversation proof.
+
+#### Scenario: Separate Hermes conversations when identity is missing or content matches
+
+- **WHEN** independent managed Hermes conversations have equal prompts, equal raw IDs under different connections, or no usable native ID
+- **THEN** proven scoped identities remain distinct and unproven requests remain request-scoped; equal content or cache affinity cannot merge their decisions or observations.
+
+Source SPEC comments:
+- https://github.com/higress-group/HiRoute/issues/119#issuecomment-6165296920
 
 ### Requirement: Captured content preserves actual request and response attribution
 
@@ -139,6 +150,14 @@ No ready matches is complete empty only when no authorized index gap remains.
 Four reader permits and the real 500 ms SQLite deadline remain; timeout is retryable
 failure, never empty success. Failure clears continuation and retry starts fresh.
 
+#### Scenario: Search repeated native conversation history
+
+- **WHEN** retained native traffic contains many repeated content occurrences and
+  large request metadata, while authorized indexes are ready
+- **THEN** live and scoped conversation search check source readiness within the
+  existing query budget without reading every occurrence's metadata; genuinely
+  missing authorized indexes remain partial rather than complete empty results.
+
 ### Requirement: Completeness is independent of model success and preview text
 
 Fact and body failures cannot block the model response. Retain available portions
@@ -210,6 +229,153 @@ body stays unavailable and cannot be rebuilt from a score explanation. Public
 `observation plan-quality samples --plan-id/--session-id` exposes the same bounded
 read-only facts, help/schema discovery, and cursor without content/model calls.
 Competence is stage performance, not task acceptance rate or universal model ranking.
+
+### Requirement: Expose Hermes connection state and recorded execution models
+
+HiRoute SHALL expose the managed Hermes profile's saved connection scope/Plan/protocol and preparation/operation state through existing CLI status queries and Desktop views. Routed Hermes requests SHALL be readable through the existing public execution queries with their recorded Plan, branch and actual execution model. Saved configuration, configuration-operation state and recorded execution SHALL remain distinguishable; the current Plan or an installed adapter SHALL NOT substitute for historical execution or unobserved live conversation selection. Existing session-history attribution and query-access contracts remain authoritative.
+
+#### Scenario: Read saved intent and routed results separately
+
+- **WHEN** a caller inspects a managed Hermes connection and a recorded request after the Plan has changed
+- **THEN** status reports the saved connection/operation facts, while execution queries report that request's recorded Plan/branch/model through existing views.
+
+#### Scenario: No routed request has been recorded
+
+- **WHEN** a Hermes default and adapter are prepared but no applicable request has reached HiRoute
+- **THEN** CLI/Desktop report prepared/configured state and any known next action without claiming runtime loading, effective live selection or an actual execution model.
+
+Source SPEC comments:
+- https://github.com/higress-group/HiRoute/issues/119#issuecomment-6165297426
+
+### Requirement: Verified native compaction links preserve session identity
+
+HiRoute SHALL retain the physical identity and exact request/receipt attribution of each native session while exposing a verified compression-continuation chain as one navigable conversation in opt-in analysis views. A managed native adapter SHALL obtain explicit compression lineage from its selected native profile through the native read-only interface; generic root affinity, equal content, timing and arbitrary parent headers are not proof. HiRoute SHALL admit a relation only within the same authenticated managed consumer, workspace and existing native-identity namespace. Only scoped HMAC identities and provenance are retained, never raw native IDs. Branches, delegates, explicit resets and unrelated sessions SHALL remain independent. Missing, malformed, conflicting, cyclic, ambiguous, truncated or unavailable lineage SHALL disclose the unproven boundary and SHALL NOT merge it, invent an origin or block otherwise valid model access. Provenance and retained visibility SHALL be rechecked on queries, including across restart; old records without evidence remain separate. The declared chain is navigable only through proven links and never rewrites physical sessions, immutable receipts, Worker identity, ContextHold or routing history. A verified session relation alone does not prove adjacent user turns. Conversation, search and cost results SHALL disclose and reuse one relation watermark across pagination and related drill-down, preserve member references, apply time/Plan/visibility filters to each request, and count each request/attempt once. Later relation additions SHALL NOT silently regroup a pinned result or invalidate it merely by advancing the live watermark. A used relation that is genuinely withdrawn or deleted SHALL cause explicit stale/refresh rather than silent regrouping. Scope creation SHALL select evidence stable through its declared lifetime so ordinary expiry does not invalidate an otherwise valid scope; upfront clipping and token expiry remain explicit. Current authorization and visibility always apply. Retained relation evidence SHALL survive reopening without making released physical-session/fact readers reject otherwise supported data. Missing or expired members stay explicit; legacy unflagged calls retain their physical-session meanings. Compatible released-writer mutations SHALL be reconciled from current retained source facts when HiRoute reopens: fully deleted or archived sources cannot remain charged, linked or recoverable through auxiliary projections, and retained newly ingested facts cannot be omitted indefinitely. Content-only deletion SHALL preserve its existing retained-fact/monetary meaning. Historical archives SHALL NOT recreate deleted detail. A normal reopen with already aligned retained projections SHALL reuse them without introducing reconciliation pending. Only views requiring known missing or stale retained projections may report catch-up pending, with scoped progress and a supported retry action; ready reads and valid scopes SHALL remain usable under current source/visibility checks. Interrupted catch-up SHALL resume without restarting for unrelated aware traffic, and stalled work SHALL report its reason rather than remain indefinitely plain pending. Missing historical evidence is an explicit gap, not unfinished reconciliation. Full facts-and-content deletion of a middle member SHALL withdraw its incident continuation edges and split the surviving chain at an explicit gap; queries SHALL neither traverse the deleted member nor synthesize a shortcut. Re-observing deleted historical lineage SHALL NOT undo deletion. Content-only deletion retains existing fact/grouping meaning, and genuinely new post-cutoff evidence follows existing revival rules without restoring deleted history.
+
+#### Scenario: Read a verified compaction continuation
+
+- **WHEN** a managed native request has valid compression ancestry in the same authenticated identity scope
+- **THEN** analysis follows only proven compression edges, preserves physical identities and original receipts, and can navigate the retained conversation across the boundary.
+
+#### Scenario: Keep forks and unproven ancestry independent
+
+- **WHEN** lineage is absent, conflicting, unsupported, ambiguous, cyclic, incomplete, or describes a reset, branch, delegate or another authorization scope
+- **THEN** no unproven edge is used; ordinary model access continues and the result discloses separate or partially linked members with the missing boundary.
+
+#### Scenario: Read and value a chain once
+
+- **WHEN** conversation/search/cost views select the same proven continuation chain
+- **THEN** they reuse one disclosed relation watermark across pages and drill-down, preserve visible member references and resolved time bounds, and count each request and consuming attempt once; repeated captured input is not new usage.
+
+#### Scenario: Preserve history through reopen and visibility changes
+
+- **WHEN** HiRoute restarts, content expires or is deleted, old records lack lineage, or a relation changes during pagination
+- **THEN** retained proven relations remain queryable subject to current visibility; unavailable members and unproven old relations stay explicit, and continuation cannot silently change its grouping or rewrite receipts.
+
+#### Scenario: Analyze while new continuations arrive
+
+- **WHEN** a ranking or conversation result is paged and opened in another supported view while later compression relations are admitted, including from the querying Agent itself
+- **THEN** the caller can reuse the original relation watermark; additions after it neither rebucket its rows nor invalidate its continuation, while a fresh analysis may include them.
+
+#### Scenario: Withdraw invalid pinned proof
+
+- **WHEN** a previously used relation is genuinely contradicted or explicitly deleted during a valid scope
+- **THEN** the result reports stale proof and a refresh action; routine expiry was excluded by the upfront retained scope and unrelated changes do not invalidate it.
+
+#### Scenario: Preserve compatible released readers
+
+- **WHEN** verified continuation evidence is retained alongside otherwise supported physical-session and request facts
+- **THEN** its presence alone does not make a released physical-session/fact reader reject the page or storage; existing supported upgrade and complete-backup recovery contracts still apply.
+
+#### Scenario: Keep retained analysis stable during ordinary expiry
+
+- **WHEN** new analysis near the retention boundary is paged while normal expiry runs
+- **THEN** requested versus effective bounds, clipping and lifetime were disclosed at creation and the selected proof/population remain stable through that lifetime, without extending retention or exposing deleted data.
+
+#### Scenario: Reconcile after compatible released-writer mutations
+
+- **WHEN** a compatible released writer deletes facts, expires requests or ingests retained traffic while unaware of auxiliary tables, then the current reader reopens
+- **THEN** queries use live sources and precise deletion scope, purging stale associations and deriving missing retained inputs without duplicate charges, archived reverse lookup or resurrection; content-only deletion retains its lawful monetary facts.
+
+#### Scenario: Reopen an already aligned store promptly
+
+- **WHEN** HiRoute restarts over compatible retained data whose derived projections are already aligned
+- **THEN** it reuses them immediately rather than putting all analysis views into reconciliation pending; missing historical lineage still remains a gap.
+
+#### Scenario: Report and resume only real projection catch-up
+
+- **WHEN** a compatible writer leaves retained inputs missing or stale, or catch-up is interrupted
+- **THEN** affected reads expose scoped progress and retry guidance while ready reads remain usable; catch-up resumes rather than restarting for unrelated current writes, and stalled work exposes its reason.
+
+#### Scenario: Delete the middle of a continuation
+
+- **WHEN** A to B to C is a proven continuation and B is fully deleted
+- **THEN** the adjacent A to B and B to C edges are withdrawn, A and C remain separately readable with a gap, no A to C shortcut or transit through B is invented, and old lineage cannot re-create the deleted edges; content-only deletion instead preserves grouping and retained money.
+
+Source SPEC comments:
+- https://github.com/higress-group/HiRoute/issues/125#issuecomment-6229104803
+
+### Requirement: C observations cover all retained decisions
+
+Routing evidence MUST reuse existing route events, bounded safe-field storage
+and authorized query entrances, with no new table, SQL migration, view or permission.
+Every current routed classifier decision records its selected protocol (native
+legacy, applicability C v1, custom extension v1 or local rules), independently of
+inherited/fallback source; project that marker into safe facts. Known non-C counts
+are separate and never enter C denominators. An authenticated supported pre-applicability envelope proves a known non-C decision without identifying its classifier family. Retain only its bounded format evidence in the existing safe projection, with routing/time identity, after verifying the original digest through the supported reader. Missing markers alone remain unknown; never infer protocol from Plan identity or rewrite authenticated facts. Missing, invalid, unsupported or already-deleted source evidence cannot be invented.
+
+C detail records full-content/bundle identity, authored default/custom assessment standard, provider/model,
+target/completeness/eligibility, applicability dispatch/state/reason/probability,
+P/T, s/F, fixed 0.5 applicability boundary, action and bounded byte/turn counts.
+Selection and actual execution/relay remain separate. Safe metadata includes no
+prompt, conversation, tool-result, credential or free-form diagnostic text.
+
+Existing observation query versions and the optional include_routing_observations flag MUST remain. Omitted/false preserves released strict request/result fields, nested selections, errors, authorization encoding and cursor bindings. True exposes bounded facts detail and plan-quality summaries through the same protected operations, with the flag bound to opt-in cursors. Do not add a query version or separate legacy-v2 business path. A stage-opening sample is not an all-decision denominator.
+
+Summaries MUST cover all matching authorized retained route decisions independently
+of page, model/score/grade filters, scoped by Plan/session, time, configured
+thresholds, protocol/content/standard and provider/model. Exclude inherited records
+as new dispatches and deduplicate originating event identity. Report retained and
+covered scopes, missing projections, old unknown markers and scan limits. Mixed current C/non-C scopes, including proven supported pre-applicability records, can report complete coverage and C rates; unproven old/current records or incomplete evidence withholds exact-population rates while preserving known counts.
+Deleted data is outside retained scope and its missing population cannot be invented.
+
+Q3 unavailable/requested uses actual dispatch as denominator. No-target/partial
+omissions and inherited decisions are separate. Eligible low history and simple
+current work define protection opportunities; suppressed/opportunities and
+suppressed/fresh C decisions show actual group changes. Required-question-missing
+violations retain protection and count separately as internal anomalies, excluded
+from provider-unavailable/requested totals. Zero denominators are unavailable.
+These rates describe behavior, not ground-truth accuracy or task quality.
+Content-only deletion preserves safe evidence under existing retention; facts-and-
+content deletion/expiry removes it. Existing reader authorization, run conflicts,
+idempotency and deletion boundaries remain effective.
+
+#### Scenario: All decisions, not open stages
+
+- **WHEN** several C decisions occur inside one stage and a stage-score filter or page is selected
+- **THEN** Counts MUST include all matching retained decision events while keeping inherited and omitted cases out of the requested denominator.
+
+#### Scenario: Content deletion
+
+- **WHEN** only captured content is deleted and safe facts remain within retention
+- **THEN** Safe C detail/counts MUST remain queryable without restoring body content; full fact deletion removes them.
+
+#### Scenario: Released read
+
+- **WHEN** a facts or plan-quality request omits the new opt-in flag
+- **THEN** The response MUST preserve its prior field set, including nested stage selection.
+
+#### Scenario: Proven pre-applicability format
+
+- **WHEN** supported pre-applicability decisions with authenticated format evidence share a scope with current applicability decisions
+- **THEN** Known non-C counts MUST include only the proven older decisions, outside applicability denominators; complete scopes retain rates before and after content-only deletion and reopen.
+
+#### Scenario: Missing evidence stays partial
+
+- **WHEN** a current marker is lost or a source/projection is missing, invalid, unsupported or already deleted without retained proof
+- **THEN** Coverage MUST remain partial and exact-population rates unavailable; Plan identity and marker omission cannot replace evidence.
+
+Source SPEC comments:
+- https://github.com/higress-group/HiRoute/issues/139#issuecomment-6235111513
 
 ## Implementation references
 

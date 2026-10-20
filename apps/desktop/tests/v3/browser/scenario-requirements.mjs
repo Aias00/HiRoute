@@ -1,6 +1,15 @@
 // Reviewed capability gates. New discovered scenarios run in full mode automatically.
 // Retire a required ID only with an explicit replacement of its unique guarantee.
 export const agentTrustRequired = ['codex.restore.conflict-active',
+  'hermes.discovery.parallel-entry',
+  'agent.discovery.remember-and-revalidate',
+  'agent.management.all-supported-families',
+  'agent.management.owned-restore',
+  'hermes.collaboration.native-model-independent',
+  'hermes.discovery.brand-and-known-profile',
+  'hermes.routing.root-cancel-and-save',
+  'hermes.management.independent-without-plan',
+  'hermes.routing.unavailable-and-exact-recovery',
   'claude.routing.blocker-guidance',
   'codex.enable.draft-cancel',
   'claude.enable.shared-presets',
@@ -45,7 +54,7 @@ export const routingWorkerRequired = ['routing.capabilities.candidate-vs-fixed',
   'routing.publish.qoder-budget-conflict'];
 
 export const focusedRequirements = {
-  'subscription-proxy': ['desktop.models.subscription-scan.recommended-login', 'desktop.models.subscription-scan.append-to-login', 'desktop.models.subscription-proxy.inline-cancel', 'desktop.models.subscription-proxy.read-retry', 'desktop.models.subscription-proxy.save-retry-return'],
+  'subscription-proxy': ['desktop.models.subscription-login.callback-modes', 'desktop.models.subscription-scan.recommended-login', 'desktop.models.subscription-scan.append-to-login', 'desktop.models.subscription-proxy.inline-cancel', 'desktop.models.subscription-proxy.read-retry', 'desktop.models.subscription-proxy.save-retry-return'],
   'claude-collaboration': ['claude.collaboration.check-before-save', 'claude.collaboration.retry-preserves-edit', 'claude.collaboration.obsolete-blocker'],
   'worker-replacement': ['worker.installation.replace', 'worker.installation.latest-edit'],
   'qoder': ['qoder.collaboration.enable-without-model', 'qoder.collaboration.retry-and-restore', 'qoder.routing.additional-plans', 'qoder.routing.adjust-and-restore', 'agent.configuration.shared-interactions', 'qoder.routing.resume-pending', 'qoder.installation.single-cli', 'routing.publish.qoder-budget-conflict', 'desktop.routing.qoder-budget-checkpoint'],
@@ -53,7 +62,16 @@ export const focusedRequirements = {
 };
 
 export const productShellRequired = [
+  'desktop.settings.storage-capacity',
+  'desktop.routing.native-default',
+  'desktop.decisions.connectivity-test',
+  'desktop.routing.custom-assessment',
+  'desktop.quality.c-observations',
+  'desktop.models.view-switch',
+  'desktop.presentation.control-layout',
+  'desktop.routing.two-context-conflict',
   'desktop.routing.additional-budget-consumers',
+  'desktop.models.subscription-login.callback-modes',
   'desktop.models.subscription-scan.recommended-login',
   'desktop.models.subscription-scan.append-to-login',
   'desktop.models.subscription-proxy.inline-cancel',

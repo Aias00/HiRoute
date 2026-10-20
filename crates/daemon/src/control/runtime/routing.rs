@@ -19,6 +19,37 @@ mod candidates;
 use candidates::CandidateDiagnostics;
 
 impl RoutingFactsPort for LocalControlAdapter {
+    fn try_active_publication(
+        &self,
+        workspace: &WorkspaceId,
+        deadline: std::time::Instant,
+    ) -> Result<
+        hiroute_application::control::ControlReadAttempt<
+            Option<hiroute_domain::GatewayPublicationV1>,
+        >,
+        ControlReadError,
+    > {
+        use hiroute_application::control::ControlReadAttempt;
+        let stores = match self.stores.try_lock() {
+            Ok(stores) => stores,
+            Err(std::sync::TryLockError::WouldBlock) => return Ok(ControlReadAttempt::Busy),
+            Err(std::sync::TryLockError::Poisoned(_)) => return Err(ControlReadError::Unavailable),
+        };
+        if std::time::Instant::now() >= deadline {
+            return Err(ControlReadError::Unavailable);
+        }
+        let publication = stores
+            .control()
+            .active_publication(workspace)
+            .map_err(super::map_port)?;
+        let verified = publication
+            .as_ref()
+            .map(hiroute_domain::PublicationRecordV1::verify)
+            .transpose()
+            .map_err(|_| ControlReadError::Corrupt)?;
+        Ok(ControlReadAttempt::Ready(verified))
+    }
+
     fn publication_checkpoint_snapshot(
         &self,
         workspace: &WorkspaceId,
@@ -144,6 +175,18 @@ impl RoutingFactsPort for LocalControlAdapter {
             .map_err(super::map_port)?
             .control()
             .decision_services(workspace)
+            .map_err(super::map_port)
+    }
+    fn decision_service(
+        &self,
+        workspace: &WorkspaceId,
+        id: &str,
+        revision: u64,
+    ) -> Result<Option<hiroute_domain::DecisionServiceV1>, ControlReadError> {
+        self.stores_lock()
+            .map_err(super::map_port)?
+            .control()
+            .decision_service(workspace, id, revision)
             .map_err(super::map_port)
     }
     fn claude_client_capability_preview(

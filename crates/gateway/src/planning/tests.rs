@@ -563,6 +563,7 @@ fn planner_smart_saving_ranks_only_inside_materialized_groups() {
     ];
     let smart = policy(
         MaterializedRouteV1::SmartSaving {
+            native_protocol: None,
             judgment: Default::default(),
             simple_group_id: "economy".into(),
             simple_fallback_group_ids: vec!["primary".into()],
@@ -707,6 +708,7 @@ fn context_hold_applies_only_inside_the_current_branch() {
     );
     let smart = policy(
         MaterializedRouteV1::SmartSaving {
+            native_protocol: None,
             judgment: Default::default(),
             simple_group_id: "simple-group".into(),
             simple_fallback_group_ids: Vec::new(),
@@ -795,6 +797,7 @@ fn smart_saving_preserves_lossless_state_without_reviving_old_groups() {
     let glm = stateful_messages_candidate("glm");
     let smart = policy(
         MaterializedRouteV1::SmartSaving {
+            native_protocol: None,
             judgment: Default::default(),
             simple_group_id: "simple-group".into(),
             simple_fallback_group_ids: vec!["complex-group".into()],
@@ -951,6 +954,7 @@ fn smart_saving_uses_explicit_primary_relay_when_regular_cannot_serialize() {
     luna.request_projection_exclusion = Some(ExclusionReasonCodeV1::OpaqueStateUnportable);
     let smart = policy(
         MaterializedRouteV1::SmartSaving {
+            native_protocol: None,
             judgment: Default::default(),
             simple_group_id: "simple-group".into(),
             simple_fallback_group_ids: vec!["complex-group".into()],
@@ -1008,6 +1012,7 @@ fn smart_saving_cannot_downgrade_to_state_owner_when_primary_lacks_image_capabil
     refresh_profile(&mut glm);
     let smart = policy(
         MaterializedRouteV1::SmartSaving {
+            native_protocol: None,
             judgment: Default::default(),
             simple_group_id: "simple-group".into(),
             simple_fallback_group_ids: Vec::new(),
@@ -1108,6 +1113,7 @@ fn external_classification_drives_existing_smart_groups_without_rule_score() {
     .unwrap();
     let smart = policy(
         MaterializedRouteV1::SmartSaving {
+            native_protocol: None,
             judgment: Default::default(),
             simple_group_id: "simple-group".into(),
             simple_fallback_group_ids: Vec::new(),
@@ -1150,6 +1156,8 @@ fn external_classification_drives_existing_smart_groups_without_rule_score() {
         ],
     );
     planner_input.classification_decision = Some(BranchDecisionV1 {
+        decision_protocol: Some(hiroute_domain::DecisionProtocolV1::LocalRules),
+        routing_observation: None,
         policy: None,
         competence_trigger: None,
         execution_group: hiroute_domain::ExecutionGroupV1::Primary,
@@ -1201,6 +1209,8 @@ fn external_decision_can_be_inherited_without_inventing_a_rule_threshold() {
     )
     .unwrap();
     let previous = BranchDecisionV1 {
+        decision_protocol: Some(hiroute_domain::DecisionProtocolV1::LocalRules),
+        routing_observation: None,
         policy: None,
         competence_trigger: None,
         execution_group: hiroute_domain::ExecutionGroupV1::Primary,
@@ -1606,3 +1616,35 @@ fn planner_opaque_state_affinity_and_cost_are_after_streaming() {
 
 #[path = "namespace_tests.rs"]
 mod namespace_tests;
+
+#[test]
+fn published_plan_candidates_keep_truthful_cost_classes_without_inventing_a_budget_quote() {
+    for class in [
+        CostClassV1::Paid,
+        CostClassV1::Subscription,
+        CostClassV1::Unknown,
+    ] {
+        let mut fact = candidate(
+            "selected",
+            IngressProtocol::Responses,
+            None,
+            Some(10),
+            class,
+        );
+        fact.api_equivalent_cost_micros = None;
+        if class == CostClassV1::Paid {
+            fact.paid_budget_quote = PaidBudgetQuoteFactV1::Unavailable;
+        }
+        let policy = custom_policy(&["selected"], StaticCostPolicyV1::PublishedCandidates);
+        let output = Planner
+            .plan(&input(
+                request(IngressProtocol::Responses, "requested task"),
+                policy,
+                vec![fact],
+            ))
+            .unwrap();
+        assert_eq!(output.ledger.ordered_candidates.len(), 1);
+        assert_eq!(evaluation(&output, "selected").cost_class, class);
+        assert_eq!(evaluation(&output, "selected").effective_cost_micros, None);
+    }
+}

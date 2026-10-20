@@ -20,6 +20,24 @@ mod probe_files;
 pub use executable::codex_subscription_client_version;
 mod filesystem;
 mod filesystem_config;
+mod hermes_config;
+mod hermes_yaml;
+pub use hermes_config::*;
+mod hermes_native_effects;
+pub use hermes_native_effects::*;
+mod hermes_plugin_effects;
+pub use hermes_plugin_effects::*;
+mod hermes_target;
+pub use hermes_target::*;
+mod hermes_support;
+pub use hermes_support::*;
+mod hermes_sources;
+#[cfg(test)]
+mod hermes_sources_tests;
+pub use hermes_sources::*;
+mod hermes_discovery;
+pub use hermes_discovery::*;
+pub use hermes_yaml::HermesNativeError;
 mod managed_launch;
 #[cfg(any(unix, windows))]
 mod native_claude_ingress_probe;
@@ -41,6 +59,7 @@ mod dsh_config;
 mod dsh_sources;
 #[cfg(test)]
 mod dsh_tests;
+mod native_points;
 mod observed_capabilities;
 mod opencode;
 mod opencode_installation;
@@ -54,6 +73,7 @@ pub use opencode::{
 pub use opencode_installation::{opencode_native_executable, opencode_native_format};
 mod pi_runtime;
 mod pi_sources;
+pub use native_points::*;
 pub use pi_sources::{NativeApiEcosystem, NativeApiSource, PiApiSource};
 mod qoder;
 pub use pi_runtime::*;

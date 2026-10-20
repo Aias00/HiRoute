@@ -365,6 +365,7 @@ mod tests {
                 candidates: vec![exact_test_candidate(1, IngressProtocol::Responses, None)],
             }],
             vec![GrantV1 {
+                consumer: None,
                 route_protocols: Default::default(),
                 grant_id: "delegation-run/run-one".into(),
                 generation: 1,
@@ -488,6 +489,7 @@ mod tests {
                 IngressProtocol::Responses,
                 &crate::context_hold::ContextIdentityFacts::request_scoped(),
                 true,
+                None,
             );
             let link: RunObservationLink =
                 serde_json::from_slice(&receiver.recv_timeout(Duration::from_secs(1)).unwrap())

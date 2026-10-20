@@ -51,7 +51,8 @@ fn installation(kind: AgentKindV1) -> SupportedAgentInstallationV1 {
         AgentKindV1::Qoder
         | AgentKindV1::Pi
         | AgentKindV1::DeepseekHarness
-        | AgentKindV1::OpenCode => {
+        | AgentKindV1::OpenCode
+        | AgentKindV1::Hermes => {
             panic!("this fixture covers default-model replacement, not additional providers")
         }
         AgentKindV1::Codex => CODEX_VERIFIED_VERSION_V1,
@@ -91,7 +92,8 @@ fn profile(kind: AgentKindV1) -> AgentProfileV1 {
         AgentKindV1::Qoder
         | AgentKindV1::Pi
         | AgentKindV1::DeepseekHarness
-        | AgentKindV1::OpenCode => {
+        | AgentKindV1::OpenCode
+        | AgentKindV1::Hermes => {
             panic!("this fixture covers default-model replacement, not additional providers")
         }
         AgentKindV1::Codex => {
@@ -261,7 +263,8 @@ fn spec(kind: AgentKindV1, native: bool, dynamic: bool) -> AgentConnectSpecV1 {
         AgentKindV1::Qoder
         | AgentKindV1::Pi
         | AgentKindV1::DeepseekHarness
-        | AgentKindV1::OpenCode => {
+        | AgentKindV1::OpenCode
+        | AgentKindV1::Hermes => {
             panic!("this fixture covers default-model replacement, not additional providers")
         }
         AgentKindV1::Codex => profile(AgentKindV1::Codex),
@@ -275,7 +278,8 @@ fn spec(kind: AgentKindV1, native: bool, dynamic: bool) -> AgentConnectSpecV1 {
             AgentKindV1::Qoder
             | AgentKindV1::Pi
             | AgentKindV1::DeepseekHarness
-            | AgentKindV1::OpenCode => {
+            | AgentKindV1::OpenCode
+            | AgentKindV1::Hermes => {
                 panic!("this fixture covers default-model replacement, not additional providers")
             }
             AgentKindV1::Codex => CODEX_VERIFIED_VERSION_V1,

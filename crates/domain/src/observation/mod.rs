@@ -5,6 +5,8 @@
 //! Gateway implementation DTO and contain no telemetry mapping. Observation is evidence-only:
 //! none of these ports may mutate routing/runtime state.
 
+mod analysis;
+mod analysis_results;
 mod envelope;
 mod execution;
 mod execution_attempt;
@@ -14,18 +16,24 @@ mod execution_validation;
 mod feedback;
 mod identity;
 mod lifecycle;
+mod native_continuation;
 mod plan_quality;
+mod routing_observations;
+pub use routing_observations::*;
 mod pricing;
 mod projection;
 mod query;
 mod query_v2;
 
+pub use analysis::*;
+pub use analysis_results::*;
 pub use envelope::*;
 pub use execution::*;
 pub use execution_attempt::*;
 pub use feedback::*;
 pub use identity::*;
 pub use lifecycle::*;
+pub use native_continuation::*;
 pub use plan_quality::*;
 pub use pricing::*;
 pub use projection::*;

@@ -55,10 +55,10 @@ pub fn preview_plan_content(
             return Err(PlanPreviewError::Invalid);
         }
     }
-    let configuration = change
-        .editor
-        .effective()
-        .map_err(|_| PlanPreviewError::Invalid)?;
+    let configuration = change.editor.effective().map_err(|e| match e {
+        PlanAuthoringError::NativeProtocol(e) => PlanPreviewError::NativeProtocol(e),
+        _ => PlanPreviewError::Invalid,
+    })?;
     if let Some(service) = configuration.decision_service()
         && state.decision_service.as_ref() != Some(service)
     {
@@ -181,6 +181,8 @@ pub fn preview_plan_content(
 
 #[derive(Debug, Error, Eq, PartialEq)]
 pub enum PlanPreviewError {
+    #[error(transparent)]
+    NativeProtocol(NativeProtocolError),
     #[error("plan is referenced by Agent settings or retained execution versions")]
     Referenced,
     #[error("invalid plan content")]

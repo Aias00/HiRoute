@@ -7,8 +7,9 @@ import claudeCode from './assets/claude-code.svg';
 import qoder from './assets/qoder.svg';
 import pi from './assets/pi.svg';
 import dsh from './assets/providers/deepseek.svg';
+import hermes from './assets/hermes.svg';
 
-export type BrandKind = 'codex' | 'claude-code' | 'qoder' | 'pi' | 'dsh' | 'opencode' | 'agent' | 'model';
+export type BrandKind = 'codex' | 'claude-code' | 'qoder' | 'pi' | 'dsh' | 'hermes' | 'opencode' | 'agent' | 'model';
 
 export function agentBrandFromId(agentId: string): BrandKind {
   const normalized = agentId.toLowerCase();
@@ -18,6 +19,7 @@ export function agentBrandFromId(agentId: string): BrandKind {
   if (normalized.includes('opencode')) return 'opencode';
   if (normalized === 'agent_dsh_default') return 'dsh';
   if (normalized === 'agent_pi_default') return 'pi';
+  if (normalized === 'agent_hermes_default') return 'hermes';
   return 'agent';
 }
 
@@ -52,9 +54,9 @@ export function BrandIcon({
     );
   }
 
-  if (kind === 'qoder' || kind === 'pi' || kind === 'dsh') {
+  if (kind === 'qoder' || kind === 'pi' || kind === 'dsh' || kind === 'hermes') {
     return <span className={classes} data-size={size} data-brand={kind} {...accessibility}>
-      <img src={kind === 'pi' ? pi : kind === 'dsh' ? dsh : qoder} alt="" />
+      <img src={kind === 'hermes' ? hermes : kind === 'pi' ? pi : kind === 'dsh' ? dsh : qoder} alt="" />
     </span>;
   }
 

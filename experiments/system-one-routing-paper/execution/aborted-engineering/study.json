@@ -1,0 +1,24 @@
+{
+  "id": "aborted-engineering",
+  "dataset": "engineering",
+  "kind": "aborted",
+  "repeats": 2,
+  "planned_calls": 1536,
+  "started_calls": 598,
+  "result_calls": 594,
+  "unknown_outcomes": [
+    "IG009_a_zh/jev113/decomposed/1",
+    "IG010_a_en/jev114/direct/1",
+    "IG021_a_reworded_zh/jev114/direct/1",
+    "IG026_b_en/jev114/direct/1"
+  ],
+  "not_started_calls": 938,
+  "expected_models": {
+    "jev114": "typesafe/jev-1.14-20261014",
+    "jev113": "typesafe/jev-1.13-20260917",
+    "qwen38flash": "qwen3.8-flash"
+  },
+  "jobs": "execution/aborted-engineering/jobs.jsonl.gz",
+  "requests": "execution/aborted-engineering/requests.jsonl.gz",
+  "responses": "responses/aborted-engineering.jsonl.gz"
+}

@@ -15,14 +15,26 @@ use super::{
     LogicalRequestId, ObservationStreamV1, SessionId, TrafficKind, TurnId, UsageFactsV1,
 };
 
+/// Authenticated storage formats whose released producers predate applicability.
+/// This recognizes format evidence, never the absence of a decision marker.
+pub fn is_pre_applicability_execution_digest(value: &str) -> bool {
+    matches!(
+        value,
+        "sha256:5aad4c450a2a296ec557b7a934bfbf70ad69a8e8fe9bc7539db46830a2940069"
+            | "sha256:de91d4f2333db66f0ec3f8b63ce192267dee0a56b65f34180b06996b232fb2c6"
+            | "sha256:80b4ff13af8abc79d7721fea42141300beade2acf1d2659983ceaafcdc6e4799"
+            | "sha256:4f0dbcc9f7862133e73e451f64d7a6d6e5de146d958ac8bf3a4d1acc885b6b1d"
+    )
+}
+
 /// Sole live Product execution-fact contract. Existing v1 rows are authenticated and read only
 /// through `validate_persisted_contract`; they are never accepted by live ingestion.
 pub const EXECUTION_FACT_SCHEMA_V2: &str = "hiroute.observation.product-execution-envelope/v2";
 pub const EXECUTION_FACT_PORT_DIGEST_V2: &str =
-    "sha256:4f0dbcc9f7862133e73e451f64d7a6d6e5de146d958ac8bf3a4d1acc885b6b1d";
+    "sha256:7ff01a649de96b1f62e069b872b23609d64a3734b5ad42c337324d3eb7cfc9f2";
 
 /// Gateway profile digests are canonical except on its explicit degraded-observation path.
-#[derive(Clone, Debug, Deserialize, Eq, PartialEq, Serialize)]
+#[derive(schemars::JsonSchema, Clone, Debug, Deserialize, Eq, PartialEq, Serialize)]
 #[serde(transparent)]
 pub struct ObservedProfileDigestV1(String);
 
@@ -57,13 +69,13 @@ pub enum ExecutionFactChannelV1 {
     ExecutionFact,
 }
 
-#[derive(Clone, Copy, Debug, Deserialize, Eq, PartialEq, Serialize)]
+#[derive(schemars::JsonSchema, Clone, Copy, Debug, Deserialize, Eq, PartialEq, Serialize)]
 pub enum ExecutionProducerComponentV1 {
     #[serde(rename = "gateway-execution")]
     GatewayExecution,
 }
 
-#[derive(Clone, Debug, Deserialize, Eq, PartialEq, Serialize)]
+#[derive(schemars::JsonSchema, Clone, Debug, Deserialize, Eq, PartialEq, Serialize)]
 #[serde(deny_unknown_fields)]
 pub struct ExecutionProducerV1 {
     pub component: ExecutionProducerComponentV1,
@@ -71,14 +83,14 @@ pub struct ExecutionProducerV1 {
     pub stream: ObservationStreamV1,
 }
 
-#[derive(Clone, Copy, Debug, Deserialize, Eq, PartialEq, Serialize)]
+#[derive(schemars::JsonSchema, Clone, Copy, Debug, Deserialize, Eq, PartialEq, Serialize)]
 #[serde(rename_all = "snake_case")]
 pub enum SessionScopeV1 {
     Conversation,
     RequestScoped,
 }
 
-#[derive(Clone, Debug, Deserialize, Eq, PartialEq, Serialize)]
+#[derive(schemars::JsonSchema, Clone, Debug, Deserialize, Eq, PartialEq, Serialize)]
 #[serde(deny_unknown_fields)]
 pub struct ExecutionCorrelationV1 {
     pub workspace_id: WorkspaceId,
@@ -89,13 +101,13 @@ pub struct ExecutionCorrelationV1 {
     pub request_id: LogicalRequestId,
 }
 
-#[derive(Clone, Copy, Debug, Deserialize, Eq, PartialEq, Serialize)]
+#[derive(schemars::JsonSchema, Clone, Copy, Debug, Deserialize, Eq, PartialEq, Serialize)]
 #[serde(rename_all = "snake_case")]
 pub enum SelectorSourceV1 {
     TrustedModelAlias,
 }
 
-#[derive(Clone, Copy, Debug, Deserialize, Eq, PartialEq, Serialize)]
+#[derive(schemars::JsonSchema, Clone, Copy, Debug, Deserialize, Eq, PartialEq, Serialize)]
 #[serde(rename_all = "snake_case")]
 pub enum IngressProtocolV1 {
     Responses,
@@ -106,7 +118,7 @@ pub enum IngressProtocolV1 {
 }
 
 /// Request-frozen authority/publication/Plan/grant identity repeated by every Gateway fact.
-#[derive(Clone, Debug, Deserialize, Eq, PartialEq, Serialize)]
+#[derive(schemars::JsonSchema, Clone, Debug, Deserialize, Eq, PartialEq, Serialize)]
 #[serde(deny_unknown_fields)]
 pub struct FrozenExecutionTrustV1 {
     pub authority_id: String,
@@ -193,7 +205,7 @@ pub struct ExecutionFactEnvelopeV1 {
     pub completeness_delta: Option<CompletenessDeltaV1>,
 }
 
-#[derive(Clone, Copy, Debug, Deserialize, Eq, PartialEq, Serialize)]
+#[derive(schemars::JsonSchema, Clone, Copy, Debug, Deserialize, Eq, PartialEq, Serialize)]
 #[serde(rename_all = "snake_case")]
 pub enum PlannedBranchV1 {
     SmartSavingSimple,
@@ -203,7 +215,7 @@ pub enum PlannedBranchV1 {
     CustomExactOrder,
 }
 
-#[derive(Clone, Copy, Debug, Deserialize, Eq, PartialEq, Serialize)]
+#[derive(schemars::JsonSchema, Clone, Copy, Debug, Deserialize, Eq, PartialEq, Serialize)]
 #[serde(rename_all = "snake_case")]
 pub enum ComplexityDecisionSourceV1 {
     Inherited,
@@ -213,7 +225,7 @@ pub enum ComplexityDecisionSourceV1 {
     Unresolved,
 }
 
-#[derive(Clone, Copy, Debug, Deserialize, Eq, PartialEq, Serialize)]
+#[derive(schemars::JsonSchema, Clone, Copy, Debug, Deserialize, Eq, PartialEq, Serialize)]
 #[serde(rename_all = "snake_case")]
 pub enum ClassifierFallbackReasonV1 {
     Timeout,
@@ -222,7 +234,7 @@ pub enum ClassifierFallbackReasonV1 {
     InvalidOutput,
 }
 
-#[derive(Clone, Copy, Debug, Deserialize, Eq, PartialEq, Serialize)]
+#[derive(schemars::JsonSchema, Clone, Copy, Debug, Deserialize, Eq, PartialEq, Serialize)]
 #[serde(rename_all = "SCREAMING_SNAKE_CASE")]
 pub enum ComplexityReasonCodeV1 {
     InheritedToolContinuation,
@@ -240,9 +252,22 @@ pub enum ComplexityReasonCodeV1 {
     ClassifierAssessmentInvalid,
 }
 
-#[derive(Clone, Debug, Deserialize, Eq, PartialEq, Serialize)]
+#[derive(schemars::JsonSchema, Clone, Copy, Debug, Deserialize, Eq, PartialEq, Serialize)]
+#[serde(rename_all = "snake_case")]
+pub enum DecisionProtocolV1 {
+    SystemOneLegacy,
+    SystemOneC,
+    CustomExtensionV1,
+    LocalRules,
+}
+
+#[derive(schemars::JsonSchema, Clone, Debug, Deserialize, Eq, PartialEq, Serialize)]
 #[serde(deny_unknown_fields)]
 pub struct BranchDecisionV1 {
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub decision_protocol: Option<DecisionProtocolV1>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub routing_observation: Option<crate::RoutingObservationV1>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub policy: Option<crate::BranchExecutionPolicyV1>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
@@ -267,6 +292,13 @@ pub struct BranchDecisionV1 {
 
 impl BranchDecisionV1 {
     pub(crate) fn validate(&self) -> Result<(), ExecutionFactError> {
+        if self
+            .routing_observation
+            .as_ref()
+            .is_some_and(|o| !o.validate())
+        {
+            return Err(ExecutionFactError::InvalidFact);
+        }
         if self.strategy_id.trim().is_empty()
             || self.schema_version.trim().is_empty()
             || CanonicalDigest::parse(self.payload_digest.as_str()).is_err()
@@ -330,7 +362,7 @@ impl BranchDecisionV1 {
     }
 }
 
-#[derive(Clone, Debug, Deserialize, Eq, PartialEq, Serialize)]
+#[derive(schemars::JsonSchema, Clone, Debug, Deserialize, Eq, PartialEq, Serialize)]
 #[serde(deny_unknown_fields)]
 pub struct GroupPlanV1 {
     pub ordinal: u32,
@@ -338,7 +370,7 @@ pub struct GroupPlanV1 {
     pub ranked_candidate_ids: Vec<String>,
 }
 
-#[derive(Clone, Copy, Debug, Deserialize, Eq, PartialEq, Serialize)]
+#[derive(schemars::JsonSchema, Clone, Copy, Debug, Deserialize, Eq, PartialEq, Serialize)]
 #[serde(rename_all = "SCREAMING_SNAKE_CASE")]
 pub enum LedgerReasonCodeV1 {
     ContextHoldApplied,
@@ -354,7 +386,7 @@ pub enum LedgerReasonCodeV1 {
     CustomExactOrder,
 }
 
-#[derive(Clone, Debug, Deserialize, Eq, PartialEq, Serialize)]
+#[derive(schemars::JsonSchema, Clone, Debug, Deserialize, Eq, PartialEq, Serialize)]
 #[serde(deny_unknown_fields)]
 pub struct ReasonLedgerEntryV1 {
     pub ordinal: u32,
@@ -362,7 +394,9 @@ pub struct ReasonLedgerEntryV1 {
     pub group_id: Option<String>,
 }
 
-#[derive(Clone, Copy, Debug, Default, Deserialize, Eq, PartialEq, Serialize)]
+#[derive(
+    schemars::JsonSchema, Clone, Copy, Debug, Default, Deserialize, Eq, PartialEq, Serialize,
+)]
 #[serde(rename_all = "snake_case")]
 pub enum ToolKindRequirementV1 {
     #[default]
@@ -376,7 +410,7 @@ impl ToolKindRequirementV1 {
     }
 }
 
-#[derive(Clone, Debug, Deserialize, Eq, PartialEq, Serialize)]
+#[derive(schemars::JsonSchema, Clone, Debug, Deserialize, Eq, PartialEq, Serialize)]
 #[serde(tag = "kind", rename_all = "snake_case", deny_unknown_fields)]
 pub enum ToolChoiceRequirementV1 {
     None,
@@ -392,7 +426,7 @@ pub enum ToolChoiceRequirementV1 {
     },
 }
 
-#[derive(Clone, Debug, Deserialize, Eq, PartialEq, Serialize)]
+#[derive(schemars::JsonSchema, Clone, Debug, Deserialize, Eq, PartialEq, Serialize)]
 #[serde(deny_unknown_fields)]
 pub struct RequestCapabilityRequirementsV1 {
     pub ingress_protocol: IngressProtocolV1,
@@ -418,7 +452,7 @@ pub struct RequestCapabilityRequirementsV1 {
     pub provider_state: bool,
 }
 
-#[derive(Clone, Copy, Debug, Deserialize, Eq, PartialEq, Serialize)]
+#[derive(schemars::JsonSchema, Clone, Copy, Debug, Deserialize, Eq, PartialEq, Serialize)]
 #[serde(rename_all = "snake_case")]
 pub enum RequestedReasoningDispositionV1 {
     Absent,
@@ -427,7 +461,7 @@ pub enum RequestedReasoningDispositionV1 {
 
 /// Typed carrier for the one intentionally provider-native reasoning field.
 /// Stable route/candidate fields never use this representation.
-#[derive(Clone, Debug, Deserialize, PartialEq, Serialize)]
+#[derive(schemars::JsonSchema, Clone, Debug, Deserialize, PartialEq, Serialize)]
 #[serde(
     tag = "kind",
     content = "value",
@@ -456,20 +490,20 @@ impl NativeReasoningValueV1 {
     }
 }
 
-#[derive(Clone, Copy, Debug, Deserialize, Eq, PartialEq, Serialize)]
+#[derive(schemars::JsonSchema, Clone, Copy, Debug, Deserialize, Eq, PartialEq, Serialize)]
 #[serde(rename_all = "snake_case")]
 pub enum RouteDecisionOutcomeV1 {
     Ready,
     NoEligibleCandidates,
 }
 
-#[derive(Clone, Copy, Debug, Deserialize, Eq, PartialEq, Serialize)]
+#[derive(schemars::JsonSchema, Clone, Copy, Debug, Deserialize, Eq, PartialEq, Serialize)]
 #[serde(rename_all = "SCREAMING_SNAKE_CASE")]
 pub enum RouteDecisionOutcomeCodeV1 {
     NoEligibleCandidate,
 }
 
-#[derive(Clone, Debug, Deserialize, PartialEq, Serialize)]
+#[derive(schemars::JsonSchema, Clone, Debug, Deserialize, PartialEq, Serialize)]
 #[serde(deny_unknown_fields)]
 pub struct RouteDecisionFactV1 {
     pub planner_version: String,
@@ -492,7 +526,7 @@ pub struct RouteDecisionFactV1 {
     pub max_attempts: u32,
 }
 
-#[derive(Clone, Copy, Debug, Deserialize, Eq, PartialEq, Serialize)]
+#[derive(schemars::JsonSchema, Clone, Copy, Debug, Deserialize, Eq, PartialEq, Serialize)]
 #[serde(tag = "kind", rename_all = "snake_case", deny_unknown_fields)]
 pub enum CacheCostFactV1 {
     None,
@@ -500,7 +534,7 @@ pub enum CacheCostFactV1 {
     Confirmed { projected_cost_micros: u64 },
 }
 
-#[derive(Clone, Copy, Debug, Deserialize, Eq, PartialEq, Serialize)]
+#[derive(schemars::JsonSchema, Clone, Copy, Debug, Deserialize, Eq, PartialEq, Serialize)]
 #[serde(rename_all = "snake_case")]
 pub enum CostClassV1 {
     Free,
@@ -509,7 +543,7 @@ pub enum CostClassV1 {
     Unknown,
 }
 
-#[derive(Clone, Copy, Debug, Deserialize, Eq, PartialEq, Serialize)]
+#[derive(schemars::JsonSchema, Clone, Copy, Debug, Deserialize, Eq, PartialEq, Serialize)]
 #[serde(rename_all = "SCREAMING_SNAKE_CASE")]
 pub enum ExclusionReasonCodeV1 {
     ProtocolPathUnavailable,
@@ -532,7 +566,7 @@ pub enum ExclusionReasonCodeV1 {
     DuplicateCandidate,
 }
 
-#[derive(Clone, Copy, Debug, Deserialize, Eq, PartialEq, Serialize)]
+#[derive(schemars::JsonSchema, Clone, Copy, Debug, Deserialize, Eq, PartialEq, Serialize)]
 #[serde(rename_all = "SCREAMING_SNAKE_CASE")]
 pub enum RankingReasonCodeV1 {
     ContextModelHold,
@@ -545,7 +579,7 @@ pub enum RankingReasonCodeV1 {
     StableTieBreak,
 }
 
-#[derive(Clone, Debug, Deserialize, Eq, PartialEq, Serialize)]
+#[derive(schemars::JsonSchema, Clone, Debug, Deserialize, Eq, PartialEq, Serialize)]
 #[serde(deny_unknown_fields)]
 pub struct CandidateDecisionFactV1 {
     pub candidate_id: String,
@@ -583,7 +617,7 @@ pub struct CandidateDecisionFactV1 {
     pub ranking_reasons: Vec<RankingReasonCodeV1>,
 }
 
-#[derive(Clone, Copy, Debug, Deserialize, Eq, PartialEq, Serialize)]
+#[derive(schemars::JsonSchema, Clone, Copy, Debug, Deserialize, Eq, PartialEq, Serialize)]
 #[serde(rename_all = "snake_case")]
 pub enum AgentTurnAttributionV1 {
     Single,
@@ -591,7 +625,7 @@ pub enum AgentTurnAttributionV1 {
     Unknown,
 }
 
-#[derive(Clone, Copy, Debug, Deserialize, Eq, PartialEq, Serialize)]
+#[derive(schemars::JsonSchema, Clone, Copy, Debug, Deserialize, Eq, PartialEq, Serialize)]
 #[serde(rename_all = "snake_case")]
 pub enum AgentTurnStatusV1 {
     Completed,
@@ -600,7 +634,7 @@ pub enum AgentTurnStatusV1 {
     Unknown,
 }
 
-#[derive(Clone, Debug, Deserialize, PartialEq, Serialize)]
+#[derive(schemars::JsonSchema, Clone, Debug, Deserialize, PartialEq, Serialize)]
 #[serde(tag = "kind", rename_all = "snake_case", deny_unknown_fields)]
 pub enum ExecutionFactV1 {
     RouteDecision(Box<RouteDecisionFactV1>),

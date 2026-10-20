@@ -1,6 +1,54 @@
 use super::*;
 
 #[test]
+fn explicit_non_loopback_http_checks_only_probe_a_configured_directory() {
+    for endpoint in [
+        "http://192.0.2.10:8123/v1",
+        "http://gateway.invalid:8123/v1",
+    ] {
+        for directory in [None, Some("/v1/models")] {
+            let transport = CountingTransport::default();
+            let calls = transport.calls();
+            let service =
+                NativeModelConnectionServiceV1::new(TestOnlyComputeCandidatePort::new(), transport);
+            let mut input = draft(endpoint.into(), GatewayAuthenticationSemanticsV1::None);
+            input.inventory_path_override = directory.map(str::to_owned);
+            let result = service
+                .check(
+                    input,
+                    NativeModelConnectionCredentialV1::NotRequired,
+                    &ModelConnectionProbeCancellationV1::default(),
+                )
+                .unwrap();
+            assert_eq!(
+                calls.load(Ordering::SeqCst),
+                usize::from(directory.is_some())
+            );
+            assert_eq!(result.inventory_path.as_deref(), directory);
+            assert_eq!(result.target.scheme, "http");
+            assert_eq!(result.target.port, 8123);
+            assert_eq!(
+                result.target.authority,
+                if endpoint.contains("192.0.2.10") {
+                    "192.0.2.10"
+                } else {
+                    "gateway.invalid"
+                }
+            );
+            assert!(result.candidate.models.iter().any(|model| model.selectable));
+            assert_eq!(result.inference, ModelConnectionInferenceStatusV1::NotRun);
+            if directory.is_none() {
+                assert_eq!(result.directory, ModelConnectionDirectoryStatusV1::NotRun);
+                assert_ne!(
+                    result.reachability,
+                    ModelConnectionReachabilityV1::Reachable
+                );
+            }
+        }
+    }
+}
+
+#[test]
 fn directory_is_optional_for_registered_and_manual_text_models() {
     for registered in [false, true] {
         for directory in [

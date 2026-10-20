@@ -1,5 +1,7 @@
 use std::collections::BTreeMap;
+mod compute_discovery;
 mod delegation;
+mod native_protocol;
 mod plan_authoring;
 mod subscription_login;
 mod worker;
@@ -320,6 +322,18 @@ fn agent_launch_descriptor_request_schema() -> Value {
     })
 }
 
+fn agent_scan_request_schema() -> Value {
+    json!({
+        "$schema":"https://json-schema.org/draft/2020-12/schema",
+        "$id":"hiroute://contracts/cli/agent-scan-request.v1.schema.json",
+        "type":"object", "additionalProperties":false,
+        "properties":{"native_target":{"type":"object","additionalProperties":false,
+            "required":["kind","config_root"],"properties":{"kind":{"const":"hermes"},
+            "config_root":{"type":"string","minLength":1,"maxLength":4096,
+                "description":"Explicit absolute effective Hermes profile directory; never inferred from the daemon environment."}}}}
+    })
+}
+
 fn empty_request_schema() -> Value {
     json!({
         "$schema": "https://json-schema.org/draft/2020-12/schema",
@@ -363,6 +377,24 @@ fn value_query_schema() -> Value {
 
 pub fn generated_contract_files() -> Vec<GeneratedContractFile> {
     let mut files = BTreeMap::from([
+        (
+            "console-launch-request.v1.schema.json",
+            pretty_json(
+                &json!({"$schema":"https://json-schema.org/draft/2020-12/schema","$id":"hiroute://contracts/cli/console-launch-request.v1.schema.json","type":"object","additionalProperties":false,"properties":{"loopback_only":{"type":"boolean","default":false}}}),
+            ),
+        ),
+        (
+            "console-token-create.v1.schema.json",
+            pretty_json(
+                &json!({"$schema":"https://json-schema.org/draft/2020-12/schema","$id":"hiroute://contracts/cli/console-token-create.v1.schema.json","type":"object","additionalProperties":false,"required":["name"],"properties":{"name":{"type":"string","minLength":1,"maxLength":80},"expires_days":{"type":["integer","null"],"minimum":1,"maximum":3650}}}),
+            ),
+        ),
+        (
+            "console-token-revoke.v1.schema.json",
+            pretty_json(
+                &json!({"$schema":"https://json-schema.org/draft/2020-12/schema","$id":"hiroute://contracts/cli/console-token-revoke.v1.schema.json","type":"object","additionalProperties":false,"required":["id"],"properties":{"id":{"type":"string","pattern":"^[a-f0-9]{64}$"}}}),
+            ),
+        ),
         (
             "subscription-login-request.v1.schema.json",
             pretty_json(&subscription_login::request()),
@@ -466,6 +498,10 @@ pub fn generated_contract_files() -> Vec<GeneratedContractFile> {
             pretty_json(&agent_launch_descriptor_request_schema()),
         ),
         (
+            "agent-scan-request.v1.schema.json",
+            pretty_json(&agent_scan_request_schema()),
+        ),
+        (
             "empty-request.v1.schema.json",
             pretty_json(&empty_request_schema()),
         ),
@@ -525,6 +561,8 @@ pub fn generated_contract_files() -> Vec<GeneratedContractFile> {
     ]);
 
     files.extend(plan_authoring::files());
+    files.extend(native_protocol::files());
+    files.extend(compute_discovery::files());
     let file_digests = files
         .iter()
         .map(|(path, contents)| {
@@ -601,6 +639,12 @@ mod tests {
                 "agent-check-request.v1.schema.json",
                 "agent-launch-descriptor-request.v1.schema.json",
                 "agent-plan-catalog-query.v2.schema.json",
+                "agent-scan-request.v1.schema.json",
+                "compute-connection-options-request.v1.schema.json",
+                "compute-scan-request.union.schema.json",
+                "console-launch-request.v1.schema.json",
+                "console-token-create.v1.schema.json",
+                "console-token-revoke.v1.schema.json",
                 "contract-set.v1.json",
                 "coverage-manifest.v1.json",
                 "delegation-cancel-request.v1.schema.json",
@@ -611,6 +655,8 @@ mod tests {
                 "delegation-start-request.v1.schema.json",
                 "delegation-wait-request.v1.schema.json",
                 "empty-request.v1.schema.json",
+                "historical-applicability-test-result.v1.schema.json",
+                "historical-applicability-test.v1.schema.json",
                 "local-control-hello.v2.schema.json",
                 "local-control.v2.schema.json",
                 "machine-envelope.v2.schema.json",
@@ -622,6 +668,7 @@ mod tests {
                 "plan-editor.v2.schema.json",
                 "plan-lifecycle-change.v1.schema.json",
                 "planned-manifest.v1.json",
+                "prepare-discovered-model-connection-request.v1.schema.json",
                 "publication-checkpoint-change.v1.schema.json",
                 "session-list-query.v1.schema.json",
                 "session-lookup.v1.schema.json",

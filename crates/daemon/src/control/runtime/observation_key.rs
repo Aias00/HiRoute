@@ -56,6 +56,21 @@ pub(super) fn observation_workspace_key(
     Err(INVALID.into())
 }
 
+pub(super) fn validate_existing_authority(storage_root: &Path) -> Result<(), String> {
+    if storage_root.join("observation/activity.db").exists()
+        || storage_root.join("observation.upgrade.json").exists()
+        || storage_root.join("observation-source-backup.json").exists()
+    {
+        let mut file = open_key(&storage_root.join("observation-hmac-key")).map_err(|_| INVALID)?;
+        if file.metadata().map_err(|_| INVALID)?.len() != 32 {
+            return Err(INVALID.into());
+        }
+        let mut key = Zeroizing::new([0u8; 32]);
+        file.read_exact(&mut *key).map_err(|_| INVALID)?;
+    }
+    Ok(())
+}
+
 fn open_key(path: &Path) -> std::io::Result<File> {
     hiroute_platform::private_fs::open_private_file(path)
 }
@@ -77,5 +92,19 @@ mod tests {
             assert!(observation_workspace_key(fixture.path()).is_err());
             assert_eq!(std::fs::read(&path).unwrap(), malformed);
         }
+    }
+
+    #[test]
+    fn a_sealed_history_link_requires_the_original_key_even_without_a_live_database() {
+        let fixture = tempfile::tempdir().unwrap();
+        std::fs::write(
+            fixture.path().join("observation-source-backup.json"),
+            b"pending source",
+        )
+        .unwrap();
+        assert!(validate_existing_authority(fixture.path()).is_err());
+        assert!(!fixture.path().join("observation-hmac-key").exists());
+        std::fs::write(fixture.path().join("observation-hmac-key"), [7; 32]).unwrap();
+        validate_existing_authority(fixture.path()).unwrap();
     }
 }

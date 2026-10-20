@@ -157,8 +157,17 @@ execution is preferred; an absent protocol may use only an expressible existing
 conversion. Endpoint health is isolated; manual Key disable affects the source.
 
 Custom configuration supports name, base URL/path prefix, None/Bearer/specified
-Header authentication, and multiple manual models. Public endpoints require TLS;
-loopback may use plain HTTP. Target changes require revalidation. Credentials cannot
+Header authentication, and multiple manual models. A user may explicitly configure
+HTTP or HTTPS for a loopback, LAN or remote endpoint, whether its host is a literal
+address or a hostname. HTTP is not rejected solely because the destination is
+non-loopback. HTTPS is recommended; an HTTP selection explains that API keys and
+request/response content travel in plaintext without adding a mandatory confirmation.
+Target normalization preserves the configured hostname; DNS and connectivity are
+evaluated by bounded request transport, not by passive discovery or a syntactic check.
+The same transport policy applies to durable source validation, publication and
+actual Gateway execution. Registered catalog destinations remain bound to their
+exact HTTPS authority; managed CPA transport retains its numeric-loopback scope.
+Target changes require revalidation. Credentials cannot
 be redirected to an unauthorized destination; TLS failure never falls back to plain
 transport. Embedded URL passwords/query Keys must use protected input instead.
 
@@ -169,6 +178,26 @@ silently stripped. Missing canonical match, scores, or price alone cannot block
 an otherwise expressible model. Cost hints without currency/unit/product/region/time
 semantics are not PriceRate, free entitlement, or savings evidence. Metadata field
 closure and reference pricing follow [model facts](../model-catalog-price/spec.md).
+
+#### Scenario: Save an explicitly configured HTTP source without a directory
+
+- **WHEN** the owner configures a valid LAN or remote HTTP endpoint, leaves the model
+  directory path empty and supplies supported manual model declarations
+- **THEN** connection check, save and saved-source recheck accept that target without
+  DNS or directory/inference calls, preserve the exact target and authentication,
+  and do not claim reachability, account access or inference has been verified.
+
+#### Scenario: Correct an invalid connection target
+
+- **WHEN** a connection check rejects an invalid URL, unsafe path, authentication
+  header or protocol header, including an additional protocol endpoint
+- **THEN** the daemon/API retains a closed, specific reason in the existing error
+  envelope, with the released `INVALID_ARGUMENTS` machine code; Desktop presents
+  a localized correction and retains input. Errors never expose URL credentials,
+  protected keys or raw provider responses. Other URL/path/authentication checks,
+  redirect restrictions and HTTPS certificate validation remain enforced.
+
+Source Issue: https://github.com/higress-group/HiRoute/issues/154
 
 ### Requirement: Saved-source recheck reconstructs protected facts
 
@@ -206,6 +235,17 @@ Independent CPA sign-in is the default recommendation; NativeBorrowed is an expl
 option and saved choices do not migrate automatically. Login completion alone does
 not enable routes or import all models.
 
+Desktop subscription checks and model selection SHALL use subscription-specific
+titles. Native discovery controls, including Hermes profile scanning, SHALL remain
+on the device scan list and stay hidden in subscription details. Returning to the
+scan list restores its controls; cancelling proxy editing retains the selected
+subscription context.
+
+A successful subscription save ends its Desktop check interaction. A later explicit
+check, including another provider or account, MUST proceed without releasing or
+invalidating the saved access. Running checks and verified checks that have not
+completed saving retain their existing interaction ownership.
+
 | Mode | Credential authority | Repair action |
 | --- | --- | --- |
 | NativeBorrowed | Native client owns login/refresh; CPA receives current access leases only | Update native login and explicitly recheck |
@@ -221,6 +261,29 @@ and removal fence late callbacks and unsaved credentials. Disable revokes admiss
 and stops refresh while retaining credentials; remove-login first revokes saved
 route access, then stops the exact instance and deletes its owned credentials.
 Neither claims provider-global OAuth revocation.
+
+### Requirement: Independent sign-in receives browser callbacks locally
+
+CPA owns temporary browser callback listeners for the existing Codex
+`http://localhost:1455/auth/callback` and Claude `http://localhost:54545/callback`
+redirects. Bind only available IPv4/IPv6 loopback families. Each provider has at
+most one pending sign-in; saved accounts do not retain a callback listener.
+
+Browser and protected manual input MUST share atomic, one-use admission for the
+exact provider/session/state. Invalid, stale and duplicate input cannot replace
+an accepted callback. CPA reception permits retry after failed callback-file
+publication. HiRoute does not resend an admitted manual code after a failed or
+uncertain submission: observe status, or cancel and start a new sign-in. The browser
+acknowledges reception without claiming token exchange or sign-in success.
+Release listeners after reception, cancellation, expiry or failure, before slow
+token exchange. Do not redirect or reflect callback secrets in browser responses.
+
+A port conflict MUST close partial listeners and retain the same pending session
+for manual completion. Desktop explains this mode before the user explicitly opens
+the browser, and accepts the full return URL through the existing protected input.
+Automatic reception opens the browser normally and retains manual completion as
+a fallback. Successful sign-in still requires explicit Check/Save; it does not
+change enabled-account or routing limits.
 
 ### Requirement: Borrowed subscription refresh cannot enlarge saved membership
 

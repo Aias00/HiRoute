@@ -127,6 +127,18 @@ Version needs section '.gnu.version_r' contains 1 entry:
         for key in ('build_image', 'runtime_image'):
             self.assertRegex(policy[key], r'@sha256:[a-f0-9]{64}$')
         self.assertEqual(set(policy['targets']), {'x86_64-unknown-linux-gnu', 'aarch64-unknown-linux-gnu'})
+        self.assertEqual(policy['node_version'], '22.19.0')
+        expected = {
+            'x86_64-unknown-linux-gnu': ('x64', 'c0649af18e6a24f6fe5535a3e86b341dd49a8e71117c8b68bde973ef834f16f2'),
+            'aarch64-unknown-linux-gnu': ('arm64', '0b2d9f564b6594222a62c82e1df2efe119dd4a4aff29644f4dd325bf360b6bcc'),
+        }
+        for target, values in expected.items():
+            self.assertEqual((policy['targets'][target]['node_arch'], policy['targets'][target]['node_sha256']), values)
+        recipe = (ROOT / 'linux-release.Dockerfile').read_text()
+        self.assertIn('node-v${NODE_VERSION}-linux-${NODE_ARCH}.tar.xz', recipe)
+        self.assertIn('"$NODE_SHA256" | sha256sum --check --strict', recipe)
+        self.assertIn('test "$(node --version)" = "v${NODE_VERSION}"', recipe)
+        self.assertIn('&& npm --version', recipe)
 
 
 @unittest.skipUnless(platform.system() == 'Linux', 'Linux runtime fixture')
@@ -200,11 +212,16 @@ else: raise SystemExit(2)
             'packages': [{'name': 'fixture'}], 'documents': [{'name': 'fixture'}],
         }))
         for path in notices.iterdir(): path.chmod(0o644)
+        console = self.root / 'console'
+        console.mkdir(exist_ok=True)
+        (console / 'index.html').write_text('<main>Runtime fixture</main>')
+        (console / 'index.html').chmod(0o644)
         args = self.packager.parser().parse_args([
             'build', '--version', '0.2.0', '--revision', 'a' * 40, '--target', self.target,
             '--hiroute', str(executable), '--hirouted', str(executable), '--cpa-binary', str(executable),
             '--cpa-version', 'fixture', '--cpa-license', str(license_path),
-            '--notices', str(notices), '--output', str(self.root / 'package'),
+            '--notices', str(notices), '--console-assets', str(console),
+            '--output', str(self.root / 'package'),
         ])
         output = io.StringIO()
         with redirect_stdout(output), patch.object(self.packager, 'REPO', self.root):
@@ -297,7 +314,7 @@ class ContainerTests(unittest.TestCase):
     def setUp(self):
         temporary = tempfile.TemporaryDirectory()
         self.addCleanup(temporary.cleanup)
-        self.root = Path(temporary.name)
+        self.root = Path(temporary.name).resolve()
         scripts = self.root / 'scripts'
         scripts.mkdir()
         for name in ('linux-release-baseline.json', 'linux-release.Dockerfile',
@@ -382,6 +399,29 @@ class ContainerTests(unittest.TestCase):
             'linux-release-runtime.py', 'install-standalone.py', 'package-standalone.py',
             'linux-release-baseline.json', 'candidate.tar.gz', 'candidate.tar.gz.json', 'linux-abi.json',
         })
+
+    def assert_node_build_arguments(self, arch):
+        policy = abi.baseline()
+        args = self.commands[0]
+        arguments = [args[i + 1] for i, value in enumerate(args) if value == '--build-arg']
+        self.assertIn('NODE_VERSION=' + policy['node_version'], arguments)
+        self.assertIn('NODE_ARCH=' + arch, arguments)
+        self.assertIn('NODE_SHA256=' + policy['targets'][self.target]['node_sha256'], arguments)
+        compiler = next(args for args in self.commands if 'scripts/build-release.py' in args)
+        environment = [compiler[i + 1] for i, value in enumerate(compiler) if value == '-e']
+        self.assertIn('PATH=/usr/local/bin:/opt/cargo/bin:/opt/go/bin:/usr/bin:/bin', environment)
+        mounts = [compiler[i + 1] for i, value in enumerate(compiler) if value == '-v']
+        self.assertFalse(any('/node:' in value or '/npm:' in value for value in mounts))
+
+    def test_x64_build_uses_its_pinned_node_inside_the_image(self):
+        container.run(self.target, self.source)
+        self.assert_node_build_arguments('x64')
+
+    def test_arm64_build_selects_its_own_node_archive(self):
+        self.target = 'aarch64-unknown-linux-gnu'
+        with patch.object(container.platform, 'machine', return_value='aarch64'):
+            container.run(self.target, self.source)
+        self.assert_node_build_arguments('arm64')
 
     def test_non_green_runtime_keeps_failed_result_and_awaiting_package(self):
         self.runtime_state = 'red'

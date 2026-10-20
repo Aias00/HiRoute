@@ -18,8 +18,10 @@ EXPECTED_DATABASE_SCHEMA_VERSION = 30
 VERSION_SUFFIX = re.compile(r"/v[0-9]+")
 INTERNAL_CONTRACT = re.compile(r"hiroute(?:\.[a-z0-9][a-z0-9-]*)+/v[0-9]+")
 VALID_MODES = {
+    "projection",
     "frozen_fixture",
     "recovery_read_only",
+    "legacy_adapter",
     "rejection_fixture",
 }
 OBSOLETE_LIVE_CONTRACT_FILES = {

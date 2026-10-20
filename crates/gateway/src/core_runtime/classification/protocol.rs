@@ -27,6 +27,8 @@ pub(super) struct ClassifierResponse {
     pub(super) degree_failed: bool,
     pub(super) assessment: Option<ClassifierAssessment>,
     pub(super) invalid_assessment: bool,
+    pub(super) applicability: Option<f64>,
+    pub(super) native_shape_complete: bool,
 }
 
 #[derive(Clone, Debug, Serialize)]
@@ -46,29 +48,46 @@ pub(super) fn assessment_definition(
     history: &AgentTurnHistorySnapshot,
     authority: &RestBranchClassifierAuthorityV1,
 ) -> Option<AssessmentDefinition> {
-    let target = history.assessment_target.as_ref()?;
+    assessment_definition_result(history, authority).ok()
+}
+
+pub(super) fn assessment_definition_result(
+    history: &AgentTurnHistorySnapshot,
+    authority: &RestBranchClassifierAuthorityV1,
+) -> Result<AssessmentDefinition, hiroute_domain::ProtectionEligibilityV1> {
+    use hiroute_domain::ProtectionEligibilityV1 as E;
+    let target = history.assessment_target.as_ref().ok_or(E::NoTarget)?;
     let from = history
         .assessment_from
-        .filter(|i| *i < history.visible_conversation.len())?;
+        .filter(|i| *i < history.visible_conversation.len())
+        .ok_or(E::InvalidBoundary)?;
     let ExecutionAttribution::Single {
         executed_branch_id, ..
     } = &target.attribution
     else {
-        return None;
+        return Err(E::AmbiguousAttribution);
     };
     let (judgment, name) = if executed_branch_id == SMART_SAVING_SCOPE_ID {
-        (authority.smart_judgment.as_ref()?, "Smart saving")
+        (
+            authority.smart_judgment.as_ref().ok_or(E::Unrated)?,
+            "Smart saving",
+        )
     } else {
         let branch = authority
             .branch_policies
             .iter()
-            .find(|b| b.id == *executed_branch_id)?;
+            .find(|b| b.id == *executed_branch_id)
+            .ok_or(E::DifferentCategory)?;
         (&branch.judgment, branch.name.as_str())
     };
-    if target.branch_execution.as_ref()?.policy != judgment.execution_policy(name) {
-        return None;
+    let policy = authority.native_protocol.as_ref().map_or_else(
+        || judgment.execution_policy(name),
+        |p| p.execution_policy(executed_branch_id, judgment, name),
+    );
+    if target.branch_execution.as_ref().ok_or(E::Unrated)?.policy != policy {
+        return Err(E::DifferentPolicy);
     }
-    Some(AssessmentDefinition {
+    Ok(AssessmentDefinition {
         from,
         instructions: judgment.competence.instructions.clone(),
         criteria: std::array::from_fn(|i| AssessmentCriterion {
@@ -98,6 +117,7 @@ pub(super) fn classifier_request_template(
         has_target: target.is_some(),
         target_partial: false,
         bindings: None,
+        routing_observation: None,
     })
 }
 pub(super) fn latest_user_wire_value(
@@ -244,6 +264,8 @@ pub(super) fn parse_classifier_response(
         })
     });
     Ok(ClassifierResponse {
+        applicability: None,
+        native_shape_complete: false,
         branch_id,
         probabilities,
         degree_failed,

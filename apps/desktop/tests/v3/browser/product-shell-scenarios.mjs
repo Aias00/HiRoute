@@ -1,5 +1,7 @@
 import { scenario, scenarioCatalog, runScenarios } from './scenario-selection.mjs';
 import { productShellRequired } from './scenario-requirements.mjs';
+import { cProtocolScenarios } from './c-protocol-scenarios.mjs';
+import { presentationScenarios } from './presentation-interactions.mjs';
 const c = () => window.productShell;
 const pause = ms => new Promise(resolve => setTimeout(resolve, ms));
 const assert = (condition, message) => { if (!condition) throw new Error(message); };
@@ -55,6 +57,83 @@ async function routing() {
   await until(() => document.querySelector('.plan-identity-fields input'), 'route editor');
 }
 const scenarios = [
+  ...cProtocolScenarios({ fresh, routing, click, until, all, text, calls, setInput, control: c }),
+  ...presentationScenarios,
+  scenario('desktop.routing.two-context-conflict', ['routing-editor'], 'A rival context revision refuses stale publication and preserves the current draft', async () => {
+    await fresh(); await routing();
+    const name = document.querySelector('.plan-identity-fields input');
+    const draftName = 'Retained after another tab changes the route';
+    setInput(name, draftName); await pause(40);
+    const rival = structuredClone(c().desktop);
+    const plan = rival.catalog.plans[0]; plan.head.head_revision += 1;
+    plan.desired.display_name = 'Saved by a second context';
+    c().handlers.desktop_snapshot = () => structuredClone(rival);
+    c().handlers.preview_plan_editor = ({ input }) => {
+      assert(input.expected_head_revision !== undefined, 'Revision was omitted from the draft');
+      throw { kind: 'native', code: 'REVISION_CONFLICT' };
+    };
+    const reads = calls('desktop_snapshot').length;
+    await click('保存草稿');
+    await until(() => text().includes('保留') && text().includes('另一会话'), 'revision conflict copy');
+    assert(calls('desktop_snapshot').length > reads, 'Conflict did not reload current facts');
+    assert(document.querySelector('.plan-identity-fields input').value === draftName, 'Rival revision discarded the local draft');
+    assert(calls('preview_plan_editor').length === 1, 'Stale publication was retried automatically');
+  }),
+  scenario('desktop.models.subscription-login.callback-modes', ['subscription-proxy', 'subscription-login'], 'Automatic callback opens the browser; manual fallback explains the conflict before opening and keeps callback text protected', async () => {
+    for (const language of (window.cpaCallbackLanguages ?? ['zh', 'en'])) {
+      for (const provider of ['codex', 'claude']) {
+        for (const manual of [false, true]) {
+          let session;
+          await fresh(() => {
+            session = { provider, login_ref: `login/fixture-${provider}`, status: 'pending',
+              authorization_url: 'https://example.invalid/oauth/authorize',
+              ...(manual ? { reason_code: 'SUBSCRIPTION_LOGIN_MANUAL_CALLBACK' } : {}) };
+            c().handlers.manage_subscription_login = ({ request }) => ({ schema: 'hiroute.subscription-login-result/v1',
+              sessions: request.action === 'list' ? [] : [{ ...session, ...(request.action === 'cancel' ? { status: 'cancelled' } : {}) }] });
+            c().handlers.open_external_url = () => undefined;
+            c().handlers.submit_subscription_login_callback = () => {
+              session = { ...session, status: 'authorized', reason_code: undefined,
+                candidate: { candidate_ref: 'candidate/cpa/fixture', candidate_revision: 1 } };
+              return { schema: 'hiroute.subscription-login-result/v1', sessions: [session] };
+            };
+          });
+          localStorage.setItem('hiroute.language', language); c().remount();
+          const label = (zh, en) => language === 'zh' ? zh : en;
+          await click(label('模型', 'Models')); await click(label('添加模型', 'Add models'));
+          await until(() => all('.add-choice').some(item => item.textContent.includes(label('连接订阅', 'Connect subscription'))), 'subscription sign-in entry');
+          all('.add-choice').find(item => item.textContent.includes(label('连接订阅', 'Connect subscription'))).click();
+          const name = provider === 'codex' ? 'Codex' : 'Claude Code';
+          await until(() => all('.oc-status-row').some(row => row.querySelector('strong')?.textContent === name && !row.querySelector('button')?.disabled), 'ready provider sign-in');
+          all('.oc-status-row').find(row => row.querySelector('strong')?.textContent === name).querySelector('button').click();
+          await until(() => button(label('手动完成授权', 'Complete authorization manually')), 'pending callback mode');
+          assert(calls('open_external_url').length === (manual ? 0 : 1), 'Manual conflict opened a browser before guidance or automatic mode did not open it');
+          assert(text().includes(manual ? label('无法自动接收浏览器授权', 'Automatic callback reception is unavailable') : label('HiRoute 会自动接收结果', 'HiRoute will receive the result automatically')), 'Callback mode guidance missing');
+          if (manual) { await click(label('打开登录页面', 'Open sign-in page')); assert(calls('open_external_url').length === 1, 'Explicit manual browser action did not dispatch'); }
+          await click(label('手动完成授权', 'Complete authorization manually'));
+          await until(() => all('input[type="password"]').length === 1, 'protected manual callback form');
+          const dialog = all('[role="dialog"]')[0];
+          const input = all('input[type="password"]')[0];
+          assert(dialog.scrollWidth <= dialog.clientWidth + 1, 'Sign-in dialog overflows horizontally');
+          assert(input.getBoundingClientRect().width > 150, 'Callback field is squeezed');
+          assert(text().includes(label('返回页面无法打开时', 'even if the return page cannot load')), 'Manual copy lacks the unavailable-page instruction');
+          setInput(input, 'synthetic-callback-material');
+          await click(label('提交授权', 'Submit authorization'));
+          await until(() => button(label('检查并选择模型', 'Check and choose models')), 'confirmed authorized state');
+          assert(calls('submit_subscription_login_callback').length === 1 && calls('submit_subscription_login_callback')[0].payload.callback === 'synthetic-callback-material', 'Manual material did not enter the native protected command exactly once');
+          assert(!all('input[type="password"]').length, 'Submitted callback form retained its value');
+          assert(!JSON.stringify(calls('manage_subscription_login')).includes('synthetic-callback-material'), 'Callback material entered ordinary control requests');
+          assert(!calls('check_subscription').length && !calls('apply_compute_save').length, 'Login automatically checked or saved a connection');
+          // Leave the empty fallback form visible for production-style screenshots.
+          if (provider === 'claude' && manual) {
+            session = { ...session, login_ref: `login/fixture-${provider}-next`, status: 'pending', reason_code: 'SUBSCRIPTION_LOGIN_MANUAL_CALLBACK', candidate: undefined };
+            all('.oc-status-row').find(row => row.querySelector('strong')?.textContent === name).querySelector('button').click();
+            await until(() => button(label('手动完成授权', 'Complete authorization manually')), 'fallback form after status observation');
+            await click(label('手动完成授权', 'Complete authorization manually'));
+          }
+        }
+      }
+    }
+  }),
   scenario('desktop.models.subscription-scan.append-to-login', ['subscription-proxy', 'subscription-login'], 'Independent sign-in from an append scan creates a new connection instead of retaining the previous append target', async () => {
     let previous;
     await fresh(() => {
@@ -75,7 +154,9 @@ const scenarios = [
     await click('模型'); await click('向此接入添加模型');
     await until(() => button('返回') && text().includes('Codex 本机订阅'), 'append subscription detail');
     await click('返回'); await click('连接订阅（推荐）');
-    await click('检查并选择模型'); await click('检查订阅');
+    await click('检查并选择模型');
+    assert(all('[role="dialog"] h2').some(item => item.textContent === '连接订阅') && !document.querySelector('[data-hermes-source-scope]'), 'Independent subscription check leaked the device-scan title or Hermes controls');
+    await click('检查订阅');
     await until(() => button('保存接入'), 'new account checked');
     await click('保存接入');
     await until(() => calls('preview_compute_save').length || document.querySelector('[data-error-code]'), 'save outcome');
@@ -143,6 +224,7 @@ const scenarios = [
     assert(!text().includes('订阅连接代理') && calls('subscription_proxy_status').length === 0, 'Settings still owns the proxy entry');
     await deviceScan();
     await until(() => button('调整模型'), 'scanned subscription');
+    assert(document.querySelector('[data-hermes-source-scope]'), 'Device scan lost its optional Hermes profile entry');
     const dialog = document.querySelector('[role="dialog"]');
     const list = document.querySelector('.oc-scan-list');
     await click('设置订阅连接代理');
@@ -169,11 +251,15 @@ const scenarios = [
     assert(calls('subscription_proxy_apply').length === 0, 'Cancel applied a draft');
     await click('调整模型');
     const detail = document.querySelector('.oc-scan-detail');
+    assert(all('[role="dialog"] h2').some(item => item.textContent === '连接订阅') && !document.querySelector('[data-hermes-source-scope]'), 'Selected subscription leaked device-scan controls');
     await click('设置订阅连接代理');
     await until(() => document.querySelector('[aria-label="订阅代理地址"]')?.value === saved.config.policy.url, 'discarded draft and saved readback');
     document.querySelector('[role="dialog"]').dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape', bubbles: true }));
     await until(() => !document.querySelector('.subscription-proxy-panel'), 'Escape collapses editor');
     assert(document.querySelector('.oc-scan-detail') === detail && document.querySelector('[role="dialog"]') === dialog, 'Escape lost the selected subscription');
+    await click('返回');
+    await until(() => document.querySelector('.oc-scan-list'), 'returned to device scan');
+    assert(all('[role="dialog"] h2').some(item => item.textContent === '扫描本机') && document.querySelector('[data-hermes-source-scope]'), 'Returning from a subscription did not restore the device-scan context');
   }),
   scenario('desktop.models.subscription-proxy.read-retry', ['subscription-proxy'], 'An unread proxy policy cannot be overwritten and retry loads the saved mode', async () => {
     let attempts = 0;
@@ -261,7 +347,7 @@ const scenarios = [
     await until(() => all('button').some(item => item.textContent.includes('新建 API 接入')), 'new connection entry');
     all('button').find(item => item.textContent.includes('新建 API 接入')).click();
     await until(() => all('.connection-provider-card').length === 13, 'complete provider directory');
-    assert(document.querySelector('.connection-directory-intro').textContent.includes('18 种接入方式'), 'Directory omits supported products');
+    assert(document.querySelector('.connection-directory-intro').textContent.includes('19 种接入方式'), 'Directory omits supported products');
     assert(getComputedStyle(document.querySelector('.connection-provider-grid')).display === 'grid', 'Production provider layout missing');
     for (const row of all('.connection-provider-card')) {
       assert(getComputedStyle(row).display === 'grid' && getComputedStyle(row).alignItems === 'center', 'Provider card is not aligned');
@@ -477,7 +563,7 @@ const scenarios = [
     assert(calls('preview_compute_save').at(-1).payload.change.expected_revisions.target === c().management.revisions.target, 'Credential change reused the revision from before the decision save');
     await until(() => text().includes('接入凭据已保存'), 'credential save completed');
   }),
-  scenario('desktop.routing.follow-up-preference', ['routing-editor', 'decision-services'], 'New routes omit the retired setting; both editors preserve saved legacy values without exposing a control', async () => {
+  scenario('desktop.routing.follow-up-preference', ['routing-editor', 'decision-services'], 'Both editors preserve authoritative compatibility values without exposing or generating a follow-up control', async () => {
     await fresh(); await routing(); await click('新建智能路由');
     const fields = all('.plan-identity-fields input');
     setInput(fields[0], 'Continuous routing'); setInput(fields[1], 'Check routing without a follow-up setting');
@@ -494,7 +580,9 @@ const scenarios = [
     await click('保存草稿');
     await until(() => calls('preview_plan_editor').length > 0, 'draft without follow-up setting');
     const editor = calls('preview_plan_editor').at(-1).payload.input.editor;
-    assert(!('reselect_on_user_message' in editor.smart) && !('reselect_on_user_message' in editor.branch_routing), 'New frontend drafts still generate the retired setting');
+    const seed = c().fixtureResponse('plan_editor_options', { input: { authoring: {} } }).authoring.editor;
+    assert(editor.smart.reselect_on_user_message === seed.smart.reselect_on_user_message && Object.hasOwn(editor.smart, 'reselect_on_user_message') === Object.hasOwn(seed.smart, 'reselect_on_user_message'), 'Frontend changed the authoritative compatibility value');
+    assert(!('reselect_on_user_message' in editor.branch_routing), 'New frontend branches generate the retired setting');
     for (const mode of ['smart_saving', 'custom_branches']) {
       for (const legacy of [true, false, undefined]) {
         const label = `${mode}, legacy=${legacy}`;
@@ -633,7 +721,7 @@ const scenarios = [
     assert(saved.change.expected_revision === 0 && saved.change.service.revision === 1, 'New connection did not use revision transaction');
     assert(saved.secret === 'synthetic-test-key', 'Built-in auth was incorrectly prefixed by UI');
     const tested = calls('test_classifier_decision').at(-1).payload.input.classifier.service;
-    assert(tested.revision === 1 && tested.connection.auth_header.value_secret_ref === 'protected/r1', 'Test used the unsaved editor or old credential');
+    assert(tested.revision === 1 && tested.id === saved.change.service.id && tested.connection.auth_header.value_secret_ref === 'protected/r1', 'Test used the unsaved editor or old credential');
     assert(text().includes('协议兼容性') && !text().includes('CLASSIFIER_INPUT_REJECTED'), 'Failure is not actionable or exposes raw code by default');
     await click('修改连接'); await click('更换');
     setInput(input('credential'), 'replacement-key');
@@ -897,6 +985,12 @@ const scenarios = [
     setInput(key, 'synthetic-input-preserved'); await pause(40);
     const link = all('[role="dialog"] a').find(item => item.textContent.includes('获取 API Key'));
     assert(link?.target === '_blank' && link.rel.includes('noreferrer') && link.href.startsWith('https://'), 'Web documentation link is unavailable');
+    if (window.fixtureTransport === 'console') {
+      const prevent = event => { assert(!event.defaultPrevented, 'Browser anchor was intercepted'); event.preventDefault(); };
+      document.addEventListener('click', prevent, { once: true }); link.click(); await pause(30);
+      assert(key.value === 'synthetic-input-preserved' && calls('open_external_url').length === 0, 'Browser documentation navigation lost input or invoked native IPC');
+      return;
+    }
     c().handlers.open_external_url = () => { throw new Error('BROWSER_UNAVAILABLE'); };
     link.click(); await until(() => text().includes('当前表单内容已保留'), 'native browser failure feedback');
     assert(calls('open_external_url').at(-1)?.payload.url === link.href, 'Native command did not receive the displayed documentation URL');
@@ -932,6 +1026,15 @@ const scenarios = [
     await click('自定义分支 · 分类并评分');
     assert(all('.classifier-protocol pre')[0].textContent.includes('"from": 0'), 'Assessment request has no prior stage');
     assert(all('.classifier-protocol pre')[1].textContent.includes('review') && text().includes('这里评分属于上一写稿阶段'), 'Assessment targets the new branch');
+    if (window.fixtureTransport === 'console') {
+      await click('保存 OpenAPI'); await until(() => text().includes('已开始下载') || text().includes('保存失败'), 'browser download outcome');
+      if (text().includes('保存失败')) await c().callHost('save_classifier_openapi');
+      assert(c().downloads.length === 1, 'Browser did not produce exactly one Blob download');
+      const document = JSON.parse(await c().downloads[0].text());
+      assert(document.openapi === '3.1.0' && document.paths['/v1/decisions'], 'Browser download differs from the canonical OpenAPI');
+      assert(calls('save_classifier_openapi').length === 0, 'Browser requested a native save command');
+      return;
+    }
     let finish;
     c().handlers.save_classifier_openapi = () => new Promise(resolve => { finish = resolve; });
     await click('保存 OpenAPI');

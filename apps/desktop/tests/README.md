@@ -1,5 +1,23 @@
 # Desktop behavior tests
 
+## Console and Windows host coverage
+
+The V3 browser runner accepts `HIROUTE_BROWSER_TRANSPORT=console` to execute the
+same required product scenarios through the browser host seam. `--console-only`
+checks the production login/session pages with synthetic HTTP, Bearer/context
+headers, plaintext warnings and host capabilities, and captures zh/en light/dark
+at 1200×813 and 755×600. These component scenarios do not establish real daemon,
+native authorization or installation acceptance.
+
+`--shell-host-only` adds the actual Windows startup HTML/styles and production
+shell settings/update states, host-only command routing and credential-free
+reconnect presentation. It uses synthetic host replies and captures the same
+language/theme/size matrix. Native origin ACLs, NSIS, Task/login effects and real
+upgrades keep their [installed gates](../../../docs/windows-desktop-installation.md#evidence-and-release-claims).
+It also distinguishes an unavailable Windows update catalog from installation
+recovery, and checks the bundled local-listener recovery instructions and usable
+Recheck action at both supported window sizes.
+
 Start with the user capability, then choose the smallest layer that can observe its
 contract. Node state tests explain decision rules; browser scenarios exercise the
 production React components and their wiring through synthetic IPC. Neither layer
@@ -17,6 +35,8 @@ proves native authorization, persistence, process cleanup or real model calls.
 | Add and adjust Qoder model routes | `qoder.routing.additional-plans`, `qoder.routing.adjust-and-restore` | Cancelled drafts do not write; only selected Plans are submitted; unavailable choices stay visible; token changes and independent restores keep the other facet. Native default/provider preservation and real model calls require production acceptance. |
 | Remove Pi or DSH routes used by the native default | `pi.routing.default-in-use`, `dsh.routing.default-in-use` | A blocked removal retains model routes and task collaboration, directs the user to their selected client, and never changes the native default or calls a model. Both reuse the additional-provider fixture. |
 | Configure Agents through common interactions | `agent.configuration.shared-interactions`; [Agent status projection](agent-status.test.mjs) | Codex, Claude Code and Qoder show configured routing without verification badges or extra check buttons. Ordinary navigation never probes a model; backend verification facts cannot hide actual configuration/recovery state. |
+| Discover Agents and retain a selected local profile | `hermes.discovery.parallel-entry`, `hermes.discovery.brand-and-known-profile`, `agent.discovery.remember-and-revalidate` in [Agent scenarios](v3/browser/agent-trust-scenarios.mjs) | Hermes stays alongside other Agents before discovery; only its details offer directory selection. Cancel/error retains context without writes; a successful selected-target read replaces the unscoped entry and enables the existing settings flow. |
+| Prepare independent management and Hermes task routing | `agent.management.all-supported-families`, `agent.management.owned-restore`, `hermes.collaboration.native-model-independent` | Six management controls, independent owned restore, retained shared/external files and existing Hermes trigger modes without a managed model or Plan. Real installed Skill loading and Worker completion retain separate native acceptance. |
 | Diagnose or recover an Agent | `codex.restore.conflict-active`, `agent.recovery.non-runnable` | A file conflict preserves current access and unrelated settings; executable diagnostics do not hide recovery. |
 | Choose or replace a Worker installation | `worker.discovery.visible-only`, `worker.installation.harness-isolation`, `worker.installation.replace`, `worker.installation.latest-edit` in [routing/Worker scenarios](v3/browser/routing-worker-scenarios.mjs) | Discovery follows visible configuration; installations stay independent; one explicit save commits the latest edit exactly once. |
 | Resume incomplete Qoder model configuration | `qoder.routing.resume-pending` | Recovery requires trusted authority and the exact original context/Operation; it refreshes backend state, creates no new setup, preserves collaboration and does not fabricate verification. |
@@ -29,10 +49,13 @@ proves native authorization, persistence, process cleanup or real model calls.
 | Choose independent subscription sign-in from a device scan | `desktop.models.subscription-scan.recommended-login`, `desktop.models.subscription-scan.append-to-login` | Scan explains native credential refresh and links to the existing independent sign-in without starting authorization or saving. Changing from an append scan to independent sign-in clears the previous connection target, so a new account saves as a new connection. Chinese/English at the fixed 100% size and 755×600 protect wrapping, visible actions and the initial login explanation while session loading is delayed, including previously enlarged browser preferences. Real OAuth refresh retains its separate native gate. |
 | Return to routing or configure a classifier | `desktop.routing.reactivation-models`, `desktop.routing.classifier-protocol` | An existing editor refreshes saved model names; quality uses active models; selection, curl copy and native-save outcomes are visible. |
 | Connect decision models and custom extensions | `desktop.decisions.save-test-revision`, `desktop.decisions.discard-navigation`; [authentication and reference rules](decision-presentation.test.mjs) | Save-and-test uses the newly saved credential revision; failures remain actionable, origin changes clear credentials, and discard clears retained editors. |
+| Read retained C counts and coverage | `desktop.quality.c-observations` in [C scenarios](v3/browser/c-protocol-scenarios.mjs) | Counts retain explicit denominators; a pending refresh clears stale counts and preserves the expanded section when results arrive. Incomplete coverage hides rates and explains unconfirmed origins; long identities and empty scopes remain readable in Chinese and English. Mock IPC covers rendering, while daemon product tests own event ingestion and retained reads. |
+| Edit native default/custom assessments | `desktop.routing.native-default`, `desktop.routing.custom-assessment` in [routing scenarios](v3/browser/c-protocol-scenarios.mjs); [released intent adapter](native-protocol.test.mjs) | One native default without capability/background controls or route test; exact custom text, thresholds and reset. Side-by-side threshold controls and helper rows stay aligned when descriptions wrap. Browser IPC is synthetic; native publication/reopen and real provider diagnostics have separate evidence. |
 | Correct an invalid collapsed connection field | `desktop.decisions.hidden-invalid-field` | Submission opens and focuses the field, scrolls the complete field and error above sticky actions, and does not save the invalid value. |
 | Inspect models used by branch routes | `desktop.models.branch-route-references` | General-model details include regular and upgrade candidates of enabled branch routes, omit disabled routes, and open the referenced route. |
 | Add a decision connection from an unfinished route | `desktop.decisions.route-detour` | The shell suspends the route draft, saves and returns the exact typed connection, preserves input on cancel, and never publishes automatically. |
 | Inspect a model or open its documentation | `desktop.models.documentation-retains-input`; [model-to-route scenario](v3/browser/model-to-route-scenarios.mjs) | Local readiness does not claim inference success; browser failure retains form input; web anchors retain their default action; route creation uses the selected model. |
+| Change model grouping or inspect page controls | `desktop.models.view-switch`, `desktop.presentation.control-layout`; [presentation scenarios](v3/browser/presentation-interactions.mjs) | Production styles preserve model/connection counts, selected model and visible selection. Chinese/English and light/dark checks reject browser-default buttons and horizontal overflow from long recent-session titles at the supported small window. |
 
 Task-route save scenarios also cover Pi and Qoder executor reselection: an explicit
 Messages choice survives clicking the selected executor and reaches the saved draft.
@@ -48,6 +71,11 @@ it does not call private component callbacks. In particular, browser checks of
 `save_classifier_openapi` and `open_external_url` verify UI dispatch/outcomes, not
 the native OS action.
 
+For an interactive presentation regression check, open
+`product-shell.html?checks=presentation` on the fixture server at 755×600 and
+click **Run presentation checks**. It runs the same two required presentation
+scenarios with production styles and reports each result; IPC remains mocked.
+
 ## Session quality presentation
 
 Session quality names come from the exact retained execution request (same session and request ID), then the current configuration display name when available. Opaque configuration/branch IDs belong in diagnostic tooltips, not primary labels. Mixed or unknown attribution must not be presented as one model. History gaps and partial assessment evidence remain separate visible flags; an unrated stage is not assigned a score.
@@ -55,6 +83,13 @@ Session quality names come from the exact retained execution request (same sessi
 `plan-quality-models.test.mjs` protects evidence identity, missing evidence and request deduplication. The session-window browser scenarios exercise the real Sessions/PlanQuality wiring, both model stages, coverage flags, unrated copy and evidence navigation; these are mock IPC checks, not native or model-quality evidence.
 
 ## Run levels
+
+Custom API transport and error presentation use the production form in
+`node tests/v3/visual/connection-flow.mjs /path/to/evidence`. It exercises manual
+HTTP save without a directory, closed backend error reasons with retained input,
+and plaintext notices in zh/en, light/dark, at 1200×813 and 755×600. Browser IPC is
+synthetic; `real_process_custom_http_save_recheck_and_validation_errors` in the
+daemon publication tests separately proves actual control/save/restart behavior.
 
 From `apps/desktop`, with the repository's Node 24 and installed dependencies:
 

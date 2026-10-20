@@ -537,6 +537,7 @@ fn responses_chat_tools_snapshot(
                 agent_plan_id: "responses-chat-tools-plan".into(),
                 plan_display_name: Some("Responses Chat tools".into()),
                 request_owned: AliasRequestOwnedRouteV1::Classified {
+                    native_protocol: None,
                     reselect_on_user_message: false,
                     judgment: Default::default(),
                     classifier: AliasComplexityClassifierV1 {
@@ -561,6 +562,7 @@ fn responses_chat_tools_snapshot(
             candidates: vec![chat, fallback],
         }],
         vec![GrantV1 {
+            consumer: None,
             route_protocols: Default::default(),
             grant_id: "responses-chat-tools-grant".into(),
             generation: 1,

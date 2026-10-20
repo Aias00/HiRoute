@@ -1,4 +1,6 @@
+import { randomId } from '../../random-id.ts';
 import type { Selection } from '../../plan-editor';
+import decisionPresets from '../../../../../assets/decision-services/providers.v1.json' with { type: 'json' };
 
 export type AuthHeader = { name: string; value_secret_ref: string };
 export type DecisionConnection = {
@@ -6,7 +8,7 @@ export type DecisionConnection = {
 } | { kind: 'custom'; endpoint: string; timeout_ms: number; auth_header?: AuthHeader | null };
 export type DecisionService = { id: string; revision: number; name: string; connection: DecisionConnection };
 export type Classifier = { kind: 'local_rules' } | { kind: 'decision_service'; service: DecisionService };
-export type Competence = { floor_millis: number; instructions: string; criteria: [string, string, string] };
+export type Competence = { standard?: 'default' | 'custom'; floor_millis: number; instructions: string; criteria: [string, string, string] };
 export type Degree = { simple_threshold_millis: number; instructions: string; simple: string; complex: string };
 export type Judgment = { degree: Degree; competence: Competence };
 export type RouteBranch = {
@@ -32,22 +34,16 @@ export const defaultJudgment: Judgment = { competence: defaultCompetence, degree
   simple: defaultConditions[0], complex: defaultConditions[1],
 } };
 export function newBranch(name: string, condition = ''): RouteBranch {
-  return { id: 'branch-' + crypto.randomUUID(), name, condition, candidates: [], primary_candidates: [] };
+  return { id: 'branch-' + randomId(), name, condition, candidates: [], primary_candidates: [] };
 }
 export function branchRouting(service?: DecisionService): BranchRouting {
   const branches = [newBranch('分支 1'), newBranch('分支 2')];
   return { classifier: { kind: 'decision_service', service: service ?? emptyService() }, branches,
     default_branch_id: branches[1].id, judgment: structuredClone(defaultJudgment) };
 }
-export const providers = [
-  { id: 'bailian-token-plan', name: '百炼 Token Plan', endpoint: 'https://token-plan.cn-beijing.maas.aliyuncs.com/compatible-mode/v1/systemone', model: 'decision-model-preview' },
-  { id: 'bailian-workspace', name: '百炼业务空间', endpoint: '', model: 'decision-model-preview' },
-  { id: 'openrouter', name: 'OpenRouter', endpoint: 'https://openrouter.ai/api/alpha/decisions', model: 'typesafe/jev-1.13' },
-  { id: 'typesafe', name: 'TypeSafe', endpoint: 'https://api.typesafe.ai/v1/systemone', model: 'jev-latest' },
-  { id: 'compatible', name: 'System One 兼容', endpoint: '', model: '' },
-];
+export const providers = decisionPresets.providers;
 export function emptyService(): DecisionService {
-  return { id: 'decision-' + crypto.randomUUID(), revision: 1, name: '', connection: {
+  return { id: 'decision-' + randomId(), revision: 1, name: '', connection: {
     kind: 'system_one', provider: providers[0].id, endpoint: providers[0].endpoint, model: providers[0].model,
     timeout_ms: 10000, auth_header: { name: 'Authorization', value_secret_ref: '' },
   } };

@@ -214,6 +214,52 @@ impl FilesystemAgentScannerV1 {
                     ));
                 }
                 items.push(NativeApiSource {
+                    point_binding: endpoint.map(|endpoint| super::NativeApiPointBindingV1 {
+                        native_scope: CanonicalDigest::of(&("opencode-native-scope/v1", native))
+                            .expect("native scope"),
+                        provider_definition: format!("provider/{provider_id}"),
+                        endpoint: endpoint.into(),
+                        authentication: if protocol == Some(UpstreamProtocol::Messages) {
+                            hiroute_domain::GatewayAuthenticationSemanticsV1::ApiKeyHeader {
+                                header: "x-api-key".into(),
+                            }
+                        } else {
+                            hiroute_domain::GatewayAuthenticationSemanticsV1::Bearer
+                        },
+                        endpoint_selector: if options.get("baseURL").is_some() {
+                            format!("provider/{provider_id}/options/baseURL")
+                        } else if model["provider"].get("api").is_some() {
+                            format!("provider/{provider_id}/models/{native_id}/provider/api")
+                        } else {
+                            format!("provider/{provider_id}/api")
+                        },
+                        protocol_selector: if model["provider"].get("npm").is_some() {
+                            format!("provider/{provider_id}/models/{native_id}/provider/npm")
+                        } else {
+                            format!("provider/{provider_id}/npm")
+                        },
+                        model_override_scope: (model["provider"].get("api").is_some()
+                            || model["provider"].get("npm").is_some())
+                        .then(|| native_id.clone()),
+                        credential_binding: format!(
+                            "provider/{provider_id}/{}:{}",
+                            if options.get("apiKey").is_some() {
+                                "configuration-api-key"
+                            } else {
+                                "auth-json"
+                            },
+                            CanonicalDigest::of(&origin)
+                                .expect("native credential origin")
+                                .as_str()
+                        ),
+                        configured_default_model_id: config.value["model"]
+                            .as_str()
+                            .and_then(|default| default.strip_prefix(&format!("{provider_id}/")))
+                            .and_then(|default| {
+                                provider["models"][default]["id"].as_str().or(Some(default))
+                            })
+                            .map(str::to_owned),
+                    }),
                     provider_id: provider_id.clone(),
                     model_id: id.into(),
                     protocol,

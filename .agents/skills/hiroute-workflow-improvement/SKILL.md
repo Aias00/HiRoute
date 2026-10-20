@@ -18,8 +18,10 @@ a separate broad audit or require a feedback report for every task.
 Continue the original task wherever possible. Feedback is not a new planning,
 review or delivery gate, and creating an Issue does not authorize its implementation.
 
-HiRoute's repository policy authorizes filing and labeling evidence-backed feedback
-from its work. Honor a user's narrower scope, such as read-only or no publication.
+HiRoute's repository policy authorizes filing, recurrence comments and labeling
+evidence-backed feedback from its work, including automatic promotion at the
+confirmed recurrence threshold below. Honor a user's narrower scope, such as
+read-only or no publication.
 Do not infer this standing authorization when copying this skill to another project.
 Do not start agents, recurring jobs, workflow upgrades or automatic rule rewrites.
 
@@ -52,7 +54,8 @@ Never edit generated `issue-spec-*` files to implement upstream suggestions.
 ## Deduplicate and write
 
 Use the [report and analysis guide](references/feedback.md) for the body fields,
-label definitions, provider commands and time-window queries.
+independent-occurrence counting, label definitions, provider commands and
+time-window queries.
 
 1. Verify the destination repository and active backend with read-only CLI/auth
    inspection; use explicit `--repo` on each command. HiRoute and the upstream above
@@ -65,9 +68,13 @@ label definitions, provider commands and time-window queries.
    relevant remaining pages or narrow the query; disclose bounded search coverage.
 3. Reuse an existing Issue for the same cause and expected correction. Add only new
    evidence or a distinct recurrence through `issue-spec comment create`; do not
-   repeat an unchanged report. Respect closed/wontfix decisions. A demonstrated
-   regression after a fix may warrant a new Issue linked to the old one; do not
-   reopen it automatically. Split unrelated causes even if their symptoms match.
+   create another Issue merely because another task or agent discovered it. Count
+   the original observed report as occurrence 1 and each independently evidenced
+   recurrence once. Ordinary discussion, retries and handoffs do not add occurrences.
+   Link the prior evidence and record the confirmed count or lower bound in the new
+   comment. Respect closed/wontfix decisions. A demonstrated regression after a fix
+   may warrant a new Issue linked to the old one; do not reopen it automatically.
+   Split unrelated causes even if their symptoms match.
 4. Prepare a self-contained English body with sanitized reproduction, expected and
    observed behavior, impact, owning layer, suggested correction and acceptance.
    Include the minimal scenario and prerequisites needed by a future session; a
@@ -87,14 +94,19 @@ label definitions, provider commands and time-window queries.
    Provision missing labels without overwriting existing definitions. For a reused
    Issue with conflicting category labels, resolve ownership before changing them;
    do not silently remove others' classification.
+   When recorded evidence on an open, unresolved Issue reaches at least
+   **3 confirmed occurrences**, automatically promote it to `priority/high` using the
+   [counting and promotion rules](references/feedback.md#count-independent-occurrences-and-promote).
+   This is part of recording the feedback, without another approval or periodic job.
 7. Read back the Issue URL, body/comment and labels. If a create returns an uncertain
    result, search/read before retrying. If labeling fails after creation, retain the
    URL and report the missing labels; retry only that step after resolving the
    failure. Never create a replacement Issue just to retry labels, switch providers
    after a denial, or claim the labeled feedback is complete when it is partial.
 
-Report the Issue URL, category, create/reuse result and any incomplete labeling.
-If nothing actionable was found, say so without filing placeholder Issues.
+Report the Issue URL, category, create/reuse result, confirmed occurrence count,
+priority action and any incomplete labeling. If nothing actionable was found,
+say so without filing placeholder Issues.
 
 ## Review an interval
 

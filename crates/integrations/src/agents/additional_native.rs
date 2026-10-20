@@ -330,7 +330,7 @@ fn render_provider(
                 )
             })
             .collect::<Result<Vec<_>, _>>()?;
-        qoder_provider::provider(endpoint, credential, models, protocol)
+        qoder_provider::provider(endpoint, credential, models, protocol)?
     } else if kind == AgentKindV1::OpenCode {
         if models.len() != 1 {
             return Err(qoder_error("OpenCode per-plan provider"));

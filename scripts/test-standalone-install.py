@@ -85,7 +85,7 @@ class StandaloneFixture(unittest.TestCase):
         for path in self.notices.iterdir():
             path.chmod(0o644)
 
-    def build(self, version="0.1.0"):
+    def build(self, version="0.1.0", console_assets=None):
         args = argparse.Namespace(
             target=installer.host_target(),
             version=version,
@@ -97,6 +97,7 @@ class StandaloneFixture(unittest.TestCase):
             cpa_license=self.license,
             notices=self.notices,
             output=self.output,
+            console_assets=console_assets,
         )
         with patch.object(package, "REPO", self.repo), patch("builtins.print"):
             package.build(args)
@@ -122,7 +123,98 @@ class StandaloneFixture(unittest.TestCase):
         )
 
 
+class ConsoleInstallationTests(StandaloneFixture):
+    @patch.object(installer.platform, "system", return_value="Linux")
+    def test_console_configuration_is_private_preserved_and_transactionally_rolled_back(self, _system):
+        manifest, archive = self.build()
+        args = self.install_args(manifest, archive)
+        args.console_mode = "network"
+        args.console_listen = "0.0.0.0"
+        args.console_advertise_address = "192.0.2.10"
+        args.console_port = 8123
+        args.allow_plaintext_network = True
+        with self.environment(), patch.object(installer, "desktop_conflict", return_value=False), patch.object(installer.subprocess, "run"), patch("builtins.print"):
+            installer.install(args)
+            config = self.home / ".state/hiroute/console-listener.json"
+            original = config.read_bytes()
+            value = json.loads(original)
+            self.assertEqual(value["desired"]["mode"], "network")
+            self.assertEqual(value["desired"]["port"], 8123)
+            self.assertEqual(value["desired"]["advertise_address"], "192.0.2.10")
+            self.assertEqual(config.stat().st_mode & 0o777, 0o600)
+            installer.install(self.install_args(manifest, archive))
+            self.assertEqual(config.read_bytes(), original, "an upgrade without options must preserve the exact configuration")
+            args.console_port = 8124
+            replace = installer.os.replace
+            failed = False
+            def fail_marker(source, destination):
+                nonlocal failed
+                if Path(destination).name == "standalone.json" and not failed:
+                    failed = True
+                    raise OSError("injected commit failure")
+                return replace(source, destination)
+            with patch.object(installer.os, "replace", side_effect=fail_marker):
+                with self.assertRaisesRegex(OSError, "injected"):
+                    installer.install(args)
+            self.assertTrue(failed)
+            self.assertEqual(config.read_bytes(), original, "configuration participates in the install rollback")
+
+    @patch.object(installer.platform, "system", return_value="Linux")
+    def test_invalid_console_options_fail_before_install_writes(self, _system):
+        cases = [
+            ["--console-mode", "network", "--console-listen", "192.0.2.1"],
+            ["--console-mode", "network", "--console-listen", "0.0.0.0", "--allow-plaintext-network"],
+            ["--console-listen", "::", "--console-advertise-address", "192.0.2.1", "--allow-plaintext-network"],
+            ["--console-mode", "loopback", "--console-listen", "192.0.2.1"],
+            ["--console-port", "0"], ["--console-port", "65536"],
+        ]
+        for options in cases:
+            args = installer.parser().parse_args(["install", *options])
+            with self.environment(), self.assertRaises(ValueError), patch.object(installer, "acquire") as acquire:
+                installer.install(args)
+            acquire.assert_not_called()
+            self.assertFalse((self.home / ".local").exists())
+
+    @patch.object(installer.platform, "system", return_value="Linux")
+    def test_explicit_configuration_refuses_foreign_link_without_modifying_it(self, _system):
+        manifest, archive = self.build()
+        args = self.install_args(manifest, archive)
+        args.console_mode = "loopback"
+        state = self.home / ".state/hiroute"
+        state.mkdir(parents=True, mode=0o700)
+        foreign = self.root / "foreign.json"
+        foreign.write_text("foreign")
+        config = state / "console-listener.json"
+        config.symlink_to(foreign)
+        with self.environment(), patch.object(installer, "desktop_conflict", return_value=False), self.assertRaises(OSError):
+            installer.install(args)
+        self.assertEqual(foreign.read_text(), "foreign")
+        self.assertTrue(config.is_symlink())
+        self.assertFalse((self.home / ".local/share/hiroute/standalone.json").exists())
+
+
 class PackageTests(StandaloneFixture):
+    def test_console_assets_are_verified_and_installed_with_the_existing_package(self):
+        assets = self.root / "console"
+        (assets / "assets").mkdir(parents=True)
+        (assets / "index.html").write_text('<script src="/assets/app.js"></script>')
+        (assets / "assets/app.js").write_text('console.info("test")')
+        for path in assets.rglob("*"):
+            if path.is_file():
+                path.chmod(0o644)
+        manifest, archive = self.build(console_assets=assets)
+        verified = package.verify(manifest, archive)
+        self.assertEqual(verified["files"]["console/index.html"]["sha256"], package.digest(assets / "index.html"))
+        with self.environment(), patch.object(installer, "desktop_conflict", return_value=False), patch.object(installer.subprocess, "run"), patch("builtins.print"):
+            installer.install(self.install_args(manifest, archive))
+            marker = json.loads((self.home / ".local/share/hiroute/standalone.json").read_text())
+            self.assertEqual((Path(marker["install_root"]) / "console/assets/app.js").read_bytes(), (assets / "assets/app.js").read_bytes())
+        for name in ("console/../escape", "console/.hidden/../escape", "console//bad", "console/bad\\name", "unexpected.txt"):
+            self.assertFalse(package.valid_inventory(package.expected_files(installer.host_target()) | {"console/index.html", name}, installer.host_target()))
+        (assets / "unsafe.js").symlink_to(assets / "index.html")
+        with self.assertRaisesRegex(ValueError, "links"):
+            package.console_payload(assets)
+
     def test_archive_is_deterministic_and_tampering_is_rejected(self):
         manifest, archive = self.build()
         first = archive.read_bytes()

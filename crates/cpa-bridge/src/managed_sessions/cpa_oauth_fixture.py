@@ -114,11 +114,12 @@ class Handler(http.server.BaseHTTPRequestHandler):
         if not self.authorized(secret):
             return
         if parsed.path == '/v8/management/oauth/auth-url':
-            assert query.get('is_webui') == ['false']
+            assert query.get('is_webui') == ['true']
             provider = query['provider'][0]
             assert provider in ('codex', 'claude')
             host = 'auth.openai.com' if provider == 'codex' else 'claude.ai'
             return self.send({'status': 'ok', 'state': state,
+                              'hiroute_callback_mode': 'manual' if (controls / 'manual-callback').exists() else 'automatic',
                               'url': 'https://' + host + '/oauth/authorize?state=' + state
                                      + '&code_challenge_method=S256'},
                              version=None if (controls / 'missing-auth-url-version').exists()

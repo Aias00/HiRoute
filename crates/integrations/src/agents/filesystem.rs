@@ -453,7 +453,8 @@ impl FilesystemAgentScannerV1 {
                     AgentKindV1::Qoder
                     | AgentKindV1::Pi
                     | AgentKindV1::DeepseekHarness
-                    | AgentKindV1::OpenCode => continue,
+                    | AgentKindV1::OpenCode
+                    | AgentKindV1::Hermes => continue,
                 };
                 #[cfg(any(unix, windows))]
                 if installation.profile.kind == AgentKindV1::Codex
@@ -596,7 +597,8 @@ impl FilesystemAgentScannerV1 {
             | hiroute_domain::AgentModelSurfaceV2::QoderCli
             | hiroute_domain::AgentModelSurfaceV2::PiCli
             | hiroute_domain::AgentModelSurfaceV2::DshCli
-            | hiroute_domain::AgentModelSurfaceV2::OpenCodeCli => None,
+            | hiroute_domain::AgentModelSurfaceV2::OpenCodeCli
+            | hiroute_domain::AgentModelSurfaceV2::HermesCli => None,
         }
     }
 

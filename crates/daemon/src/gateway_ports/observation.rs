@@ -183,6 +183,53 @@ impl ObservationRecordSink for GatewayRunRelationSink {
     }
 }
 
+/// Independent additive observation channel. Old execution/receipt carriers and
+/// the Worker relation protocol retain their exact serializers.
+pub struct GatewayNativeContinuationSink {
+    store: Arc<LocalObservationStore>,
+}
+impl GatewayNativeContinuationSink {
+    pub fn new(store: Arc<LocalObservationStore>) -> Self {
+        Self { store }
+    }
+}
+impl ObservationRecordSink for GatewayNativeContinuationSink {
+    fn deliver(&self, record: &ObservationRecord) -> Result<ObservationAck, ObservationNack> {
+        isolate(record, || {
+            if record.is_gap_heartbeat() {
+                let heartbeat = project_gap_payload(record.payload(), "native_continuation")?;
+                ensure_gap_stamp(record, &heartbeat, "gateway-native-continuation")?;
+                return Ok(accounted_acknowledgement(record));
+            }
+            let e: hiroute_domain::NativeContinuationEvidenceV1 =
+                serde_json::from_slice(record.payload())
+                    .map_err(|_| DeliveryError::Projection(GatewayProjectionError::InvalidInput))?;
+            let s = record.stamp();
+            if s.identity.channel.as_ref() != "native_continuation"
+                || s.identity.component.as_ref() != "gateway-native-continuation"
+                || s.identity.producer_id.as_ref() != e.producer_id
+                || s.identity.producer_epoch.as_ref() != e.producer_epoch
+                || s.identity.stream_id.as_ref() != e.stream_id
+                || s.sequence != e.sequence
+            {
+                return Err(DeliveryError::StampMismatch);
+            }
+            self.store
+                .ingest_native_continuation(&e)
+                .map_err(|error| match error {
+                    ObservationV2Error::Invalid => {
+                        DeliveryError::Projection(GatewayProjectionError::InvalidInput)
+                    }
+                    ObservationV2Error::RelationshipConflict => {
+                        DeliveryError::RelationshipConflict(e.request_id.clone())
+                    }
+                    _ => DeliveryError::ReceiverUnavailable(true),
+                })?;
+            Ok(accounted_acknowledgement(record))
+        })
+    }
+}
+
 fn isolate(
     record: &ObservationRecord,
     deliver: impl FnOnce() -> Result<ObservationAck, DeliveryError>,
@@ -397,6 +444,7 @@ fn supported_schema(record: &ObservationRecord) -> String {
         "execution_fact" => EXECUTION_FACT_SCHEMA,
         "conversation_content" => CONVERSATION_CONTENT_SCHEMA,
         "run_relation" => "hiroute.observation.run-link/v1",
+        "native_continuation" => hiroute_domain::NATIVE_CONTINUATION_SCHEMA_V1,
         _ => "unsupported-channel",
     }
     .into()

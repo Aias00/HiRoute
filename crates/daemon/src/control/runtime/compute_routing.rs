@@ -62,9 +62,82 @@ impl LocalControlAdapter {
             .get(input_slot)
             .cloned()
             .ok_or(ControlReadError::NotFound)?;
+        if descriptor.field_selector == "hermes.api-key" {
+            let sources = self
+                .hermes_source_facts()
+                .map_err(|_| ControlReadError::SnapshotChanged)?
+                .sources;
+            return if hiroute_integrations::native_api_connection_points(sources)
+                .iter()
+                .any(|point| {
+                    self.release_catalog
+                        .as_ref()
+                        .and_then(|catalog| {
+                            super::model_connections::point_catalog::point_evidence(catalog, point)
+                                .ok()
+                        })
+                        .as_ref()
+                        == Some(expected_evidence)
+                        && point
+                            .sources
+                            .iter()
+                            .any(|source| source.credential.as_ref() == Some(&descriptor))
+                }) {
+                Ok(())
+            } else {
+                Err(ControlReadError::SnapshotChanged)
+            };
+        }
+        if descriptor.field_selector == "env.ANTHROPIC_AUTH_TOKEN" {
+            let sources = self
+                .claude_api_point_sources()
+                .map_err(|_| ControlReadError::SnapshotChanged)?;
+            if hiroute_integrations::native_api_connection_points(sources)
+                .iter()
+                .any(|point| {
+                    self.release_catalog
+                        .as_ref()
+                        .and_then(|catalog| {
+                            super::model_connections::point_catalog::point_evidence(catalog, point)
+                                .ok()
+                        })
+                        .as_ref()
+                        == Some(expected_evidence)
+                        && point
+                            .sources
+                            .iter()
+                            .any(|source| source.credential.as_ref() == Some(&descriptor))
+                })
+            {
+                return Ok(());
+            }
+        }
         if let Some(ecosystem) =
             hiroute_integrations::NativeApiEcosystem::from_selector(&descriptor.field_selector)
         {
+            let sources = self
+                .scanner
+                .native_api_sources(ecosystem)
+                .map_err(|_| ControlReadError::SnapshotChanged)?;
+            if hiroute_integrations::native_api_connection_points(sources)
+                .iter()
+                .any(|point| {
+                    self.release_catalog
+                        .as_ref()
+                        .and_then(|catalog| {
+                            super::model_connections::point_catalog::point_evidence(catalog, point)
+                                .ok()
+                        })
+                        .as_ref()
+                        == Some(expected_evidence)
+                        && point
+                            .sources
+                            .iter()
+                            .any(|source| source.credential.as_ref() == Some(&descriptor))
+                })
+            {
+                return Ok(());
+            }
             return self
                 .scanner
                 .native_api_sources(ecosystem)
@@ -269,6 +342,12 @@ fn projection_expectation_for_ids(
 }
 
 impl ComputeFactsPort for LocalControlAdapter {
+    fn scan_compute_points(
+        &self,
+        request: &hiroute_application_api::ComputeScanRequestV2,
+    ) -> Result<hiroute_application_api::ComputeScanResultV2, ControlReadError> {
+        self.compute_point_scan(request)
+    }
     fn scan_compute(&self) -> Result<ComputeScanResultV1, ControlReadError> {
         let catalog = self
             .release_catalog
@@ -359,6 +438,7 @@ impl ComputeFactsPort for LocalControlAdapter {
             options,
             subscriptions: None,
             metadata_catalog: Some(catalog.model_metadata().clone()),
+            candidate: None,
         })
     }
 
@@ -599,7 +679,7 @@ fn scan_item(
     })
 }
 
-fn public_provenance(
+pub(in crate::control::runtime) fn public_provenance(
     value: &hiroute_domain::ComputeCatalogProvenanceV1,
 ) -> ComputeCatalogProvenanceViewV1 {
     ComputeCatalogProvenanceViewV1 {

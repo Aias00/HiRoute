@@ -10,6 +10,18 @@ export { safeConnectionErrorCode } from './copy';
 export { blankModel } from './state';
 
 export function connectionErrorMessage(code: string, zh: boolean): string {
+  if (code === 'model_connections.invalid_url') return zh
+    ? '连接地址无效。请使用完整的 http:// 或 https:// 地址；API Key 请单独填写，不要放在地址中。'
+    : 'Enter a complete http:// or https:// endpoint. Enter the API key separately, not in the URL.';
+  if (code === 'model_connections.unsafe_path') return zh
+    ? '请求路径或模型目录路径无效。请使用以 / 开头的路径，移除查询参数、编码字符和相对路径片段。'
+    : 'Check the endpoint, request and model directory paths. Start paths with / and remove queries, encoded characters and relative path segments.';
+  if (code === 'model_connections.unsafe_authentication_header') return zh
+    ? '认证 Header 无效或不允许使用。请选择 Bearer，或填写允许使用的 Header 名称，例如 x-api-key。'
+    : 'The authentication header is invalid or reserved. Select Bearer or use an allowed header name, such as x-api-key.';
+  if (code === 'model_connections.unsafe_protocol_header') return zh
+    ? '协议 Header 配置无效或冲突。请检查所选协议的 Header，避免覆盖认证或连接控制 Header。'
+    : 'Check the selected protocol headers. Do not override authentication or connection control headers.';
   if (['REVISION_CONFLICT', 'CHANGE_PREVIEW_STALE', 'application.error.revision_conflict', 'application.error.change_preview_stale'].includes(code)) return zh ? '配置在保存前发生变化，尚未提交。输入已保留，请再次保存。' : 'Configuration changed before submission. Your input is preserved; save again.';
   if (code === 'MODEL_TOOL_CALL_NOT_VERIFIED') return zh ? '该模型未返回有效工具调用，当前不能作为 Agent 工具模型使用。请更换支持工具调用的模型，或修复服务后重新验证。' : 'The model did not return a valid tool call and cannot currently be used as an Agent tool model. Choose a tool-capable model or repair the service and verify again.';
   if (code === 'MODEL_INFERENCE_FAILED') return zh
@@ -66,6 +78,13 @@ export function connectionErrorMessage(code: string, zh: boolean): string {
   return zh
     ? '暂时无法完成操作。请重试，当前输入已保留。'
     : 'The operation could not complete. Try again; your entries are retained.';
+}
+
+export function PlaintextHttpWarning({ baseUrl, zh }: { baseUrl: string; zh: boolean }) {
+  if (!/^http:\/\//i.test(baseUrl.trim())) return null;
+  return <span className="field-help" role="note" data-plaintext-http-warning>{zh
+    ? 'HTTP 使用明文传输，API Key 及请求和响应内容可能被读取。建议优先使用 HTTPS。'
+    : 'HTTP sends API keys and request and response content in plaintext. Use HTTPS when available.'}</span>;
 }
 
 export function registeredConnectionLabel(option: ComputeConnectionOption | null, zh: boolean) {

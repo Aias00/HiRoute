@@ -543,6 +543,8 @@ pub enum PublicationInstallError {
     InvalidEndpoint(String),
     #[error("gateway publication contains an invalid frozen routing policy")]
     InvalidPlannerPolicy,
+    #[error(transparent)]
+    NativeProtocol(hiroute_domain::NativeProtocolError),
     #[error("publication failpoint fired before durable LKG")]
     InjectedBeforeDurableLkg,
     #[error("publication failpoint fired after rename but before directory durability")]

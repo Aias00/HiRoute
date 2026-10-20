@@ -15,8 +15,13 @@ use serde_json::json;
 use crate::args::{Globals, OutputMode};
 use crate::{CliExecution, LocalControlClient, failure, service, success};
 
+mod console;
+
 pub(crate) fn execute(arguments: &[String], globals: &Globals) -> Option<CliExecution> {
     let family = arguments.first()?.as_str();
+    if family == "console" {
+        return Some(console::execute(&arguments[1..], globals));
+    }
     if !matches!(
         family,
         "service" | "gateway" | "protected-input" | "subscription-proxy"
@@ -50,7 +55,7 @@ pub(crate) fn execute(arguments: &[String], globals: &Globals) -> Option<CliExec
 fn host_help(family: &str) -> &'static str {
     match family {
         "service" => {
-            "Usage\n  hiroute service start|stop|restart|status|logs|doctor --output json\n  hiroute service autostart enable|disable|status --output json\n  hiroute service run\n  Windows package maintenance:\n  hiroute service install --manager task --output json\n  hiroute service install --manager scm --password-stdin --output json\n  hiroute service uninstall --output json\n  hiroute service layout --output json\n  hiroute service publish-install --request-stdin --output json\n  hiroute service write-record --path <PATH> --request-stdin --output json\n"
+            "Usage\n  hiroute service start|stop|restart|status|logs|doctor --output json\n  hiroute service autostart enable|disable|status --output json\n  hiroute service run\n  hiroute service layout --output json\n"
         }
         "gateway" => {
             "Usage\n  hiroute gateway show --output json\n  hiroute gateway set --address <IPV4> --port auto|<PORT> [--accept-remote-risk] --output json\n  hiroute gateway recover --output json\n"
@@ -64,7 +69,7 @@ fn host_help(family: &str) -> &'static str {
                 return "Usage\n  hiroute protected-input register --candidate <REF> --secret-handle <INHERITED_HANDLE> --output json\n  hiroute protected-input release --candidate <REF> --output json\nThe inherited handle must name a private non-stdio pipe; payload and EOF are bounded.\n";
             }
             #[cfg(not(windows))]
-            "Usage\n  hiroute protected-input register --candidate <REF> --secret-fd <FD> --output json\n  hiroute protected-input release --candidate <REF> --output json\n"
+            "Usage\n  hiroute protected-input register --candidate <REF> --secret-fd <FD> --output json\n  hiroute protected-input register --candidate <REF> --prompt --format bearer|raw --output json\n  hiroute protected-input release --candidate <REF> --output json\n\n--prompt is a human step in the user's own terminal (for example SSH), outside chat and Agent tools. It reads hidden input from the controlling terminal only; no stdin fallback. bearer accepts a bare API key and adds Bearer; raw accepts the complete custom header value. Never put credentials in argv, environment, normal JSON or chat. Cancellation/missing terminal saves no service. Continue using the candidate reference after registered=true. The existing --secret-fd value remains unchanged.\n"
         }
         _ => unreachable!(),
     }
@@ -74,6 +79,16 @@ fn service_command(
     arguments: &[String],
     globals: &Globals,
 ) -> Result<serde_json::Value, ErrorCode> {
+    // Only the private Rust transaction is an installation entry. The dormant
+    // manager adapters remain in the service module for low-level SCM tests.
+    if arguments.first().is_some_and(|verb| {
+        matches!(
+            verb.as_str(),
+            "install" | "uninstall" | "prepare-install" | "publish-install" | "write-record"
+        )
+    }) {
+        return Err(ErrorCode::InvalidArguments);
+    }
     let timeout = globals.timeout.unwrap_or(Duration::from_secs(30));
     let status = match arguments {
         [verb] if verb == "start" => json_value(service::start(timeout).map_err(map)?)?,
@@ -83,7 +98,6 @@ fn service_command(
         [verb] if verb == "logs" => service::logs().map_err(map)?,
         [verb] if verb == "doctor" => service::doctor(),
         [verb] if verb == "layout" => service::windows_layout().map_err(map)?,
-        [verb] if verb == "prepare-install" => service::prepare_windows_install().map_err(map)?,
         [verb, manager_flag, manager, daemon_flag, daemon]
             if verb == "describe-install"
                 && manager_flag == "--manager"
@@ -91,26 +105,6 @@ fn service_command(
         {
             service::describe_windows_manager(manager, std::path::Path::new(daemon)).map_err(map)?
         }
-        [verb, source] if verb == "publish-install" && source == "--request-stdin" => {
-            service::publish_install_record().map_err(map)?
-        }
-        [verb, path_flag, path, source]
-            if verb == "write-record" && path_flag == "--path" && source == "--request-stdin" =>
-        {
-            service::write_private_record(std::path::Path::new(path)).map_err(map)?
-        }
-        [verb, flag, manager] if verb == "install" && flag == "--manager" && manager == "task" => {
-            service::install_manager(manager, false).map_err(map)?
-        }
-        [verb, flag, manager, password]
-            if verb == "install"
-                && flag == "--manager"
-                && manager == "scm"
-                && password == "--password-stdin" =>
-        {
-            service::install_manager(manager, true).map_err(map)?
-        }
-        [verb] if verb == "uninstall" => service::uninstall_manager(timeout).map_err(map)?,
         [autostart, verb] if autostart == "autostart" && verb == "enable" => {
             json_value(service::set_autostart(true).map_err(map)?)?
         }
@@ -320,6 +314,9 @@ fn agent_update_status(
         let status = query(
             "GetAgentConnectionStatus",
             json!(AgentSettingsStatusRequestV2 {
+                effective: None,
+                include_skills: true,
+                native_target: None,
                 schema_version: AGENT_SETTINGS_SCHEMA_V2,
                 context_id: context.clone(),
             }),
@@ -393,6 +390,17 @@ fn protected_input_command(
         .map(|client| client.with_timeout(globals.timeout.unwrap_or(Duration::from_secs(30))))
         .map_err(|_| ErrorCode::DaemonUnavailable)?;
     let request = match arguments {
+        [verb, candidate_flag, candidate, prompt, format_flag, format]
+            if verb == "register"
+                && candidate_flag == "--candidate"
+                && prompt == "--prompt"
+                && format_flag == "--format" =>
+        {
+            StandaloneProtectedInputRequestV1::register(
+                candidate.clone(),
+                crate::protected_prompt::read(format)?,
+            )
+        }
         #[cfg(windows)]
         [verb, candidate_flag, candidate, secret_flag, handle]
             if verb == "register"
@@ -536,6 +544,25 @@ mod tests {
             parse_gateway_settings(&values(&["--address", "::1", "--port", "auto"])),
             Err(ErrorCode::InvalidArguments)
         );
+    }
+
+    #[test]
+    fn windows_installation_has_no_public_manager_or_record_write_entry() {
+        assert!(!host_help("service").contains("--manager"));
+        for words in [
+            vec!["install", "--manager", "scm", "--password-stdin"],
+            vec!["install", "--manager", "task"],
+            vec!["uninstall"],
+            vec!["publish-install", "--request-stdin"],
+            vec!["prepare-install"],
+            vec!["write-record", "--path", "foreign", "--request-stdin"],
+        ] {
+            let args = words.into_iter().map(String::from).collect::<Vec<_>>();
+            assert!(matches!(
+                service_command(&args, &Globals::default()),
+                Err(ErrorCode::InvalidArguments)
+            ));
+        }
     }
 
     #[test]

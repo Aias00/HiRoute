@@ -1,8 +1,9 @@
 # Release candidate builds
 
 The candidate entry builds macOS Desktop DMGs (`arm64`, `x86_64`) and Linux or Windows
-headless archives (`x86_64`, `aarch64`). Desktop for Windows/Linux is outside this
-build entry. A target's package integrity is separate from its required native runtime
+headless archives (`x86_64`, `aarch64`) and a separate x64 Windows Desktop NSIS
+installer. Windows headless archives are internal installer/test payloads only;
+Windows publication consists solely of the x64 NSIS installer. A target's package integrity is separate from its required native runtime
 acceptance and does not by itself authorize publishing that target. All components of one release must come from the same clean,
 committed source revision, with CPA built from `vendor/cpa/source.json` and its
 checked patch.
@@ -22,6 +23,13 @@ sccache and native build tools. Linux additionally requires Docker: the same
 command enters the pinned glibc 2.31 build image and then a separate minimal
 runtime image. Host distribution libraries are never used as the release ABI
 baseline. The native architecture check applies to the host and both containers.
+Linux frontend preparation uses Node from the pinned build image, not the host.
+The policy pins its version and each native architecture's official archive
+SHA-256 from [Node's published checksums](https://nodejs.org/dist/v22.19.0/SHASUMS256.txt).
+The image verifies the download before extraction and checks Node/npm execution;
+candidate evidence records both versions. Mounting an arbitrary host Node would
+couple the build to that binary's host libc requirements, outside the fixed
+glibc 2.31 environment. Node is a build tool and is not added to the release payload.
 The CPA checkout must contain the commit in `vendor/cpa/source.json`; its current
 branch does not select the source. Invoke from the clean candidate checkout:
 
@@ -31,6 +39,9 @@ python3 scripts/build-release.py \
 
 python3 scripts/build-release.py \
   --target aarch64-unknown-linux-gnu --cpa-source-repo /path/to/CLIProxyAPI
+
+python scripts/build-release.py --windows-desktop \
+  --target x86_64-pc-windows-msvc --cpa-source-repo C:/sources/CLIProxyAPI
 ```
 
 The same entry accepts `aarch64-apple-darwin`, `x86_64-unknown-linux-gnu`,
@@ -40,7 +51,11 @@ CLI, daemon and CPA. Its builder uses a checkout-local native file lock; it does
 import the Unix workbench lock implementation. The CPA probe retains the actual native
 SystemRoot and uses isolated profile/temp paths. Windows candidates remain
 `awaiting_runtime` until the installed foreground/background and feature gates pass;
-see [Windows operating and evidence boundaries](standalone-windows.md).
+see [Windows operating and evidence boundaries](standalone-windows.md). Internal
+Windows builds write `internal-payloads/` and `publication: internal-only`, without
+an `assets` directory or `website_artifact` row. They cannot be added to a release
+catalog: both native and website validators reject Windows standalone entries
+and Windows ARM64 packages.
 The native x64 Windows Release invocation selects static CRT for Rust and its
 CMake dependencies and rejects ambient compiler overrides. The complete archive's
 three EXEs are checked for both ordinary and delay imports of Debug CRT or VC
@@ -54,6 +69,23 @@ through [package-desktop.py](../scripts/package-desktop.py) as documented in the
 [macOS installation guide](macos-installation.md); the matrix entry uses native
 hosts so its probes execute on the selected architecture.
 
+`--windows-desktop` requires native x64 Windows and adds the shell to the same
+static-CRT/image checks. It stages the verified standalone archive, including
+console assets, under the shell's ignored resources, builds the pinned Tauri shell,
+and bundles NSIS in `currentUser` mode without code signing. The output name is
+`HiRoute-VERSION-REV12-windows-x86_64-setup.exe`. This stays separate from the
+headless archive jobs. 7-Zip (`7z` or `7zz`) is required to extract and audit the
+actual embedded shell image for its SHA-256, architecture and CRT imports. The
+read-only `package-windows-shell.py image --installer INSTALLER.exe` entry repeats
+that measurement for an existing immutable artifact. Its identity sidecar remains `awaiting_runtime` until the
+required Windows 11 x64 and Server standard-user selections pass for that exact
+installer. See the [native acceptance boundaries](windows-desktop-installation.md#evidence-and-release-claims).
+
+The single source `apps/website/data/releases.json` uses V3. Website preparation
+emits `releases-v3.json` for the Windows shell and a V2 `releases.json` projection
+excluding every Windows artifact. Supported released macOS readers reject Windows
+artifacts in V2, so that projection is retained in the compatibility register.
+
 Each attempt is retained under `target/release-candidate/SHA/TARGET/ROUND/`.
 `assets/` contains the DMG or archive plus companion manifest; `result.json`
 records the full source revision, host, checks, timing, and the measured
@@ -66,13 +98,20 @@ container; the HOME is removed afterwards. Logs and package evidence are retaine
 
 Run the **build-release-candidates** workflow on the public candidate branch.
 Unix candidate builds start independently of the reusable **windows-headless**
-workflow at the same source commit. All five native scopes and their Windows 11
-x64-artifact replay must succeed before Windows package-build jobs can start.
+workflow at the same source commit. All five native scopes, their selected Windows 11
+x64-artifact replays and the native ARM64 Rust-installation job must succeed before Windows package-build jobs can start.
 Both groups use **build-release-platform** for the same per-target build steps. This expensive Windows matrix
 does not run automatically on PR or main pushes; ordinary iteration uses the
 [cross-compilation and development-machine path](validation-routing.md#windows-iteration-and-release-validation).
 Hosted background compile-only cases and real accounts retain their separate
 runtime gates; the CI dependency does not establish those results.
+
+To prepare only an x64 NSIS installer for development-machine acceptance, dispatch
+**build-release-platform** on the exact candidate branch with its default x64
+Windows target, Windows runner and `windows_desktop: true` option. It uploads
+the installer and build evidence, and leaves the identity `awaiting_runtime`.
+It performs no publication and does not replace the required native acceptance
+or the release-candidate matrix.
 
 Every package matrix job checks out the dispatch's exact `github.sha`, uses a native
 runner and uploads its own assets and evidence. Ubuntu runner labels select only
@@ -157,10 +196,11 @@ API-key model call on the intended deployment host, using the same frozen archiv
 that live result is separate from the offline build gate. Rebuild after integrating
 product fixes and retain each result at its actual source revision.
 
-1. Require the Windows validation gate and all six package matrix jobs to succeed
+1. Require the Windows validation gate and every selected package job to succeed
    for the same SHA. Keep the exact source
    commit available; internal master and an exported public commit may differ.
-2. Download each job's `assets/` and `result.json`. Use the measured
+2. Download public package jobs' `assets/` and `result.json`. Keep Windows
+   headless `internal-payloads/` out of the release. Use the measured
    `website_artifact` rows in a new release record in
    `apps/website/data/releases.json`, with the intended version/channel/date/notes.
    Preserve historical records and regenerate website content twice, checking
@@ -170,6 +210,9 @@ product fixes and retain each result at its actual source revision.
    The existing [publish-release workflow](../.github/workflows/release.yml)
    verifies tag/package identity and digests, then publishes OSS/site links and
    proposes the [release contract snapshot](release-contracts.md).
+   Windows Desktop also attaches its `INSTALLER.exe.identity.json`; publication
+   verifies the installer digest, source revision and complete native case evidence.
+   An incomplete or misbound sidecar cannot publish a Windows Desktop artifact.
 
 The build workflow only stores Actions artifacts. It does not publish a GitHub
 Release, alter the stable catalog, or replace any immutable distribution object.

@@ -358,10 +358,8 @@ pub(crate) fn dispatch_compute_management(
             )
         }
         PREPARE_DISCOVERED_MODEL_CONNECTION_OPERATION_V1 => {
-            let Some(grant) = request.protected_grant.as_ref() else {
-                return failed(ErrorCode::CapabilityDenied, request_id);
-            };
-            if grant.principal_kind != PrincipalKind::Desktop {
+            let grant = request.protected_grant.as_ref();
+            if grant.is_some_and(|grant| grant.principal_kind != PrincipalKind::Desktop) {
                 return failed(ErrorCode::CapabilityDenied, request_id);
             }
             let Ok(prepare) = serde_json::from_value::<PrepareDiscoveredModelConnectionRequestV1>(
@@ -380,17 +378,18 @@ pub(crate) fn dispatch_compute_management(
                 Ok(value) => value.revisions,
                 Err(_) => return failed(ErrorCode::DaemonUnavailable, request_id),
             };
-            if ports
-                .control
-                .validate_protected_capability(
-                    &grant.capability,
-                    &WorkspaceId::default(),
-                    grant.principal_kind,
-                    PREPARE_DISCOVERED_MODEL_CONNECTION_OPERATION_V1,
-                    &digest,
-                    &revisions,
-                )
-                .is_err()
+            if let Some(grant) = grant
+                && ports
+                    .control
+                    .validate_protected_capability(
+                        &grant.capability,
+                        &WorkspaceId::default(),
+                        grant.principal_kind,
+                        PREPARE_DISCOVERED_MODEL_CONNECTION_OPERATION_V1,
+                        &digest,
+                        &revisions,
+                    )
+                    .is_err()
             {
                 return failed(ErrorCode::CapabilityDenied, request_id);
             }
@@ -494,7 +493,13 @@ fn result<T: serde::Serialize>(
 
 fn map_error(error: ComputeManagementControlError) -> ErrorCode {
     match error {
-        ComputeManagementControlError::Invalid => ErrorCode::InvalidArguments,
+        ComputeManagementControlError::Invalid
+        | ComputeManagementControlError::InvalidModelConnectionUrl
+        | ComputeManagementControlError::UnsafeModelConnectionPath
+        | ComputeManagementControlError::UnsafeModelConnectionAuthenticationHeader
+        | ComputeManagementControlError::UnsafeModelConnectionProtocolHeader => {
+            ErrorCode::InvalidArguments
+        }
         ComputeManagementControlError::NotFound => ErrorCode::ResourceNotFound,
         ComputeManagementControlError::Conflict => ErrorCode::RevisionConflict,
         ComputeManagementControlError::RegisteredOptionUnavailable => ErrorCode::ResourceNotFound,
@@ -518,6 +523,14 @@ fn failed_control(
 ) -> MachineEnvelopeV2<Value> {
     let mut failure = ErrorV1::new(map_error(error));
     failure.message_key = match error {
+        ComputeManagementControlError::InvalidModelConnectionUrl => "model_connections.invalid_url",
+        ComputeManagementControlError::UnsafeModelConnectionPath => "model_connections.unsafe_path",
+        ComputeManagementControlError::UnsafeModelConnectionAuthenticationHeader => {
+            "model_connections.unsafe_authentication_header"
+        }
+        ComputeManagementControlError::UnsafeModelConnectionProtocolHeader => {
+            "model_connections.unsafe_protocol_header"
+        }
         ComputeManagementControlError::RegisteredOptionUnavailable => {
             "compute.registered_option_unavailable"
         }
@@ -547,6 +560,39 @@ fn failed(code: ErrorCode, request_id: String) -> MachineEnvelopeV2<Value> {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn connection_target_errors_keep_the_released_machine_code_and_specific_safe_reason() {
+        for (error, message_key) in [
+            (
+                ComputeManagementControlError::InvalidModelConnectionUrl,
+                "model_connections.invalid_url",
+            ),
+            (
+                ComputeManagementControlError::UnsafeModelConnectionPath,
+                "model_connections.unsafe_path",
+            ),
+            (
+                ComputeManagementControlError::UnsafeModelConnectionAuthenticationHeader,
+                "model_connections.unsafe_authentication_header",
+            ),
+            (
+                ComputeManagementControlError::UnsafeModelConnectionProtocolHeader,
+                "model_connections.unsafe_protocol_header",
+            ),
+        ] {
+            let envelope =
+                serde_json::to_value(failed_control(error, "check/test".into())).unwrap();
+            assert_eq!(envelope["error"]["code"], "INVALID_ARGUMENTS");
+            assert_eq!(envelope["error"]["message_key"], message_key);
+            assert_eq!(envelope["request_id"], "check/test");
+            assert_eq!(
+                envelope["error"]["details_schema"],
+                "hiroute.error-details/none-v1"
+            );
+            assert_eq!(envelope["error"]["retryable"], false);
+        }
+    }
 
     #[test]
     fn registered_business_failures_keep_closed_message_keys() {

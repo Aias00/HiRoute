@@ -103,6 +103,8 @@ pub(crate) enum ClassifierAuthenticationAuthorityV1 {
 /// It contains no secret material and cannot authorize an ordinary model route.
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub(crate) struct RestBranchClassifierAuthorityV1 {
+    pub(crate) decision_provider: String,
+    pub(crate) native_protocol: Option<hiroute_domain::FrozenNativeProtocolV1>,
     pub(crate) endpoint: Arc<str>,
     pub(crate) http_authority: Arc<str>,
     pub(crate) request_path: Arc<str>,
@@ -139,6 +141,7 @@ pub(crate) struct VerifiedRunObservationContext {
 /// unrelated aliases or grants.
 #[derive(Debug)]
 pub struct AuthorizedRequestPlan {
+    native_consumer: Option<hiroute_domain::AgentModelConsumerV1>,
     web_search_allowed: bool,
     verified_run_observation: Option<VerifiedRunObservationContext>,
     receipt: RequestAuthorityReceipt,
@@ -166,6 +169,7 @@ impl AuthorizedRequestPlan {
     ) -> Self {
         Self {
             web_search_allowed: false,
+            native_consumer: None,
             verified_run_observation,
             receipt,
             deadline,
@@ -180,6 +184,17 @@ impl AuthorizedRequestPlan {
 
     pub fn receipt(&self) -> &RequestAuthorityReceipt {
         &self.receipt
+    }
+
+    pub(crate) fn with_native_consumer(
+        mut self,
+        consumer: Option<hiroute_domain::AgentModelConsumerV1>,
+    ) -> Self {
+        self.native_consumer = consumer;
+        self
+    }
+    pub(crate) fn is_hermes_consumer(&self) -> bool {
+        self.native_consumer == Some(hiroute_domain::AgentModelConsumerV1::Hermes)
     }
 
     pub(crate) fn with_web_search_allowed(mut self, allowed: bool) -> Self {

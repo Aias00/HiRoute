@@ -1,7 +1,10 @@
-import { invoke } from '@tauri-apps/api/core';
+import { hostCapabilities } from '../host/index.ts';
+import { invoke } from '../host/index.ts';
 import { useEffect, useState } from 'react';
+import { ObservationStorageSettings } from '../features/ObservationStorageSettings';
 import { DiagnosticsSettings } from '../features/diagnostics/DiagnosticsSettings';
 import { UpdatesSettings } from '../features/UpdatesSettings';
+import { ShellHostSettings } from '../features/ShellHostSettings';
 import { safeDiagnosticCode } from '../error-code';
 import { ProductPage } from '../ui';
 import type { Language, LanguagePreference, ThemePreference } from '../ui/preferences';
@@ -89,7 +92,7 @@ export function SettingsPage(props: SettingsPageProps) {
     let current = true;
     setCliError('');
     setListenerError('');
-    void invoke<CliEntryView>('cli_entry_status').then(value => {
+    if (hostCapabilities().cli_entry) void invoke<CliEntryView>('cli_entry_status').then(value => {
       if (current) setCliEntry(value);
     }).catch(error => {
       if (current) setCliError(safeDiagnosticCode(error, 'CLI_ENTRY_UNAVAILABLE'));
@@ -169,6 +172,7 @@ export function SettingsPage(props: SettingsPageProps) {
 
   return <ProductPage title={text('设置', 'Settings')} subtitle={text('偏好与本机服务', 'Preferences and local service')}>
     <div className="settings-wrap">
+      {hostCapabilities().host === 'shell-console' && <ShellHostSettings active={props.active} language={props.language} />}
       <section className="settings-group"><h2>{text('偏好', 'Preferences')}</h2><div className="settings-list">
         <div className="settings-row"><div className="settings-copy"><strong>{text('语言', 'Language')}</strong><span>{text('界面与状态文案', 'Interface and status text')}</span></div>
           <div className="segmented">{(['system', 'zh', 'en'] as const).map(language => <button type="button" key={language} className={`segment ${props.languagePreference === language ? 'active' : ''}`} aria-pressed={props.languagePreference === language} onClick={() => props.onLanguageChange(language)}>{language === 'system' ? text('跟随系统', 'System') : language === 'zh' ? '中文' : 'English'}</button>)}</div>
@@ -187,10 +191,10 @@ export function SettingsPage(props: SettingsPageProps) {
       <section className="settings-group"><h2>{text('本地记录', 'Local records')}</h2><div className="settings-list"><div className="settings-row">
         <div className="settings-copy"><strong>{text('会话内容', 'Session content')}</strong><span>{text('在会话详情中，可以清理该会话的正文或记录。', 'Clear content or records from each session’s detail view.')}</span></div>
         <button className="btn" type="button" onClick={() => props.onOpenSessions()}>{text('查看会话', 'View sessions')}</button>
-      </div></div></section>
+      </div><ObservationStorageSettings active={props.active} language={props.language} /></div></section>
       <DiagnosticsSettings active={props.active} language={props.language} />
-      <UpdatesSettings active={props.active} language={props.language} onServiceChanged={props.onServiceChanged} />
-      <section className="settings-group"><h2>CLI</h2><div className="settings-list"><div className="settings-row">
+      {hostCapabilities().updates && <UpdatesSettings active={props.active} language={props.language} onServiceChanged={props.onServiceChanged} />}
+      {hostCapabilities().cli_entry && <section className="settings-group"><h2>CLI</h2><div className="settings-list"><div className="settings-row">
         <div className="settings-copy"><strong>{text('终端入口', 'Terminal entry')}</strong><span>{cliEntry === null
           ? text('正在检查 ~/.local/bin/hiroute', 'Checking ~/.local/bin/hiroute')
           : text(`状态：${cliEntry.state} · ${cliEntry.entry_path}`, `State: ${cliEntry.state} · ${cliEntry.entry_path}`)}</span>
@@ -202,7 +206,7 @@ export function SettingsPage(props: SettingsPageProps) {
           {cliEntry?.state !== 'valid' && <button className="btn" type="button" disabled={cliBusy || cliEntry?.state === 'conflict'} onClick={() => void updateCliEntry('cli_entry_install')}>{cliEntry?.state === 'broken' ? text('修复', 'Repair') : text('安装', 'Install')}</button>}
           {cliEntry?.state === 'valid' && <button className="btn" type="button" disabled={cliBusy} onClick={() => void updateCliEntry('cli_entry_remove')}>{text('移除', 'Remove')}</button>}
         </div>
-      </div>{cliError && <div className="settings-inline-error" role="status">{text(`CLI 入口不可用（${cliError}）`, `CLI entry unavailable (${cliError})`)}</div>}</div></section>
+      </div>{cliError && <div className="settings-inline-error" role="status">{text(`CLI 入口不可用（${cliError}）`, `CLI entry unavailable (${cliError})`)}</div>}</div></section>}
       <section className="settings-group"><h2>Gateway</h2><div className="settings-list"><div className="settings-row">
         <div className="settings-copy"><strong>{text('监听范围', 'Listener access')}</strong><span>{listener?.config.applied
           ? text(`已应用 ${listener.config.applied.address}:${listener.config.applied.port} · ${listener.ready ? 'ready' : 'not ready'}`, `Applied ${listener.config.applied.address}:${listener.config.applied.port} · ${listener.ready ? 'ready' : 'not ready'}`)

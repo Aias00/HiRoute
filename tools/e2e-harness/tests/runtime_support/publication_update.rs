@@ -30,7 +30,12 @@ impl RuntimeFixture {
             }))
             .unwrap(),
         );
-        assert_eq!(response.status, 200, "{:?}", response.body);
+        assert_eq!(
+            response.status,
+            200,
+            "{}",
+            String::from_utf8_lossy(&response.body)
+        );
         let body: serde_json::Value = serde_json::from_slice(&response.body).unwrap();
         assert_eq!(body["code"], "PUBLICATION_APPLIED", "{body}");
         assert_eq!(

@@ -39,6 +39,52 @@ fn idle_query_steps(store: &LocalObservationStore) -> i32 {
 }
 
 #[test]
+fn idle_blob_gc_does_not_take_the_capture_writer_for_candidate_metadata() {
+    let root = tempdir().unwrap();
+    let store = std::sync::Arc::new(open_store(root.path()));
+    seed(&store, 32, 1);
+    let writer = store.connection.lock();
+    std::thread::scope(|threads| {
+        let (finished, result) = std::sync::mpsc::channel();
+        let worker_store = std::sync::Arc::clone(&store);
+        threads.spawn(move || {
+            finished
+                .send(worker_store.collect_garbage_batch(32))
+                .unwrap();
+        });
+        let idle = result.recv_timeout(std::time::Duration::from_millis(500));
+        // Release even on failure, so the negative control cannot leave a
+        // blocked maintenance thread behind when the assertion unwinds.
+        drop(writer);
+        assert_eq!(idle.unwrap().unwrap(), 0);
+    });
+}
+
+#[test]
+fn blob_gc_candidate_metadata_merges_covering_identities_before_opening_blob_rows() {
+    let root = tempdir().unwrap();
+    let store = open_store(root.path());
+    let db = store.connection.lock();
+    let mut statement = db
+        .prepare(&format!("EXPLAIN QUERY PLAN {GARBAGE_CANDIDATES_SQL}"))
+        .unwrap();
+    let plan = statement
+        .query_map([32], |row| row.get::<_, String>(3))
+        .unwrap()
+        .collect::<Result<Vec<_>, _>>()
+        .unwrap();
+    assert!(
+        plan.iter().any(|step| step == "MERGE (EXCEPT)"),
+        "idle candidate work must merge ordered covering sources: {plan:?}"
+    );
+    assert!(
+        plan.iter().any(|step| step
+            .contains("content_blobs_v2 USING COVERING INDEX sqlite_autoindex_content_blobs_v2_1")),
+        "live blob metadata must not be opened: {plan:?}"
+    );
+}
+
+#[test]
 fn blob_gc_live_lookup_stays_linear_and_existing_databases_gain_index() {
     let root = tempdir().unwrap();
     let store = open_store(root.path());
@@ -49,14 +95,25 @@ fn blob_gc_live_lookup_stays_linear_and_existing_databases_gain_index() {
     store
         .connection
         .lock()
-        // Both current indexes can satisfy the workspace/digest lookup. Remove
-        // both to reproduce the original unindexed query, not a new fast path.
+        // Each current index can satisfy this lookup. Remove all alternatives
+        // so the negative control still represents the original unindexed path.
         .execute_batch(
             "DROP INDEX content_instances_v2_live_blob;
-             DROP INDEX content_instances_v2_search_blob;",
+             DROP INDEX content_instances_v2_search_blob;
+             DROP INDEX content_instances_v2_live_blob_global;",
         )
         .unwrap();
-    let without_index = idle_query_steps(&store);
+    // Negative control for the original correlated lookup. The current merge
+    // algorithm also avoids its quadratic work when an index is unavailable.
+    let without_index = {
+        let db = store.connection.lock();
+        let mut statement = db.prepare(
+            "SELECT b.workspace_id,b.blob_digest FROM content_blobs_v2 b WHERE NOT EXISTS(
+             SELECT 1 FROM content_instances_v2 c WHERE c.workspace_id=b.workspace_id AND c.content_blob_digest=b.blob_digest AND c.state='complete') ORDER BY b.rowid LIMIT ?1",
+        ).unwrap();
+        assert!(!statement.exists([32]).unwrap());
+        statement.get_status(StatementStatus::VmStep)
+    };
     assert!(
         without_index > indexed * 20,
         "regression fixture must expose the expensive old lookup"

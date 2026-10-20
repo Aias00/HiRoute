@@ -279,7 +279,7 @@ impl LocalObservationStore {
         })
     }
 
-    pub(super) fn encode_observation_cursor<T: Serialize>(
+    pub(crate) fn encode_observation_cursor<T: Serialize>(
         &self,
         cursor: &T,
     ) -> Result<String, ObservationV2Error> {
@@ -290,7 +290,7 @@ impl LocalObservationStore {
         ))
     }
 
-    pub(super) fn decode_observation_cursor<T: serde::de::DeserializeOwned>(
+    pub(crate) fn decode_observation_cursor<T: serde::de::DeserializeOwned>(
         &self,
         encoded: &str,
     ) -> Result<T, ObservationV2Error> {

@@ -98,18 +98,78 @@ impl LocalControlAdapter {
         source: PiApiSource,
         prepare_id: &str,
     ) -> Result<ComputeCandidateViewV2, ComputeManagementControlError> {
+        let discovery = pi_discovery(&source);
+        let evidence = source.evidence_digest.clone();
+        self.prepare_native_source_candidate(vec![source], discovery, evidence, prepare_id, false)
+    }
+
+    pub(super) fn prepare_native_point_candidate(
+        &self,
+        point: hiroute_integrations::NativeApiConnectionPointV2,
+        prepare_id: &str,
+    ) -> Result<ComputeCandidateViewV2, ComputeManagementControlError> {
+        let catalog = self
+            .release_catalog
+            .as_ref()
+            .ok_or(ComputeManagementControlError::Unavailable)?;
+        let discovery = super::points::point_discovery(&point, catalog);
+        let evidence = super::point_catalog::point_evidence(catalog, &point)?;
+        self.prepare_native_source_candidate(point.sources, discovery, evidence, prepare_id, true)
+    }
+
+    fn prepare_native_source_candidate(
+        &self,
+        sources: Vec<PiApiSource>,
+        discovery: ComputeDiscoveryRefV1,
+        evidence: hiroute_domain::CanonicalDigest,
+        prepare_id: &str,
+        grouped: bool,
+    ) -> Result<ComputeCandidateViewV2, ComputeManagementControlError> {
+        let source = sources
+            .first()
+            .cloned()
+            .ok_or(ComputeManagementControlError::DiscoveryNotImportable)?;
         if !source.supported_auth || source.credential.is_none() {
             return Err(ComputeManagementControlError::DiscoveryNotImportable);
         }
         let protocol = source
             .protocol
             .ok_or(ComputeManagementControlError::DiscoveryNotImportable)?;
-        let ecosystem = NativeApiEcosystem::from_source(&source)
-            .ok_or(ComputeManagementControlError::DiscoveryNotImportable)?;
-        let (base_url, secret) = self
-            .scanner
-            .read_native_api_source(&source)
-            .map_err(|_| ComputeManagementControlError::DiscoveryChanged)?;
+        use hiroute_application::ProtectedInputPort;
+
+        let (base_url, secret) = (if source.source_ref.starts_with("hermes-source/") {
+            self.read_hermes_source(&source)
+                .map_err(|_| hiroute_integrations::AgentFilesystemScanError::SourceChanged)
+        } else if source
+            .credential
+            .as_ref()
+            .is_some_and(|c| c.field_selector == "env.ANTHROPIC_AUTH_TOKEN")
+        {
+            let credential = source
+                .credential
+                .as_ref()
+                .ok_or(ComputeManagementControlError::DiscoveryNotImportable)?;
+            let slot = super::super::mutation::protected_input_slot(credential)
+                .map_err(|_| ComputeManagementControlError::Corrupt)?;
+            self.read_secret(&slot)
+                .map(|secret| {
+                    (
+                        zeroize::Zeroizing::new(
+                            source
+                                .point_binding
+                                .as_ref()
+                                .expect("trusted point binding")
+                                .endpoint
+                                .clone(),
+                        ),
+                        secret,
+                    )
+                })
+                .map_err(|_| hiroute_integrations::AgentFilesystemScanError::SourceChanged)
+        } else {
+            self.scanner.read_native_api_source(&source)
+        })
+        .map_err(|_| ComputeManagementControlError::DiscoveryChanged)?;
         let credential = source
             .credential
             .as_ref()
@@ -123,13 +183,17 @@ impl LocalControlAdapter {
             field_selector: credential.field_selector.clone(),
             observed_revision: credential.observed_revision,
         };
+        self.protected_inputs
+            .lock()
+            .map_err(|_| ComputeManagementControlError::Unavailable)?
+            .insert(input_slot.clone(), credential.clone());
         let candidate_digest = hiroute_domain::CanonicalDigest::of(&(
             match ecosystem {
                 NativeApiEcosystem::Pi => "pi-discovered-candidate/v1",
                 NativeApiEcosystem::Dsh => "dsh-discovered-candidate/v1",
                 NativeApiEcosystem::OpenCode => "opencode-discovered-candidate/v1",
             },
-            &source.evidence_digest,
+            &evidence,
             prepare_id,
         ))
         .map_err(|_| ComputeManagementControlError::Corrupt)?;
@@ -150,43 +214,41 @@ impl LocalControlAdapter {
         self.model_connections
             .reserve_candidate_ref(&candidate)
             .map_err(|_| ComputeManagementControlError::Conflict)?;
-        let observed = |v| NativeCandidateFactValueV1 {
-            value: v,
-            basis: if v.is_some() {
-                NativeCandidateFactBasisV1::Observed
-            } else {
-                NativeCandidateFactBasisV1::Unknown
-            },
-        };
-        let capability = NativeModelCapabilityDeclarationV1 {
-            tool: NativeCandidateFactValueV1::unknown(),
-            vision: observed(source.vision),
-            streaming: NativeCandidateFactValueV1::unknown(),
-            context_tokens: NativeCandidateFactValueV1 {
-                value: source.context_tokens,
-                basis: if source.context_tokens.is_some() {
-                    NativeCandidateFactBasisV1::Observed
-                } else {
-                    NativeCandidateFactBasisV1::Unknown
-                },
-            },
-            max_output_tokens: NativeCandidateFactValueV1 {
-                value: source.max_output_tokens,
-                basis: if source.max_output_tokens.is_some() {
-                    NativeCandidateFactBasisV1::Observed
-                } else {
-                    NativeCandidateFactBasisV1::Unknown
-                },
-            },
-            native_reasoning: NativeCandidateFactValueV1::unknown(),
+        let models = sources.iter().map(native_source_declaration).collect();
+        let models = if grouped {
+            super::point_catalog::expand_models(
+                self.release_catalog
+                    .as_ref()
+                    .ok_or(ComputeManagementControlError::Unavailable)?,
+                &sources,
+                models,
+            )?
+        } else {
+            models
         };
         let draft = NativeModelConnectionDraftV1 {
             display_template_id: None,
             inference_model_id: None,
             candidate_ref: Some(candidate.candidate_ref),
-            lineage_ref: pi_discovery(&source).discovery_ref,
+            lineage_ref: discovery.discovery_ref,
             trusted_lineage_digest: None,
-            display_name: format!("{} · {}", ecosystem.label(), source.provider_id),
+            display_name: format!(
+                "{} · {}",
+                if source.source_ref.starts_with("hermes-source/") {
+                    "Hermes"
+                } else if source
+                    .credential
+                    .as_ref()
+                    .is_some_and(|c| c.field_selector == "env.ANTHROPIC_AUTH_TOKEN")
+                {
+                    "Claude Code"
+                } else {
+                    NativeApiEcosystem::from_source(&source)
+                        .ok_or(ComputeManagementControlError::DiscoveryNotImportable)?
+                        .label()
+                },
+                source.provider_id
+            ),
             existing_source_id: None,
             edit_revision: source.revision,
             check_id: prepare_id.into(),
@@ -202,18 +264,17 @@ impl LocalControlAdapter {
             protocol_profile_id: match protocol {
                 UpstreamProtocol::Responses => "adapter.openai-responses.v1",
                 UpstreamProtocol::Messages => "adapter.anthropic-messages.v1",
+                UpstreamProtocol::ChatCompletions if grouped => "adapter.openai-chat.v1",
                 UpstreamProtocol::ChatCompletions => "adapter.openai-chat-completions.v1",
             }
             .into(),
             protocol_profile_revision: 1,
             protocol_header_semantics: super::custom_endpoint_headers(protocol),
-            authentication: if protocol == UpstreamProtocol::Messages {
-                GatewayAuthenticationSemanticsV1::ApiKeyHeader {
-                    header: "x-api-key".into(),
-                }
-            } else {
-                GatewayAuthenticationSemanticsV1::Bearer
-            },
+            authentication: source
+                .point_binding
+                .as_ref()
+                .map(|b| b.authentication.clone())
+                .unwrap_or_else(|| super::point_catalog::authentication(protocol)),
             additional_native_endpoints: Vec::new(),
             provenance: NativeConnectionProvenanceInputV1::UserConfigured {
                 configuration_revision: source.revision,
@@ -225,24 +286,60 @@ impl LocalControlAdapter {
             runtime_fallback_denied_model_ids: super::runtime_fallback_denied_model_ids(
                 self.release_catalog.as_ref(),
             ),
-            models: vec![NativeModelDeclarationV1 {
-                upstream_model_id: source.model_id,
-                display_name: source.display_name,
-                catalog_configuration_id: None,
-                membership: ComputeModelMembershipV2::Observed,
-                capabilities: capability,
-            }],
+            models,
         };
-        self.model_connections
-            .prepare_observed_discovery(
-                draft,
-                NativeModelConnectionCredentialV1::Protected {
-                    descriptor,
-                    input_slot,
-                    secret: &secret,
-                },
-                source.evidence_digest,
-            )
-            .map_err(|_| ComputeManagementControlError::Corrupt)
+        let credential = NativeModelConnectionCredentialV1::Protected {
+            descriptor,
+            input_slot,
+            secret: &secret,
+        };
+        let result = if grouped {
+            self.model_connections
+                .prepare_native_point_discovery(draft, credential, evidence)
+        } else {
+            self.model_connections
+                .prepare_observed_discovery(draft, credential, evidence)
+        };
+        result.map_err(|_| ComputeManagementControlError::Corrupt)
+    }
+}
+
+fn native_source_declaration(source: &PiApiSource) -> NativeModelDeclarationV1 {
+    let observed = |v| NativeCandidateFactValueV1 {
+        value: v,
+        basis: if v.is_some() {
+            NativeCandidateFactBasisV1::Observed
+        } else {
+            NativeCandidateFactBasisV1::Unknown
+        },
+    };
+    let capability = NativeModelCapabilityDeclarationV1 {
+        tool: NativeCandidateFactValueV1::unknown(),
+        vision: observed(source.vision),
+        streaming: NativeCandidateFactValueV1::unknown(),
+        context_tokens: NativeCandidateFactValueV1 {
+            value: source.context_tokens,
+            basis: if source.context_tokens.is_some() {
+                NativeCandidateFactBasisV1::Observed
+            } else {
+                NativeCandidateFactBasisV1::Unknown
+            },
+        },
+        max_output_tokens: NativeCandidateFactValueV1 {
+            value: source.max_output_tokens,
+            basis: if source.max_output_tokens.is_some() {
+                NativeCandidateFactBasisV1::Observed
+            } else {
+                NativeCandidateFactBasisV1::Unknown
+            },
+        },
+        native_reasoning: NativeCandidateFactValueV1::unknown(),
+    };
+    NativeModelDeclarationV1 {
+        upstream_model_id: source.model_id.clone(),
+        display_name: source.display_name.clone(),
+        catalog_configuration_id: None,
+        membership: ComputeModelMembershipV2::Observed,
+        capabilities: capability,
     }
 }

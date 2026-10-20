@@ -29,6 +29,13 @@ These assets identify third-party Agent integrations inside HiRoute. They do not
 - The two path shapes and 16×20 proportions are preserved. Its neutral foreground and shadow follow the active HiRoute theme, with clear space inside the existing avatar.
 - Use the mark beside the accurate OpenCode name to identify the integration. OpenCode owns the mark; this use does not imply endorsement.
 
+## Hermes
+
+- File: `hermes.svg`
+- Source: the official Hermes Agent website favicon from NousResearch/hermes-agent at `ecac27c0af86064c40eeb8097cc20377cf2eee12`, <https://raw.githubusercontent.com/NousResearch/hermes-agent/ecac27c0af86064c40eeb8097cc20377cf2eee12/website/static/img/favicon.svg>.
+- SHA-256: `6c4968c1a46f104559684826ed8061fad6052711ff0af9c6b36a6ce674536684`.
+- The SVG is copied without artwork changes to identify Hermes. Upstream's MIT license is included in `hermes-LICENSE.txt`; the mark remains owned by its author and does not imply endorsement.
+
 ## Fallback
 
 Unknown Agents use HiRoute's neutral inline `Agent` glyph plus their returned display name. A missing known asset is treated as an incomplete integration and must not fall back to initials such as `CX` or `CC`.

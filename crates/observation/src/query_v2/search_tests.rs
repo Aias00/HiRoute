@@ -3,12 +3,12 @@ use crate::{DigestAuthority, LocalObservationStore, text_index::TextIndexBuilder
 use hiroute_domain::*;
 use rusqlite::params;
 
-pub(super) fn source(store: &LocalObservationStore, text: &[u8]) -> String {
+pub(crate) fn source(store: &LocalObservationStore, text: &[u8]) -> String {
     let digest = store
         .authority
         .content_blob_digest("text/plain", text)
         .to_string();
-    let path = store.activity_path.with_file_name("indexed-source");
+    let path = store.blob_path(&digest);
     std::fs::write(&path, text).unwrap();
     let connection = store.connection.lock();
     connection.execute("INSERT INTO sessions(workspace_id,session_id,started_at_ms,updated_at_ms) VALUES(?1,'session',100,100)",[WorkspaceId::DEFAULT]).unwrap();
@@ -18,7 +18,7 @@ pub(super) fn source(store: &LocalObservationStore, text: &[u8]) -> String {
         VALUES(?1,'content','occurrence','request','request','fork',0,'text','text/plain',?2,0,?3,'complete',100000000)",params![WorkspaceId::DEFAULT,digest,text.len()]).unwrap();
     digest
 }
-pub(super) fn reader(content: bool) -> ObservationReaderContext {
+pub(crate) fn reader(content: bool) -> ObservationReaderContext {
     ObservationReaderContext::local_user(
         WorkspaceId::default(),
         "user".into(),
@@ -29,7 +29,7 @@ pub(super) fn reader(content: bool) -> ObservationReaderContext {
     )
     .unwrap()
 }
-pub(super) fn query(keyword: &str, limit: u16) -> ObservationSearchQueryV2 {
+pub(crate) fn query(keyword: &str, limit: u16) -> ObservationSearchQueryV2 {
     ObservationSearchQueryV2 {
         agent_id: None,
         plan_id: None,
@@ -162,12 +162,8 @@ fn deletion_erases_derived_text_and_invalidates_pending_search_pages() {
 fn digest_corruption_never_publishes_rebuilt_text() {
     let root = tempfile::tempdir().unwrap();
     let store = LocalObservationStore::open(root.path(), DigestAuthority::new([2; 32])).unwrap();
-    source(&store, b"original");
-    std::fs::write(
-        store.activity_path.with_file_name("indexed-source"),
-        b"needle!!",
-    )
-    .unwrap();
+    let digest = source(&store, b"original");
+    std::fs::write(store.blob_path(&digest), b"needle!!").unwrap();
     index(&store);
     let page = store
         .search_observed_text(&reader(true), &query("needle", 10), 500)

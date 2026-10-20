@@ -179,7 +179,7 @@ impl StaticCommandDescriptor {
                 automation: automation(self.command_id).to_owned(),
                 output: output(self.command_id).to_owned(),
                 exit_status: exit_status(self.command_id).to_owned(),
-                examples: vec![example(self.command_id, &joined_path)],
+                examples: examples(self.command_id, &joined_path),
                 see_also: vec![format!(
                     "hiroute schema show --command-id {}",
                     self.command_id
@@ -219,6 +219,42 @@ macro_rules! command {
 // Only commands with executable positive and negative scenarios may be marked Released and
 // projected into manifest.v1.json.
 const COMMANDS: &[StaticCommandDescriptor] = &[
+    command!(
+        "console.open",
+        ["console", "open"],
+        "CreateConsoleLaunch",
+        [],
+        Released,
+        Action,
+        "Create a single-use owner console launch link."
+    ),
+    command!(
+        "console.token.create",
+        ["console", "token", "create"],
+        "CreateConsoleToken",
+        [],
+        Released,
+        Action,
+        "Create a named owner console access token, shown once."
+    ),
+    command!(
+        "console.token.list",
+        ["console", "token", "list"],
+        "ListConsoleTokens",
+        [],
+        Released,
+        Query,
+        "List console token metadata without credential secrets."
+    ),
+    command!(
+        "console.token.revoke",
+        ["console", "token", "revoke"],
+        "RevokeConsoleToken",
+        [],
+        Released,
+        Action,
+        "Revoke a console access token and its sessions."
+    ),
     command!(
         "schema.list",
         ["schema", "list"],
@@ -452,6 +488,15 @@ const COMMANDS: &[StaticCommandDescriptor] = &[
         Planned,
         Action,
         "Refresh inventory only through its registered connector contract."
+    ),
+    command!(
+        "compute.connection.prepare",
+        ["compute", "connection", "prepare"],
+        "PrepareDiscoveredModelConnection",
+        [],
+        Released,
+        Query,
+        "Prepare the current opaque native connection-point reference without an inference call."
     ),
     command!(
         "compute.connection.options",
@@ -872,7 +917,7 @@ const COMMANDS: &[StaticCommandDescriptor] = &[
         ["prices", "effective"],
         "GetEffectivePrices",
         ["CLI-040", "APP-040"],
-        Planned,
+        Released,
         Query,
         "Read effective current-catalog price facts and local override revisions."
     ),
@@ -881,7 +926,7 @@ const COMMANDS: &[StaticCommandDescriptor] = &[
         ["prices", "override", "preview"],
         "PreviewPriceOverrideChange",
         ["CLI-041", "APP-041"],
-        Planned,
+        Released,
         Preview,
         "Preview a typed local price override change."
     ),
@@ -890,7 +935,7 @@ const COMMANDS: &[StaticCommandDescriptor] = &[
         ["prices", "override", "apply"],
         "ApplyPriceOverrideChange",
         ["CLI-042", "APP-042"],
-        Planned,
+        Released,
         Apply,
         "Apply an exact local price override revision."
     ),
@@ -992,6 +1037,24 @@ const COMMANDS: &[StaticCommandDescriptor] = &[
         Released,
         Query,
         "Read recorded token, cache and valuation totals with coverage."
+    ),
+    command!(
+        "observation.storage.show",
+        ["observation", "storage", "show"],
+        "GetObservationCapacity",
+        ["CLI-059", "APP-059"],
+        Released,
+        Query,
+        "Read the local observation capacity policy and measured reclamation status."
+    ),
+    command!(
+        "observation.storage.set",
+        ["observation", "storage", "set"],
+        "SetObservationCapacity",
+        ["CLI-060", "APP-060"],
+        Released,
+        Action,
+        "Save a positive byte threshold or disable early observation expiry."
     ),
     command!(
         "observation.plan-quality.samples",

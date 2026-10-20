@@ -142,7 +142,8 @@ impl LocalControlAdapter {
             let result = match target.surface {
                 AgentModelSurfaceV2::PiCli
                 | AgentModelSurfaceV2::DshCli
-                | AgentModelSurfaceV2::OpenCodeCli => {
+                | AgentModelSurfaceV2::OpenCodeCli
+                | AgentModelSurfaceV2::HermesCli => {
                     return Err(ControlReadError::Denied);
                 }
                 AgentModelSurfaceV2::QoderCli => {
@@ -442,7 +443,7 @@ impl LocalControlAdapter {
     }
 }
 
-fn expected_trust(
+pub(super) fn expected_trust(
     snapshot: &GatewayPublicationSnapshotProjectionV3,
     grant_id: &str,
     served_model_id: &str,

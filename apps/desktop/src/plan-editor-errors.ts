@@ -34,6 +34,8 @@ export function modelBudgetConflict(error: unknown): ModelBudgetConflict | null 
 export function planErrorCode(error: unknown): string {
   if (typeof error === 'string') return /^[A-Z][A-Z0-9_]{0,80}$/.test(error) ? error : 'REQUEST_FAILED';
   if (!error || typeof error !== 'object') return 'REQUEST_FAILED';
+  const diagnostic = (error as { envelope?: { error?: { message_key?: string } } }).envelope?.error?.message_key;
+  if (diagnostic?.startsWith('native.')) return diagnostic.toUpperCase().replaceAll('.', '_');
   const value = error as { code?: unknown; safe_error_code?: unknown; failure?: { code?: unknown }; envelope?: { error?: { code?: unknown } } };
   const code = planErrorCode(value.envelope?.error?.code ?? value.failure?.code ?? value.code ?? value.safe_error_code);
   return modelBudgetConflict(error) && ['REVISION_CONFLICT', 'QODER_MODEL_BUDGET_CONFLICT', 'AGENT_MODEL_BUDGET_CONFLICT'].includes(code)
@@ -58,9 +60,17 @@ export function planErrorMessage(error: unknown, language: 'zh' | 'en'): string 
       : `Installed model routing capacity is protected. ${blockers}. On the Agent page, remove the affected plan from these connections or disable their model routing, then publish and reconnect. Task collaboration can stay enabled. Your input is retained.`;
   }
   const messages: Record<string, [string, string]> = {
+    NATIVE_PROTOCOL_UNSUPPORTED: ['此功能配置不受支持，请更新 HiRoute 并重新读取配置。', 'This capability configuration is unsupported. Update HiRoute and reload the configuration.'],
+    NATIVE_PROTOCOL_FIXED_CONTENT_INVALID: ['适用性配置无效，请重新读取配置。', 'The applicability configuration is invalid. Reload the configuration.'],
+    NATIVE_PROTOCOL_HISTORY_CAP_INVALID: ['背景轮数需在 0 到 8 之间。', 'Background turns must be between 0 and 8.'],
+    NATIVE_PROTOCOL_STATE_REFERENCE_INVALID: ['提示词引用了当前配置不提供的历史字段，请编辑受影响的判断设置。', 'A prompt references history fields absent from the current configuration. Edit the affected judgment settings.'],
+    NATIVE_PROTOCOL_DIGEST_MISMATCH: ['发布内容校验未通过，请重新读取配置。当前已发布路由仍然有效。', 'Publication validation failed. Reload the configuration. The published route remains active.'],
+    NATIVE_PROTOCOL_CONTENT_MISMATCH: ['评分设置与发布内容不一致，请重新预览发布。', 'Assessment settings differ from publication content. Preview the publication again.'],
+
     PLAN_UNCHANGED: ['没有待发布更改。', 'No changes to publish.'],
     EDITOR_INVALID: ['请检查名称、使用场景及模型设置，当前输入已保留。', 'Check the name, purpose and model settings. Your input is retained.'],
     INVALID_ARGUMENTS: ['部分路由设置未通过校验，请检查输入后重试。', 'Some routing settings failed validation. Check your input and retry.'],
+    REVISION_CONFLICT: ['另一会话更改了此路由。已重新读取当前状态，你的草稿已保留。请核对最新配置后重新编辑并提交。', 'Another session changed this route. The current state was reloaded and your draft is retained. Review the latest configuration before editing and submitting again.'],
     CONFLICT: ['配置已在其他地方变化，请重新读取后再提交。当前输入已保留。', 'The configuration changed elsewhere. Reload before submitting. Your input is retained.'],
     QODER_MODEL_BUDGET_CONFLICT: ['新预算低于 Qoder 当前已接入模型声明的容量。请先在 Agent 页面停用 Qoder 的模型路由，再发布此计划并重新配置模型路由；任务协作无需停用。当前输入已保留。', 'The new budget is below the capacity declared by the current Qoder model connection. Disable Qoder model routing on the Agent page, publish this plan, then configure model routing again. Task collaboration can stay enabled. Your input is retained.'],
     AGENT_MODEL_BUDGET_CONFLICT: ['已接入的 Agent 模型路由容量受保护。请读取连接状态，调整受影响的模型路由后重新发布。任务协作无需停用，当前输入已保留。', 'Installed Agent model routing capacity is protected. Read connection status and adjust the affected model routing before publishing again. Task collaboration can stay enabled. Your input is retained.'],
@@ -70,5 +80,10 @@ export function planErrorMessage(error: unknown, language: 'zh' | 'en'): string 
     DAEMON_UNAVAILABLE: ['暂时无法连接本机服务，当前输入已保留。请稍后重试。', 'Cannot connect to the local service. Your input is retained. Try again.'],
     RESPONSE_DATA_INVALID: ['未能读取操作结果，当前输入已保留。请先核实路由状态再重试。', 'Could not read the operation result. Your input is retained. Check the route state before retrying.'],
   };
-  return (messages[planErrorCode(error)] ?? ['操作未能确认完成，当前输入已保留。请先核实路由状态再重试。', 'Completion could not be confirmed. Your input is retained. Check the route state before retrying.'])[language === 'zh' ? 0 : 1];
+  const message = (messages[planErrorCode(error)] ?? ['操作未能确认完成，当前输入已保留。请先核实路由状态再重试。', 'Completion could not be confirmed. Your input is retained. Check the route state before retrying.'])[language === 'zh' ? 0 : 1];
+  const diagnostic = (error as { envelope?: { data?: { schema?: string; scope?: unknown; field?: unknown } } } | null)?.envelope?.data;
+  if (diagnostic?.schema !== 'hiroute.native-protocol-diagnostic/v1') return message;
+  const name = diagnostic.field ?? diagnostic.scope;
+  if (typeof name !== 'string' || !/^[A-Za-z0-9/_.:-]{1,384}$/.test(name)) return message;
+  return `${message} ${language === 'zh' ? '受影响范围/字段：' : 'Affected scope/field: '}${name}`;
 }

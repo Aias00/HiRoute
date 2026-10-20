@@ -1,7 +1,23 @@
 # Session content search
 
-`session_search` is the Desktop conversation-search intent on the protected V2
-observation transport. It uses the existing search filters and returns one
+Current `hiroute.observation.query/v2` retains the optional
+`include_routing_observations` flag for facts and plan-quality reads. Omitted/false
+preserves released strict fields, authorization encoding and cursor bindings.
+Opt-in adds bounded routing evidence; it does not add a read permission, SQL table
+or query version.
+
+Statistics cover all retained matching decisions in the authorized scope,
+independently of stage pagination and model/score filters. Each current classifier
+decision records C, native legacy, custom-extension v1 or local rules. Known non-C
+counts stay separate from C denominators. Authenticated supported pre-applicability envelopes also count as known non-C. The existing bounded projection refresh verifies each original carrier/digest and retains only safe format, routing and time evidence. Marker omission alone proves nothing. Unproven historical/current records, unknown scope, missing or invalid projections and bounded scans withhold rates while preserving counts. Already-deleted carriers cannot be reconstructed.
+Content-only deletion retains safe evidence; full fact deletion/expiry removes it
+through existing retention, without a new table, migration, view or permission.
+See [the contract](../../../../issue-spec/specs/session-history/spec.md) and
+[all-decision query](routing_observations.rs). The remaining sections describe
+independent session search.
+
+`session_search` is the Desktop conversation-search intent on the existing protected
+observation operation. It uses the existing search filters and returns one
 `ObservationTextAnchorV2` per matching session, newest matching request first,
 then session ID ascending. Within that request it chooses the first matching
 content occurrence/block. `limit` counts sessions, and `next_cursor` means there
@@ -51,11 +67,30 @@ keywords avoid loading every content occurrence or folded body. Returned anchors
 always verify the exact folded substring and load original offset maps. Current
 reads use returned content identities. A partial covering index on ready-source
 identities keeps publication checks in metadata; it still requires the complete
-lookup publication marker. A workspace-local ready-source set skips complete
-digests before inspecting missing sources under the reader's
-filters; a missing source index or incomplete publication still reports a gap.
+lookup publication marker. Gap detection merges the ordered covering live-source
+and ready-source indexes with `EXCEPT`, materializing only unready digests before
+opening occurrence metadata under the reader's filters. It avoids both large
+temporary complete-source sets and large metadata pages for repeated history;
+missing indexes or incomplete publication still report authorized gaps.
 Scale regressions include distinct source digests and common short keywords;
 repeating many occurrences of a single blob does not cover these query costs.
+The maintenance indexer limits metadata-only scanning separately from body input.
+After a stable complete pass it sleeps until the existing source revision or its
+writer connection changes; analysis-scope writes do not restart that scan. A
+change behind an in-progress cursor requires another pass before declaring idle.
+Unchanged analysis checkpoints perform no writes during ordinary idle maintenance.
+Fresh analysis scopes and price captures share the existing capture writer's
+admission within the caller's original deadline, so sustained native capture does
+not repeatedly beat them to SQLite's shorter busy slice. Existing scope reads
+retain their concurrent read transactions; content reads release the writer first.
+Idle physical blob collection also merges covering identities on a separate read
+connection. Only selected unreferenced candidates take the writer, and current
+references and paths are rechecked before deleting a file. The batch bound stays
+in the candidate merge, including a large orphan backlog.
+Terminal content acknowledgement and missing-blob checks use the existing request
+index to select their request/direction/fork before sorting content IDs. An ordering
+index must not make these capture writes scan unrelated retained history while
+analysis waits for the writer.
 
 The released `search` intent retains occurrence pagination and its V2 response
 shape. It is a distinct supported interface, not the Desktop session-list query.
@@ -73,3 +108,23 @@ scenarios exercise the production Sessions component; native acceptance must
 type the keyword in Desktop, find a known body after a large nonmatching corpus,
 continue across unrelated Worker activity and open the original anchor. Browser
 fixtures alone do not establish authorization or product completion.
+
+## Scoped analysis consumers
+
+The opt-in analysis views live in [`../analysis`](../analysis/): `read` composes the existing bounded
+content and stage owners, `scope` pins relation/numeric/price watermarks, `members` resolves physical
+members for both content and money, and `comparison` shares source matching and per-attempt rounding
+with the legacy explicit-reference report. Numeric inputs and native relations use additive auxiliary
+tables, not new execution-fact/receipt variants or changes to shared storage admission markers.
+
+Application composition supplies one 500 ms deadline, including nonblocking control/price reads.
+The existing reader semaphore and SQLite progress handler remain authoritative. Analysis scopes are
+signed, expire within one hour and disclose retention-safe effective bounds; ordinary cleanup removes
+expired membership/price leases. Used-source deletion and withdrawn proofs invalidate affected scopes;
+append-only unrelated traffic does not. Released cursors retain their original validation rules.
+
+Content selection hydrates only the selected page and bounds public text/tool snippets; references
+lead to the existing V2 content pager. Provider state/private reasoning is not conversation content.
+Recorded stages explain routing but never create user-turn adjacency. Verified native compression is
+a continuation boundary with reset turn context. Requests lacking reliable lineage/turn evidence
+remain separate or unknown rather than acquiring inferred links.

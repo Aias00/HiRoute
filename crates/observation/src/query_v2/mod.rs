@@ -1,20 +1,24 @@
 //! Bounded observation projections. Reader contexts are internal authenticated
 //! inputs, never deserialized from a client request or inferred from its name.
 
+mod api_equivalent;
 mod cache_hit;
 mod catalog;
 mod content;
 mod facts;
 mod plan_quality;
+pub(crate) use plan_quality::routing_reason;
 mod relation;
 mod requests;
+mod routing_observations;
 mod schema;
 mod search;
 #[cfg(test)]
-mod search_tests;
+pub(crate) mod search_tests;
 #[cfg(test)]
 mod search_window_tests;
 mod session_search;
+pub(crate) use session_search::analysis_matching_sessions;
 #[cfg(test)]
 mod session_search_tests;
 mod sessions;
@@ -50,13 +54,21 @@ pub enum ObservationV2Error {
     Stale,
     #[error("observation query workers are busy")]
     Busy,
+    #[error("observation query reached its deadline")]
+    Timeout,
 }
 
 impl From<rusqlite::Error> for ObservationV2Error {
     fn from(_error: rusqlite::Error) -> Self {
         #[cfg(test)]
         eprintln!("observation query SQLite failure: {_error:?}");
-        Self::Unavailable
+        match _error.sqlite_error_code() {
+            Some(rusqlite::ErrorCode::OperationInterrupted) => Self::Timeout,
+            Some(rusqlite::ErrorCode::DatabaseBusy | rusqlite::ErrorCode::DatabaseLocked) => {
+                Self::Busy
+            }
+            _ => Self::Unavailable,
+        }
     }
 }
 
@@ -96,11 +108,19 @@ impl From<hiroute_domain::ObservationQueryError> for ObservationV2Error {
         match error {
             hiroute_domain::ObservationQueryError::Unauthorized => Self::Unauthorized,
             hiroute_domain::ObservationQueryError::InvalidQuery => Self::Invalid,
+            hiroute_domain::ObservationQueryError::ReadTimeout => Self::Timeout,
+            hiroute_domain::ObservationQueryError::ReaderBusy => Self::Busy,
             _ => Self::Unavailable,
         }
     }
 }
 impl ObservationV2Error {
+    pub(crate) fn into_legacy_domain(self) -> hiroute_domain::ObservationQueryError {
+        match self {
+            Self::Busy | Self::Timeout => hiroute_domain::ObservationQueryError::Unavailable,
+            other => other.into_domain(),
+        }
+    }
     pub(crate) fn into_domain(self) -> hiroute_domain::ObservationQueryError {
         use hiroute_domain::ObservationQueryError as E;
         match self {
@@ -108,6 +128,8 @@ impl ObservationV2Error {
             Self::Invalid => E::InvalidQuery,
             Self::Stale => E::StalePreview,
             Self::RelationshipConflict => E::RevisionConflict,
+            Self::Busy => E::ReaderBusy,
+            Self::Timeout => E::ReadTimeout,
             _ => E::Unavailable,
         }
     }
@@ -130,23 +152,33 @@ impl QueryDeadline {
         connection: &rusqlite::Connection,
         reader: Option<ObservationReaderContext>,
     ) -> Result<Self, ObservationV2Error> {
-        connection.busy_timeout(std::time::Duration::from_millis(100))?;
+        let now = std::time::Instant::now();
+        let deadline = reader
+            .as_ref()
+            .and_then(ObservationReaderContext::query_deadline)
+            .unwrap_or(now + std::time::Duration::from_millis(500));
+        if deadline <= now {
+            return Err(ObservationV2Error::Timeout);
+        }
+        connection.busy_timeout((deadline - now).min(std::time::Duration::from_millis(100)))?;
         let interrupt = connection.get_interrupt_handle();
         let (send, receive) = std::sync::mpsc::channel();
         std::thread::Builder::new()
             .name("observation-query-deadline".into())
             .spawn(move || {
-                let started = std::time::Instant::now();
                 loop {
-                    if reader.as_ref().is_some_and(|r| r.is_cancelled())
-                        || started.elapsed() >= std::time::Duration::from_millis(500)
-                    {
+                    let remaining = deadline.saturating_duration_since(std::time::Instant::now());
+                    if reader.as_ref().is_some_and(|r| r.is_cancelled()) || remaining.is_zero() {
                         // Keep interrupting until the operation drops its guard: a
                         // later statement must not receive a fresh execution budget.
                         interrupt.interrupt();
                     }
                     if !matches!(
-                        receive.recv_timeout(std::time::Duration::from_millis(20)),
+                        receive.recv_timeout(if remaining.is_zero() {
+                            std::time::Duration::from_millis(20)
+                        } else {
+                            remaining.min(std::time::Duration::from_millis(20))
+                        }),
                         Err(std::sync::mpsc::RecvTimeoutError::Timeout)
                     ) {
                         break;

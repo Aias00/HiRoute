@@ -30,7 +30,10 @@ pub(super) fn additional_model_endpoint(
 ) -> PortResult<String> {
     if matches!(
         kind,
-        AgentKindV1::Pi | AgentKindV1::DeepseekHarness | AgentKindV1::OpenCode
+        AgentKindV1::Pi
+            | AgentKindV1::DeepseekHarness
+            | AgentKindV1::OpenCode
+            | AgentKindV1::Hermes
     ) {
         return Ok(gateway_base_url.to_owned());
     }
@@ -73,7 +76,10 @@ pub(super) fn additional_models_for_grant(
             }
             let budget = (if matches!(
                 kind,
-                AgentKindV1::Pi | AgentKindV1::DeepseekHarness | AgentKindV1::OpenCode
+                AgentKindV1::Pi
+                    | AgentKindV1::DeepseekHarness
+                    | AgentKindV1::OpenCode
+                    | AgentKindV1::Hermes
             ) {
                 hiroute_integrations::pi_plan_token_budget(&plan.body.materialized)
             } else {

@@ -6,7 +6,7 @@ use hiroute_domain::{
     ObservationQueryError, SessionDeletionOutcomeV1, SessionDeletionPreviewV1,
     SessionDeletionSpecV1, SessionId, TombstoneReason,
 };
-use rusqlite::{Transaction, params};
+use rusqlite::{OptionalExtension, Transaction, params};
 
 use super::value_rollup::{
     archive_session_value, delete_session_tombstones, delete_session_value_rollups,
@@ -15,12 +15,14 @@ use super::value_rollup::{
 use super::{LocalObservationStore, increment_store_revision, store_revision};
 
 pub(super) const GARBAGE_CANDIDATES_SQL: &str =
-    "SELECT b.workspace_id, b.blob_digest, b.object_path FROM content_blobs_v2 b
-                     WHERE NOT EXISTS (
-                       SELECT 1 FROM content_instances_v2 c
-                       WHERE c.workspace_id=b.workspace_id
-                         AND c.content_blob_digest=b.blob_digest AND c.state='complete'
-                     ) ORDER BY b.rowid LIMIT ?1";
+    "SELECT workspace_id,blob_digest FROM content_blobs_v2
+     EXCEPT SELECT workspace_id,content_blob_digest FROM content_instances_v2 WHERE state='complete'
+     EXCEPT SELECT workspace,digest FROM observation_capacity_blobs_v5
+     ORDER BY 1,2 LIMIT ?1";
+
+#[cfg(test)]
+#[path = "retention_gc_tests.rs"]
+mod gc_tests;
 
 impl LocalObservationStore {
     pub(super) fn preview_session_deletion_base(
@@ -135,6 +137,13 @@ impl LocalObservationStore {
             delete_session_tombstones(&transaction, spec)?;
         }
         if spec.data_class == DeletionDataClass::FactsAndContent {
+            crate::analysis::full_delete(
+                &transaction,
+                spec.workspace_id.as_str(),
+                spec.session_id.as_str(),
+                deletion_through,
+            )
+            .map_err(|_| ObservationQueryError::Unavailable)?;
             if !spec.delete_rollups {
                 archive_session_value(&transaction, spec)?;
             }
@@ -312,31 +321,66 @@ impl LocalObservationStore {
         if limit == 0 || limit > 200 {
             return Err(ObservationQueryError::InvalidQuery);
         }
-        let mut connection = self.connection.lock();
-        let unreferenced = {
-            let mut statement = connection
-                .prepare(GARBAGE_CANDIDATES_SQL)
-                .map_err(|_| ObservationQueryError::Unavailable)?;
-            statement
-                .query_map([limit], |row| {
-                    Ok((
-                        row.get::<_, String>(0)?,
-                        row.get::<_, String>(1)?,
-                        row.get::<_, String>(2)?,
-                    ))
-                })
-                .map_err(|_| ObservationQueryError::Unavailable)?
-                .collect::<Result<Vec<_>, _>>()
-                .map_err(|_| ObservationQueryError::Corrupt)?
-        };
-        let transaction = connection
-            .transaction()
+        let candidates = self.garbage_candidates(limit)?;
+        self.collect_unreferenced_candidates(&candidates)
+    }
+
+    fn garbage_candidates(
+        &self,
+        limit: usize,
+    ) -> Result<Vec<(String, String)>, ObservationQueryError> {
+        // The common idle pass is metadata-only. Merge covering identities on
+        // its own read connection, without occupying capture/scope admission.
+        let connection = rusqlite::Connection::open_with_flags(
+            &self.activity_path,
+            rusqlite::OpenFlags::SQLITE_OPEN_READ_ONLY,
+        )
+        .map_err(|_| ObservationQueryError::Unavailable)?;
+        let mut statement = connection
+            .prepare(GARBAGE_CANDIDATES_SQL)
             .map_err(|_| ObservationQueryError::Unavailable)?;
-        for (workspace, digest, path) in &unreferenced {
-            match fs::remove_file(path) {
-                Ok(()) => {}
-                Err(error) if error.kind() == std::io::ErrorKind::NotFound => {}
-                Err(_) => return Err(ObservationQueryError::Unavailable),
+        statement
+            .query_map([limit], |row| Ok((row.get(0)?, row.get(1)?)))
+            .map_err(|_| ObservationQueryError::Unavailable)?
+            .collect::<Result<Vec<_>, _>>()
+            .map_err(|_| ObservationQueryError::Corrupt)
+    }
+
+    fn collect_unreferenced_candidates(
+        &self,
+        candidates: &[(String, String)],
+    ) -> Result<u64, ObservationQueryError> {
+        if candidates.is_empty() {
+            return Ok(0);
+        }
+        let mut connection = self.connection.lock();
+        let transaction = connection
+            .transaction_with_behavior(rusqlite::TransactionBehavior::Immediate)
+            .map_err(|_| ObservationQueryError::Unavailable)?;
+        let mut removed = 0;
+        for (workspace, digest) in candidates {
+            // Candidate discovery is not deletion authority: capture can make
+            // a blob live in between. Recheck its current path and references
+            // under the writer reservation before touching any physical file.
+            let path: Option<String> = transaction.query_row(
+                "SELECT b.object_path FROM content_blobs_v2 b WHERE b.workspace_id=?1 AND b.blob_digest=?2
+                 AND NOT EXISTS(SELECT 1 FROM content_instances_v2 c WHERE c.workspace_id=b.workspace_id AND c.content_blob_digest=b.blob_digest AND c.state='complete') AND NOT EXISTS(SELECT 1 FROM observation_capacity_blobs_v5 protected WHERE protected.workspace=b.workspace_id AND protected.digest=b.blob_digest)",
+                params![workspace,digest], |row|row.get(0),
+            ).optional().map_err(|_|ObservationQueryError::Unavailable)?;
+            let Some(path) = path else {
+                continue;
+            };
+            let path = self
+                .object_path(&path)
+                .map_err(|_| ObservationQueryError::Corrupt)?;
+            let shared:bool=transaction.query_row("SELECT EXISTS(SELECT 1 FROM content_instances_v2 WHERE content_blob_digest=?1 AND state='complete')",[digest],|row|row.get(0)).map_err(|_|ObservationQueryError::Unavailable)?;
+            if !shared {
+                match fs::remove_file(&path) {
+                    Ok(()) => {}
+                    Err(error) if error.kind() == std::io::ErrorKind::NotFound => {}
+                    Err(_) => return Err(ObservationQueryError::Unavailable),
+                }
+                self.note_object_path(&path);
             }
             transaction
                 .execute(
@@ -344,15 +388,16 @@ impl LocalObservationStore {
                     params![workspace, digest],
                 )
                 .map_err(|_| ObservationQueryError::Unavailable)?;
+            removed += 1;
         }
-        if !unreferenced.is_empty() {
+        if removed != 0 {
             increment_store_revision(&transaction)
                 .map_err(|_| ObservationQueryError::Unavailable)?;
         }
         transaction
             .commit()
             .map_err(|_| ObservationQueryError::Unavailable)?;
-        Ok(unreferenced.len() as u64)
+        Ok(removed)
     }
 
     fn remove_orphan_blob_files(&self) -> Result<(), ObservationQueryError> {
@@ -373,8 +418,16 @@ impl LocalObservationStore {
             let path = entry
                 .map_err(|_| ObservationQueryError::Unavailable)?
                 .path();
-            if path.is_file() && !referenced.contains(&path.to_string_lossy().into_owned()) {
-                fs::remove_file(path).map_err(|_| ObservationQueryError::Unavailable)?;
+            if path.is_file()
+                && !referenced.contains(
+                    &self
+                        .object_locator(&path)
+                        .map_err(|_| ObservationQueryError::Corrupt)?,
+                )
+                && !referenced.contains(&path.to_string_lossy().into_owned())
+            {
+                fs::remove_file(&path).map_err(|_| ObservationQueryError::Unavailable)?;
+                self.note_object_path(&path);
             }
         }
         Ok(())
@@ -414,9 +467,11 @@ impl LocalObservationStore {
                 .ok_or(ObservationQueryError::Corrupt)?;
             if !active.contains(name) {
                 if path.is_dir() {
-                    fs::remove_dir_all(path).map_err(|_| ObservationQueryError::Unavailable)?;
+                    fs::remove_dir_all(&path).map_err(|_| ObservationQueryError::Unavailable)?;
+                    self.note_removed_directory(&path);
                 } else {
-                    fs::remove_file(path).map_err(|_| ObservationQueryError::Unavailable)?;
+                    fs::remove_file(&path).map_err(|_| ObservationQueryError::Unavailable)?;
+                    self.note_object_path(&path);
                 }
             }
         }
@@ -494,6 +549,8 @@ fn delete_content_rows(
 ) -> Result<(), ObservationQueryError> {
     let workspace = spec.workspace_id.as_str();
     let session = spec.session_id.as_str();
+    super::records::retire_session_feedback(transaction, workspace, session)
+        .map_err(|_| ObservationQueryError::Unavailable)?;
     transaction
         .execute(
             "DELETE FROM observation_sensitive_payloads_v2 WHERE workspace_id=?1 AND session_id=?2",

@@ -1,0 +1,11 @@
+# Automatically generated - DO NOT EDIT!
+
+[[permission]]
+identifier = "allow-observation-capacity-set"
+description = "Enables the observation_capacity_set command without any pre-configured scope."
+commands.allow = ["observation_capacity_set"]
+
+[[permission]]
+identifier = "deny-observation-capacity-set"
+description = "Denies the observation_capacity_set command without any pre-configured scope."
+commands.deny = ["observation_capacity_set"]
