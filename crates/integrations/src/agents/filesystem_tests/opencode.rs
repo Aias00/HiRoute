@@ -123,6 +123,30 @@ fn opencode_dynamic_options_and_oauth_remain_non_importable() {
             .is_none()
     );
 }
+
+#[test]
+fn opencode_review_substituted_model_ids_cannot_be_imported_as_literals() {
+    let root = tempfile::tempdir().unwrap();
+    let scanner = scanner(root.path());
+    for id in [
+        "{env:UPSTREAM_MODEL}",
+        "{file:model-id.txt}",
+        "prefix-{env:UPSTREAM_MODEL}",
+    ] {
+        let mut value = declaration();
+        value["provider"]["ordinary"]["models"]["explicit"]["id"] = json!(id);
+        write_secret_settings(&scanner.opencode_user_models_target(), value);
+        let sources = scanner.opencode_api_sources().unwrap();
+        assert_eq!(sources.len(), 1);
+        assert!(!sources[0].supported_auth, "{id}");
+        assert!(sources[0].credential.is_none());
+        assert!(scanner.read_opencode_api_source(&sources[0]).is_err());
+    }
+    write_secret_settings(&scanner.opencode_user_models_target(), declaration());
+    let sources = scanner.opencode_api_sources().unwrap();
+    assert!(sources[0].supported_auth);
+    assert!(scanner.read_opencode_api_source(&sources[0]).is_ok());
+}
 #[test]
 fn opencode_settings_dependencies_detect_layer_changes_and_owned_provider_shadowing() {
     let root = tempfile::tempdir().unwrap();

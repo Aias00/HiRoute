@@ -1,7 +1,7 @@
 //! Additive model settings through the public transaction and real native artifact store.
 use super::*;
 
-fn model_spec(fixture: &QoderFixture) -> serde_json::Value {
+pub(super) fn model_spec(fixture: &QoderFixture) -> serde_json::Value {
     let publication = fixture
         .runtime
         .adapter
@@ -26,7 +26,7 @@ fn model_spec(fixture: &QoderFixture) -> serde_json::Value {
         .unwrap();
     json!({"schema_version":{"major":2,"minor":0},"context_id":fixture.context,"model":{"intent":"configure","settings":{"mode":"qoder_additional","allowed_plan_ids":[plan.agent_plan_id]}}})
 }
-fn model_status(fixture: &QoderFixture) -> serde_json::Value {
+pub(super) fn model_status(fixture: &QoderFixture) -> serde_json::Value {
     let result = fixture.service.dispatch_wire(request(
         "GetAgentConnectionStatus",
         json!({"schema_version":{"major":2,"minor":0},"context_id":fixture.context}),
@@ -35,7 +35,10 @@ fn model_status(fixture: &QoderFixture) -> serde_json::Value {
     assert!(result.error.is_none(), "{result:?}");
     result.data.unwrap()
 }
-fn restore_spec(fixture: &QoderFixture, status: &serde_json::Value) -> serde_json::Value {
+pub(super) fn restore_spec(
+    fixture: &QoderFixture,
+    status: &serde_json::Value,
+) -> serde_json::Value {
     json!({"schema_version":{"major":2,"minor":0},"context_id":fixture.context,"model":{"intent":"restore","restore_point_ref":status["restore_point_ref"]}})
 }
 
