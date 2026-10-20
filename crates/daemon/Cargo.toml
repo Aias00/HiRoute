@@ -54,6 +54,7 @@ name = "hirouted"
 path = "src/control/bin.rs"
 
 [dev-dependencies]
+fs2.workspace = true
 hiroute-client-core = { path = "../client-core" }
 tokio = { workspace = true, features = ["test-util"] }
 tokio-util.workspace = true
