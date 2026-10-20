@@ -96,6 +96,26 @@ fn preflight() -> Result<(), String> {
     }
     Ok(())
 }
+fn prepare_failure(error: &std::io::Error) -> String {
+    if let Some(failure) = error
+        .get_ref()
+        .and_then(|error| error.downcast_ref::<hiroute_host_runtime::UpgradePreflightFailure>())
+    {
+        return failure.to_string();
+    }
+    if let Some(failure) = error
+        .get_ref()
+        .and_then(|error| error.downcast_ref::<windows::ReplacementSpaceFailure>())
+    {
+        return failure.to_string();
+    }
+    match error.kind() {
+        std::io::ErrorKind::PermissionDenied => "UPGRADE_ACCESS_DENIED: Close the owning HiRoute instance and check access to this account's installation/recovery folders. Preserve data; do not apply blanket permission changes. / 请关闭占用该安装的 HiRoute 实例并检查本账户安装与恢复目录的访问权限，保留数据，不要批量修改权限。",
+        std::io::ErrorKind::StorageFull => "UPGRADE_INSUFFICIENT_SPACE: The program/recovery volume ran out of space. Keep history and recovery packages; free unrelated files before retrying. / 程序与恢复材料所在磁盘空间不足，请保留历史与恢复包，释放无关文件后再试。",
+        std::io::ErrorKind::WouldBlock => "UPGRADE_FILES_IN_USE: Close the owning HiRoute instance before retrying. No installed program was replaced by this preparation. / 请关闭占用该安装的 HiRoute 实例后再试，本次准备尚未替换已安装的程序。",
+        _ => "UPGRADE_RECOVERY_MATERIAL_UNAVAILABLE: The complete previous installation or its registration could not be verified. Keep both programs, all data and diagnostics. Obtain the matching material or support before retrying; an arbitrary older installer cannot repair it. / 无法验证完整旧安装或其注册信息，请保留两版程序、全部数据与诊断。补齐配套材料或寻求支持后再试，不要使用任意旧安装器覆盖。",
+    }.into()
+}
 fn request(cli: &std::path::Path, verb: &str, value: Value) -> Result<Value, String> {
     let bytes = serde_json::to_vec(&value).map_err(|_| "INSTALL_REQUEST_INVALID")?;
     let (success, value) = service::execute_reply(
@@ -236,12 +256,21 @@ pub fn run_if_requested() -> Option<i32> {
         );
     }
     if verb == "--installer-prepare" {
-        let result = if args.len() == 2 {
-            super::install_transaction::prepare(std::path::Path::new(&args[1]))
+        let result = if args.len() == 3 {
+            super::install_transaction::prepare(
+                std::path::Path::new(&args[1]),
+                std::path::Path::new(&args[2]),
+            )
         } else {
             Err(std::io::ErrorKind::InvalidInput.into())
         };
-        return Some(if result.is_ok() { 0 } else { 1 });
+        return Some(match result {
+            Ok(()) => 0,
+            Err(error) => {
+                eprintln!("{}", prepare_failure(&error));
+                1
+            }
+        });
     }
     if matches!(
         verb.as_str(),

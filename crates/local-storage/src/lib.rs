@@ -106,6 +106,22 @@ impl LocalStorageSet {
         if std::fs::metadata(storage.join("observation-hmac-key"))?.len() != 32 {
             return Err(LocalStorageError::Locked);
         }
+        match std::fs::symlink_metadata(package) {
+            Ok(metadata) if metadata.is_dir() && !metadata.file_type().is_symlink() => {}
+            Ok(_) => {
+                return Err(LocalStorageError::InvalidData.with_recovery(
+                    hiroute_host_runtime::StorageRecoveryCause::InvalidPackage,
+                    hiroute_host_runtime::StorageRecoveryAction::PreserveAndDiagnose,
+                ));
+            }
+            Err(error) if error.kind() == std::io::ErrorKind::NotFound => {
+                return Err(LocalStorageError::Io(error).with_recovery(
+                    hiroute_host_runtime::StorageRecoveryCause::MissingPackage,
+                    hiroute_host_runtime::StorageRecoveryAction::PreserveAndDiagnose,
+                ));
+            }
+            Err(error) => return Err(LocalStorageError::Io(error)),
+        }
         backup::source_snapshot::preflight_space(
             storage,
             None,

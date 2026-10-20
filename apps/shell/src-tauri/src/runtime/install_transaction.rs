@@ -11,6 +11,8 @@ use std::{
     path::{Path, PathBuf},
 };
 
+mod recovery;
+
 const INVENTORY: &str = "shell-package.json";
 const PENDING: &str = "install-pending.json";
 #[derive(Serialize, Deserialize)]
@@ -188,7 +190,7 @@ fn same_repair_payload(
                 )
         })
 }
-pub(super) fn prepare(manifest: &Path) -> io::Result<()> {
+pub(super) fn prepare(manifest: &Path, daemon: &Path) -> io::Result<()> {
     windows::preflight()?;
     let package: Package = read(manifest, false)?;
     package.validate()?;
@@ -308,20 +310,19 @@ pub(super) fn prepare(manifest: &Path) -> io::Result<()> {
     for (name, expected) in &old {
         backup_file(&root.join(name), &backups.join(name), expected)?;
     }
-    write(
-        &data.join(PENDING),
-        &Pending {
-            schema: "hiroute.windows-shell-transaction/v1".into(),
-            phase: Phase::Prepared,
-            old,
-            new,
-            service_active,
-            previous_package,
-            previous_autostart,
-            console_desired,
-            shell_login,
-        },
-    )
+    let value = Pending {
+        schema: "hiroute.windows-shell-transaction/v1".into(),
+        phase: Phase::Prepared,
+        old,
+        new,
+        service_active,
+        previous_package,
+        previous_autostart,
+        console_desired,
+        shell_login,
+    };
+    recovery::prepare(&value, &package, daemon)?;
+    write(&data.join(PENDING), &value)
 }
 /// NSIS overlays files, so old content-hashed assets must leave the package's
 /// closed file set before the Rust package reader admits the new payload.

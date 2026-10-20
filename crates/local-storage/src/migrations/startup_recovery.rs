@@ -4,6 +4,7 @@ use hiroute_host_runtime::StorageRecoveryAction as Action;
 
 pub(crate) fn publish_failure(root: &Path, error: LocalStorageError) -> LocalStorageError {
     let mut recovery = error.recovery();
+    let initial = recovery.clone();
     // Missing package and matching SQL markers cannot establish that a complete
     // original group is readable by the exact old program. In particular,
     // current Gateway payloads can be incompatible without a SQL version change.
@@ -37,6 +38,12 @@ pub(crate) fn publish_failure(root: &Path, error: LocalStorageError) -> LocalSto
         }
     }
     let _ = recovery.store(root);
+    // Preserve the existing public Rust error variants when the additional
+    // disposition carries no different facts. A changed batch/action must still
+    // travel with the error instead of depending on a writable report file.
+    if recovery == initial && !matches!(error, LocalStorageError::Recovery { .. }) {
+        return error;
+    }
     LocalStorageError::Recovery {
         recovery: Box::new(recovery),
         source: Box::new(match error {

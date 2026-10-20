@@ -10,6 +10,56 @@ use std::{
 };
 
 pub const RETAINED_PACKAGE_FILE: &str = "upgrade-package.json";
+
+#[derive(Clone, Debug, Deserialize, Serialize)]
+#[serde(deny_unknown_fields)]
+pub struct WindowsDesktopRestore {
+    pub schema: String,
+    pub program: PathBuf,
+    pub desktop: Option<PathBuf>,
+    pub task_name: String,
+    pub task_autostart: bool,
+    pub shell_login: bool,
+    pub files: BTreeMap<String, PathBuf>,
+}
+impl WindowsDesktopRestore {
+    pub fn validate(&self) -> io::Result<()> {
+        if self.schema != "hiroute.windows-desktop-restore/v1"
+            || !self.program.is_absolute()
+            || self
+                .desktop
+                .as_ref()
+                .is_some_and(|path| !path.is_absolute())
+            || self.files.is_empty()
+            || !self.task_name.starts_with("HiRoute-")
+            || self.task_name.len() != 71
+            || !self.task_name[7..]
+                .bytes()
+                .all(|byte| byte.is_ascii_hexdigit() && !byte.is_ascii_uppercase())
+            || self.files.len() > 6000
+            || !self.files.contains_key("installation/standalone.json")
+            || !self
+                .files
+                .contains_key("installation/windows-background.json")
+            || self.files.iter().any(|(name, target)| {
+                !name.starts_with("installation/")
+                    || !target.is_absolute()
+                    || name.contains(['\\', ':'])
+                    || name.split('/').any(|part| {
+                        part.is_empty()
+                            || part == "."
+                            || part == ".."
+                            || !part
+                                .bytes()
+                                .all(|byte| byte.is_ascii_alphanumeric() || b"-_.".contains(&byte))
+                    })
+            })
+        {
+            return Err(invalid());
+        }
+        Ok(())
+    }
+}
 #[derive(Clone, Debug, Deserialize, Serialize)]
 #[serde(deny_unknown_fields)]
 pub struct RetainedRecoveryPackage {
@@ -173,6 +223,49 @@ impl RetainedRecoveryPackage {
 #[cfg(test)]
 mod tests {
     use super::*;
+    #[test]
+    fn complete_desktop_restore_metadata_rejects_unknown_or_foreign_destinations() {
+        let directory = tempfile::tempdir().unwrap();
+        let value = WindowsDesktopRestore {
+            schema: "hiroute.windows-desktop-restore/v1".into(),
+            program: directory.path().join("old-program"),
+            desktop: Some(directory.path().join("old-desktop")),
+            task_name: format!("HiRoute-{}", "a".repeat(64)),
+            task_autostart: false,
+            shell_login: true,
+            files: BTreeMap::from([
+                (
+                    "installation/standalone.json".into(),
+                    directory.path().join("standalone.json"),
+                ),
+                (
+                    "installation/windows-background.json".into(),
+                    directory.path().join("background.json"),
+                ),
+            ]),
+        };
+        value.validate().unwrap();
+        let mut unknown = serde_json::to_value(&value).unwrap();
+        unknown["run_arbitrary_command"] = "ignored fields must not be accepted".into();
+        assert!(serde_json::from_value::<WindowsDesktopRestore>(unknown).is_err());
+        let mut unsafe_record = value.clone();
+        unsafe_record.files.insert(
+            "installation/../foreign".into(),
+            directory.path().join("foreign"),
+        );
+        assert!(unsafe_record.validate().is_err());
+        unsafe_record = value.clone();
+        unsafe_record.desktop = Some("relative-desktop".into());
+        assert!(unsafe_record.validate().is_err());
+        unsafe_record = value.clone();
+        unsafe_record
+            .files
+            .remove("installation/windows-background.json");
+        assert!(unsafe_record.validate().is_err());
+        unsafe_record = value;
+        unsafe_record.task_name = "unrelated-task".into();
+        assert!(unsafe_record.validate().is_err());
+    }
     #[test]
     fn retained_source_rejects_changed_package_and_wrong_target() {
         let dir = tempfile::tempdir().unwrap();

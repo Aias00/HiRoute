@@ -16,11 +16,68 @@ pub struct UpgradePreflight {
     pub available_bytes: u64,
     pub recovery: Option<StorageRecovery>,
 }
+#[derive(Debug)]
+pub struct UpgradePreflightFailure {
+    pub code: &'static str,
+    pub recovery: Option<Box<StorageRecovery>>,
+}
+impl std::fmt::Display for UpgradePreflightFailure {
+    fn fmt(&self, formatter: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        formatter.write_str(self.code)?;
+        if let Some(recovery) = &self.recovery {
+            write!(formatter, ": {}", recovery.operator_guidance())?;
+            if let Some(space) = &recovery.storage_space {
+                write!(
+                    formatter,
+                    " Required: {} bytes; available: {} bytes.",
+                    space.required_bytes, space.available_bytes
+                )?;
+            }
+        }
+        Ok(())
+    }
+}
+impl std::error::Error for UpgradePreflightFailure {}
+
 pub fn run_upgrade_preflight(
     program: &Path,
     storage: &Path,
     package: &Path,
 ) -> Result<UpgradePreflight, &'static str> {
+    checked_upgrade_preflight(program, storage, package).map_err(|failure| failure.code)
+}
+
+pub fn checked_upgrade_preflight(
+    program: &Path,
+    storage: &Path,
+    package: &Path,
+) -> Result<UpgradePreflight, UpgradePreflightFailure> {
+    let (success, report) =
+        transport(program, storage, package).map_err(|code| UpgradePreflightFailure {
+            code,
+            recovery: None,
+        })?;
+    if !success || report.recovery.is_some() {
+        let code = match report.recovery.as_ref().map(|recovery| recovery.cause) {
+            Some(crate::StorageRecoveryCause::InsufficientSpace) => "UPGRADE_INSUFFICIENT_SPACE",
+            Some(crate::StorageRecoveryCause::MissingKey) => "UPGRADE_KEY_UNAVAILABLE",
+            Some(crate::StorageRecoveryCause::MissingPackage) => "UPGRADE_RECOVERY_PACKAGE_MISSING",
+            Some(crate::StorageRecoveryCause::InvalidPackage) => "UPGRADE_RECOVERY_PACKAGE_INVALID",
+            _ => "UPGRADE_PREFLIGHT_REFUSED",
+        };
+        return Err(UpgradePreflightFailure {
+            code,
+            recovery: report.recovery.map(Box::new),
+        });
+    }
+    Ok(report)
+}
+
+fn transport(
+    program: &Path,
+    storage: &Path,
+    package: &Path,
+) -> Result<(bool, UpgradePreflight), &'static str> {
     let mut command = Command::new(program);
     command
         .arg("--upgrade-preflight")
@@ -67,13 +124,86 @@ pub fn run_upgrade_preflight(
     if report.schema != "hiroute.upgrade-preflight/v1" {
         return Err("UPGRADE_PREFLIGHT_INVALID");
     }
-    if !status.success() || report.recovery.is_some() {
-        return Err(match report.recovery.map(|r| r.cause) {
-            Some(crate::StorageRecoveryCause::InsufficientSpace) => "UPGRADE_INSUFFICIENT_SPACE",
-            Some(crate::StorageRecoveryCause::MissingKey) => "UPGRADE_KEY_UNAVAILABLE",
-            Some(crate::StorageRecoveryCause::InvalidPackage) => "UPGRADE_RECOVERY_PACKAGE_INVALID",
-            _ => "UPGRADE_PREFLIGHT_REFUSED",
-        });
+    if let Some(recovery) = &report.recovery
+        && (recovery.schema != crate::STORAGE_RECOVERY_SCHEMA
+            || !matches!(
+                recovery.action,
+                crate::StorageRecoveryAction::PreserveAndDiagnose
+                    | crate::StorageRecoveryAction::RetryCurrent
+            )
+            || recovery.backup_batch.is_some()
+            || recovery.backup_name.is_some()
+            || recovery.original_state_digest.is_some())
+    {
+        // Provisional checks may explain prerequisites, but can never grant a
+        // current-batch resume, restoration or old-program launch authority.
+        return Err("UPGRADE_PREFLIGHT_INVALID");
     }
-    Ok(report)
+    Ok((status.success(), report))
+}
+
+#[cfg(all(test, unix))]
+mod tests {
+    use super::*;
+    use std::os::unix::fs::PermissionsExt;
+
+    #[test]
+    fn typed_preflight_failure_preserves_measured_recovery_facts_and_rejects_extra_fields() {
+        let directory = tempfile::tempdir().unwrap();
+        let program = directory.path().join("preflight");
+        let report = serde_json::json!({
+            "schema":"hiroute.upgrade-preflight/v1", "history_cutover_required":false,
+            "required_bytes":4096, "available_bytes":12,
+            "recovery":{
+                "schema":"hiroute.storage-startup-recovery/v1", "cause":"insufficient_space",
+                "action":"retry_current", "storage_space":{"required_bytes":4096,"available_bytes":12}
+            }
+        });
+        let write = |report: &serde_json::Value| {
+            std::fs::write(
+                &program,
+                format!("#!/bin/sh\ncat <<'REPORT'\n{report}\nREPORT\nexit 1\n"),
+            )
+            .unwrap();
+            std::fs::set_permissions(&program, std::fs::Permissions::from_mode(0o700)).unwrap();
+        };
+        write(&report);
+        let failure =
+            checked_upgrade_preflight(&program, directory.path(), directory.path()).unwrap_err();
+        assert_eq!(failure.code, "UPGRADE_INSUFFICIENT_SPACE");
+        assert_eq!(
+            failure
+                .recovery
+                .as_ref()
+                .unwrap()
+                .storage_space
+                .as_ref()
+                .unwrap()
+                .required_bytes,
+            4096
+        );
+        assert!(failure.to_string().contains("4096 bytes"));
+        assert!(failure.to_string().contains("12 bytes"));
+        assert_eq!(
+            run_upgrade_preflight(&program, directory.path(), directory.path()).unwrap_err(),
+            "UPGRADE_INSUFFICIENT_SPACE"
+        );
+        let mut unknown = report;
+        unknown["arbitrary_native_error"] = "never expose raw native output".into();
+        write(&unknown);
+        let failure =
+            checked_upgrade_preflight(&program, directory.path(), directory.path()).unwrap_err();
+        assert!(failure.recovery.is_none());
+        assert!(!failure.to_string().contains("raw native output"));
+        unknown
+            .as_object_mut()
+            .unwrap()
+            .remove("arbitrary_native_error");
+        unknown["recovery"]["action"] = "reinstall_original".into();
+        write(&unknown);
+        let failure =
+            checked_upgrade_preflight(&program, directory.path(), directory.path()).unwrap_err();
+        assert_eq!(failure.code, "UPGRADE_PREFLIGHT_INVALID");
+        assert!(failure.recovery.is_none());
+    }
 }

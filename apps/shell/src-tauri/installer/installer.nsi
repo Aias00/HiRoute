@@ -390,6 +390,7 @@ Function PageLeaveReinstall
 FunctionEnd
 
 ; Fixed per-user program directory; never a standalone state directory.
+Page custom HiRouteHistoryNotice
 Page custom HiRouteOptions HiRouteOptionsLeave
 
 ; 6. Start menu shortcut page
@@ -515,6 +516,10 @@ Function .onInit
       File "/oname=$PLUGINSDIR\hiroute-package.json" "{{no-escape @key}}"
     !else if "{{this.[1]}}" == "standalone/package-manifest.json"
       File "/oname=$PLUGINSDIR\hiroute-package.json" "{{no-escape @key}}"
+    !else if "{{this.[1]}}" == "standalone\hirouted.exe"
+      File "/oname=$PLUGINSDIR\hirouted-preflight.exe" "{{no-escape @key}}"
+    !else if "{{this.[1]}}" == "standalone/hirouted.exe"
+      File "/oname=$PLUGINSDIR\hirouted-preflight.exe" "{{no-escape @key}}"
     !endif
   {{/each}}
   nsExec::ExecToStack '"$PLUGINSDIR\hiroute-preflight.exe" --installer-preflight'

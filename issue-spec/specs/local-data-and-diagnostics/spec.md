@@ -272,6 +272,11 @@ Recovery presentation SHALL distinguish correcting prerequisites, current-batch 
 - **WHEN** Linux systemd or a Windows ordinary-user Task starts the installed candidate after an upgrade
 - **THEN** the matching complete old package is retained and its protected handoff is verified against the storage root and candidate image; package cleanup cannot delete it prematurely and an unrelated terminal variable is not required for ordinary installer operation.
 
+#### Scenario: Complete Windows Desktop recovery material
+
+- **WHEN** NSIS admits a replacement over an existing Desktop
+- **THEN** preflight precedes installed-file replacement and retains both program namespaces, shell/uninstaller/inventory, the installation owner's complete native file map, Task definition/login choices and fixed current-user Apps registration. Space budgets combine allocations sharing a volume and keep separate volumes independent. Whole-group recovery restores those matching materials under the same ordinary account, with a batch-specific bilingual guide and actual readiness/request verification. A same-payload repair preserves the accepted original handoff instead of replacing it with the current program.
+
 #### Scenario: Prerequisite refusal and cancellation
 
 - **WHEN** preflight finds unavailable/unverified material or insufficient recovery space, or the user cancels while waiting for work

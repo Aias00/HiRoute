@@ -112,9 +112,14 @@ file or service conflict stays on the bundled failure page with a diagnostics pa
 
 ## Storage-format failure and whole-group recovery
 
-NSIS/native installation retains the matching complete previous standalone
-package through a private storage-root-bound handoff, checked against the new
-daemon image. Candidate preflight runs before installed-program replacement; startup
+Before NSIS replaces installed files, its verified candidate daemon checks the
+stopped-source requirements. Preparation retains both the complete previous
+Desktop (including shell, uninstaller and inventory) and standalone version root,
+the native transaction's CLI/daemon/Skill/documentation file map, Task definition,
+login choices and the fixed current-user HiRoute Apps registration. The protected
+handoff binds this material to the storage root and new daemon image. Space checks
+combine simultaneous allocations on the same native volume and check separate
+program/data volumes separately. Candidate preflight runs before replacement; startup
 revalidates under the storage writer barrier. Package cleanup retains the old
 source while its handoff is needed. This does not use macOS App discovery or
 assume that a PowerShell variable is inherited by the logged-on Task.

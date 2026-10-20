@@ -21,15 +21,15 @@ pub(super) fn run_if_requested() -> Option<i32> {
             root.join("observation"),
         )
         .map_err(|_| {
-            StorageRecovery::new(
+            Box::new(StorageRecovery::new(
                 StorageRecoveryCause::UnknownState,
                 StorageRecoveryAction::PreserveAndDiagnose,
-            )
+            ))
         })?;
         let required =
             hiroute_local_storage::LocalStorageSet::preflight_upgrade(&root, &package, seal)
-                .map_err(|e| e.recovery())?;
-        Ok::<_, StorageRecovery>((seal, required))
+                .map_err(|e| Box::new(e.recovery()))?;
+        Ok::<_, Box<StorageRecovery>>((seal, required))
     })();
     let available = fs2::available_space(if root.exists() {
         &root
@@ -44,7 +44,7 @@ pub(super) fn run_if_requested() -> Option<i32> {
             e.storage_space
                 .as_ref()
                 .map_or(0, |space| space.required_bytes),
-            Some(e),
+            Some(*e),
         ),
     };
     let failed = recovery.is_some();
