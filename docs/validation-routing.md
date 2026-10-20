@@ -237,6 +237,13 @@ normal Rust installation entry with the captured login/tray defaults; it does
 not force a stop or bypass restoration. This mutates the prepared installation
 and is diagnostic evidence, never a successful full NSIS result. Inspect its
 output and resulting transaction before any further installation attempt.
+For a refusal before any transaction was published, `installer-prepare` captures
+the actual candidate preparation adapter's stderr. It requires the exact installed
+`--from-product`, recent inspection and `--prepare-manifest` independently extracted
+from that verified failed NSIS. The candidate revision and CLI/daemon digests must
+match; pending transactions are refused. This can publish preparation material
+and must be inspected before another action. It does not replace installed programs
+and is never a successful full-installer verdict.
 If that failed unreleased producer never registered its generated uninstaller,
 manual `installer-quarantine` can preserve that one file in the run's evidence.
 It requires the same inspection/prior-product admission and an independently

@@ -338,7 +338,7 @@ def main():
     desktop = commands.add_parser('desktop-session', help='Measured installed Desktop and native UI acceptance')
     desktop.add_argument('--product', required=True)
     desktop.add_argument('--action', dest='desktop_action', required=True,
-                         choices=('install', 'installer-resume', 'installer-quarantine', 'launch', 'snapshot', 'invoke', 'text', 'click', 'scroll', 'close', 'quit', 'tray-observe', 'desktop-state', 'cli', 'native-files', 'codex-call', 'codex-inference', 'network-probe', 'recovery-preview', 'recovery-restore-original', 'recovery-lock-ui', 'recovery-file-use-ui', 'recovery-format-ui'))
+                         choices=('install', 'installer-prepare', 'installer-resume', 'installer-quarantine', 'launch', 'snapshot', 'invoke', 'text', 'click', 'scroll', 'close', 'quit', 'tray-observe', 'desktop-state', 'cli', 'native-files', 'codex-call', 'codex-inference', 'network-probe', 'recovery-preview', 'recovery-restore-original', 'recovery-lock-ui', 'recovery-file-use-ui', 'recovery-format-ui'))
     desktop.add_argument('--from-product', help='Exact installed bundle admitted before a cross-build upgrade')
     desktop.add_argument('--recover-product', help='Exact interrupted bundle, with a recent inspection, before normal NSIS recovery')
     desktop.add_argument('--observation-run')
@@ -352,6 +352,7 @@ def main():
     desktop.add_argument('--native-tls', action='store_true', help='Compare the Windows system TLS verifier without changing trust policy')
     desktop.add_argument('--generated-uninstaller-sha256', help='Digest independently extracted from the verified failed NSIS artifact, for manual quarantine only')
     desktop.add_argument('--cli-args', type=Path, help='Private JSON array of public CLI arguments')
+    desktop.add_argument('--prepare-manifest', type=Path, help='Manifest independently extracted from the verified failed NSIS, for its actual preparation adapter only')
     run = commands.add_parser('run')
     run.add_argument('--harness', required=True)
     run.add_argument('--product', required=True)
@@ -414,7 +415,7 @@ def main():
             if args.desktop_action == 'network-probe' and (
                     not args.source_id or not re.fullmatch(r'source/[A-Za-z0-9._:-]{1,240}', args.source_id)):
                 raise ValueError('TLS diagnostics require an explicit saved source identity')
-            if args.desktop_action in ('installer-resume', 'installer-quarantine', 'recovery-preview', 'recovery-restore-original') and (
+            if args.desktop_action in ('installer-prepare', 'installer-resume', 'installer-quarantine', 'recovery-preview', 'recovery-restore-original') and (
                     not args.from_product or not args.observation_run
                     or not re.fullmatch(r'[a-f0-9]{32}', args.observation_run)):
                 raise ValueError('Installer resume requires the prior product and a recent installation inspection')
@@ -433,6 +434,11 @@ def main():
                           case='native_desktop_' + args.desktop_action.replace('-', '_'), operation='desktop', ignored=False,
                           timeout={'recovery-restore-original':1500,'install':810,'recovery-lock-ui':600,'recovery-file-use-ui':600,'recovery-format-ui':1200}.get(args.desktop_action,240))
             values.pop('cli_args')
+            values.pop('prepare_manifest')
+            if args.desktop_action == 'installer-prepare':
+                if args.prepare_manifest is None or not 1 <= args.prepare_manifest.stat().st_size <= 64 * 1024:
+                    raise ValueError('Preparation diagnosis requires the bounded, independently extracted NSIS manifest')
+                values['prepare_manifest'] = json.loads(args.prepare_manifest.read_text(encoding='utf-8'))
             if args.desktop_action == 'cli':
                 if args.cli_args is None:
                     raise ValueError('Public CLI acceptance requires a private argument file')

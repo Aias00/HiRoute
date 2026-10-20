@@ -32,6 +32,19 @@ desktop = load('windows-desktop-session')
 
 
 class Runner(unittest.TestCase):
+    def test_prepare_manifest_binds_both_binaries_and_revision(self):
+        pm=dict(source_revision='a'*40,files={name:dict(sha256=name) for name in ('hiroute.exe','hirouted.exe')})
+        value=dict(revision='a'*40,target='x86_64-pc-windows-msvc',
+                   files={'bin/'+name:dict(sha256=name) for name in pm['files']})
+        self.assertEqual(json.loads(desktop.prepare_manifest_bytes(value,pm)),value)
+        for name in pm['files']:
+            other=json.loads(json.dumps(value));other['files']['bin/'+name]['sha256']='changed'
+            with self.assertRaisesRegex(ValueError,'substitutes'):
+                desktop.prepare_manifest_bytes(other,pm)
+        value['revision']='b'*40
+        with self.assertRaisesRegex(ValueError,'not the measured'):
+            desktop.prepare_manifest_bytes(value,pm)
+
     def setUp(self):
         self.temporary = tempfile.TemporaryDirectory()
         self.addCleanup(self.temporary.cleanup)

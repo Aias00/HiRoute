@@ -1130,12 +1130,54 @@ def format_startup_ui(request, run, product, pm, helper, activity, root, baselin
             if not ready:raise ValueError('The controlled fixture could not return the current Gateway to readiness')
 
 
+def prepare_manifest_bytes(value, pm):
+    """Admit data for the measured candidate; never accept executable paths or overrides."""
+    if (not isinstance(value,dict) or value.get('revision')!=pm['source_revision']
+            or value.get('target')!='x86_64-pc-windows-msvc' or not isinstance(value.get('files'),dict)):
+        raise ValueError('The preparation manifest is not the measured candidate')
+    for name in ('hiroute.exe','hirouted.exe'):
+        if value['files'].get('bin/'+name,{}).get('sha256')!=pm['files'][name]['sha256']:
+            raise ValueError('The preparation manifest substitutes a candidate binary')
+    data=json.dumps(value).encode('utf-8')
+    if not 1<=len(data)<=64*1024:raise ValueError('The preparation manifest exceeds its bound')
+    return data
+
+
+def installer_prepare(request,run,product,pm,helper,activity,manifest,root):
+    """Diagnose the real mutating pre-replacement adapter; never claim an NSIS result."""
+    previous,observation=request.get('from_product'),request.get('observation_run')
+    if not re.fullmatch(r'[a-f0-9]{12}-[a-f0-9]{12}',previous or '') or not re.fullmatch(r'[a-f0-9]{32}',observation or ''):
+        raise ValueError('Preparation diagnosis requires the exact installed product and recent inspection')
+    inspected=root/'runs'/observation
+    original=helper.bounded_json(inspected/'request.json');result=helper.bounded_json(inspected/'result.json')
+    if (original.get('operation')!='inspect' or original.get('product')!=previous or not result.get('passed')
+            or result.get('administrator') is not False or original['config']['user']!=request['config']['user']
+            or original['config']['session_id']!=request['config']['session_id']
+            or time.time()-(inspected/'result.json').stat().st_mtime>3600):
+        raise ValueError('Preparation inspection is stale or belongs to another product/account')
+    admit_nsis_install(request,helper,activity,manifest,root)
+    facts=helper.inspect_installation(Path.home(),Path(os.environ['LOCALAPPDATA']))
+    if facts.get('install-pending.json') or facts.get('install-journal.json'):
+        raise ValueError('Preserve the pending native transaction; do not replay preparation diagnosis')
+    path=run/'incoming-package.json';path.write_bytes(prepare_manifest_bytes(request.get('prepare_manifest'),pm))
+    done=subprocess.run([str(product/'windows_desktop.exe'),'--installer-prepare',str(path),str(product/'hirouted.exe')],
+        capture_output=True,timeout=180,creationflags=0x08000000)
+    (run/'prepare-adapter.stdout').write_bytes(done.stdout);(run/'prepare-adapter.stderr').write_bytes(done.stderr)
+    (run/'prepare-adapter.after.json').write_text(json.dumps(
+        helper.inspect_installation(Path.home(),Path(os.environ['LOCALAPPDATA'])),indent=2),encoding='utf-8')
+    if done.returncode:raise ValueError('The native preparation adapter refused; inspect its captured stderr before another action')
+    return dict(native_entry='measured NSIS preparation adapter; not a full NSIS result',exit_code=done.returncode,
+                assessment='preparation_only; installed programs were not replaced')
+
+
 def execute(request, run, product, pm, helper, activity, manifest, root):
     if activity.get('administrator_groups') is not False:
         raise ValueError('Native Desktop evidence requires a standard account, not a filtered administrator')
     action = request['desktop_action']
-    if action not in ('install', 'installer-resume', 'installer-quarantine', 'launch', 'snapshot', 'invoke', 'text', 'click', 'scroll', 'close', 'quit', 'tray-observe', 'desktop-state', 'cli', 'native-files', 'codex-call', 'codex-inference', 'network-probe', 'recovery-preview', 'recovery-restore-original', 'recovery-lock-ui', 'recovery-file-use-ui', 'recovery-format-ui'):
+    if action not in ('install', 'installer-prepare', 'installer-resume', 'installer-quarantine', 'launch', 'snapshot', 'invoke', 'text', 'click', 'scroll', 'close', 'quit', 'tray-observe', 'desktop-state', 'cli', 'native-files', 'codex-call', 'codex-inference', 'network-probe', 'recovery-preview', 'recovery-restore-original', 'recovery-lock-ui', 'recovery-file-use-ui', 'recovery-format-ui'):
         raise ValueError('Unknown native Desktop action')
+    if action=='installer-prepare':
+        return installer_prepare(request,run,product,pm,helper,activity,manifest,root)
     if action == 'recovery-restore-original':
         return restore_original(request, run, product, pm, helper, activity, manifest, root)
     if action == 'recovery-lock-ui':
