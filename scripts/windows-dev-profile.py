@@ -312,10 +312,14 @@ def original_recovery_source(native_home, local_app_data, baseline):
         raise ValueError('Original batch identity changed')
     source = plain(batch / 'source')
     record = bounded_json(source / 'source-backup.json')
-    if (record.get('schema') != 'hiroute.upgrade-source-backup/v2'
-            or record.get('complete') is not True or record.get('source_storage') != str(storage)
-            or record.get('source_info', {}).get('batch_id') != batch_id):
-        raise ValueError('The recovery source is incomplete or belongs to another storage root')
+    if record.get('schema') != 'hiroute.upgrade-source-backup/v2' or record.get('complete') is not True:
+        raise ValueError('The original recovery source is not a complete sealed group')
+    if record.get('source_info', {}).get('batch_id') != batch_id:
+        raise ValueError('The original recovery source belongs to another batch')
+    recorded_storage = record.get('source_storage')
+    if (not isinstance(recorded_storage, str) or not Path(recorded_storage).is_absolute()
+            or native_directory_identity(plain(recorded_storage)) != native_directory_identity(storage)):
+        raise ValueError('The original recovery source belongs to another native storage directory')
     files = record.get('files')
     if not isinstance(files, dict) or not 1 <= len(files) <= 10000:
         raise ValueError('Original material inventory is unavailable')

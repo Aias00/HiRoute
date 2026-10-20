@@ -174,6 +174,9 @@ class Runner(unittest.TestCase):
         baseline = dict(source_revision='a'*40, files=binaries)
         with patch.object(profiles, 'native_directory_identity', return_value=[1, 2]):
             self.assertEqual(profiles.original_recovery_source(home, local, baseline)['batch_id'], 'batch-1')
+            with patch.object(profiles, 'native_directory_identity', side_effect=[[9, 9], [1, 2]]):
+                with self.assertRaisesRegex(ValueError, 'another native storage'):
+                    profiles.original_recovery_source(home, local, baseline)
             (source / 'storage/master-key').write_bytes(b'changed authority')
             with self.assertRaisesRegex(ValueError, 'material changed'):
                 profiles.original_recovery_source(home, local, baseline)
