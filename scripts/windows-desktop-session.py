@@ -816,6 +816,17 @@ def restore_original(request, run, product, pm, helper, activity, manifest, root
     if check.returncode or check.stdout.strip() != '0':
         raise ValueError('Owned processes remain; preserve the stopped recovery state before copying data')
     stage('current-task-stopped-login-disabled-and-processes-exited')
+    if locations is not None:
+        # Follow the guide's ordering: remove the stopped registration before
+        # activating old data, so a pending failure restart cannot launch the
+        # newer daemon against that restored group.
+        command('schtasks.exe',['/Delete','/TN',task,'/F'],'remove-stopped-current-task')
+        stopped_again=subprocess.run(['powershell.exe','-NoProfile','-NonInteractive','-Command',
+            "$ErrorActionPreference='Stop';$images=@("+images+");@(Get-CimInstance Win32_Process | Where-Object {$_.ExecutablePath -in $images}).Count"],
+            capture_output=True,timeout=30,text=True,creationflags=0x08000000)
+        if stopped_again.returncode or stopped_again.stdout.strip()!='0':
+            raise ValueError('An owned process raced Task removal; no old data was activated')
+        stage('stopped-current-registration-removed-before-old-data-activation')
     for label, path in [('program',install),('desktop',roots['programs']),('installation',roots['data'])]:
         copy_recovery_tree(helper, path, newer/label, run/(label+'-copy.log'))
     storage = helper.plain(helper.extended_windows_path(str(roots['state']/'storage')))
@@ -844,7 +855,6 @@ def restore_original(request, run, product, pm, helper, activity, manifest, root
         stage('matching-original-native-installer-completed')
     else:
         package = source['source']/'recovery-package'
-        command('schtasks.exe',['/Delete','/TN',task,'/F'],'remove-stopped-current-task')
         for label,old,target in [('program',package/'program',Path(locations['program'])),
                                  ('desktop',package/'desktop',Path(locations['desktop']))]:
             target = helper.plain(target)
@@ -1038,8 +1048,22 @@ def format_startup_ui(request, run, product, pm, helper, activity, root, baselin
     """Preserve a clean current group, refuse a future marker, then leave it offline for explicit restore."""
     roots,facts,shell=startup_ui_context(request,product,pm,helper,activity,root)
     source=helper.original_recovery_source(Path.home(),Path(os.environ['LOCALAPPDATA']),baseline)
-    if helper.original_desktop_locations(source,baseline,roots) is None:
+    locations=helper.original_desktop_locations(source,baseline,roots)
+    if locations is None:
         raise ValueError('The format UI case requires a complete retained Desktop and original Task')
+    guides={}
+    for name in ('RECOVERY.md','恢复说明.md','PROGRAM-LOCATIONS.md'):
+        path=helper.plain(source['source']/name)
+        if not path.is_file() or not 1<=path.stat().st_size<=128*1024:
+            raise ValueError('The original platform/language recovery guide is unavailable')
+        text=path.read_text(encoding='utf-8')
+        if name!='PROGRAM-LOCATIONS.md' and source['batch_id'] not in text:
+            raise ValueError('A generated recovery guide belongs to another batch')
+        if name=='PROGRAM-LOCATIONS.md' and ('task.xml' not in text or locations['task_name'] not in text
+                or 'service install' in text or 'service uninstall' in text):
+            raise ValueError('The original Windows guide is not paired with its native registration')
+        (run/name).write_text(text,encoding='utf-8')
+        guides[name]=dict(sha256=helper.digest(path),bytes=path.stat().st_size)
     install=Path(facts['marker']['record']['install_root']);cli=install/'hiroute.exe'
     def command(args,label):
         done=subprocess.run([str(cli),*args],capture_output=True,timeout=150,creationflags=0x08000000)
@@ -1092,6 +1116,7 @@ def format_startup_ui(request, run, product, pm, helper, activity, root, baselin
         passed=True
         return dict(native_entry='real standard-user future-format failure page and offline guide',languages=languages,
                     batch_id=source['batch_id'],preserved_clean_current=str(saved),
+                    guide_files=guides,
                     service_state='offline; explicit complete-group operator restoration required')
     finally:
         if child is not None and child.poll() is None:
