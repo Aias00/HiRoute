@@ -620,7 +620,6 @@ def admit_nsis_install(request, helper, activity, manifest, root):
         raise ValueError('Fresh Desktop installation must not adopt an existing product')
 
 
-
 # The shell's installer adapter permits one 600-second native install request.
 # NSIS also extracts files and runs its prepare/commit hooks outside that request.
 # Keep this specific whole-installer watchdog outside that product deadline;
@@ -699,286 +698,7 @@ def nsis_install(installer, run, locations):
             time.sleep(0.5)
 
 
-def robocopy_path(path):
-    # Robocopy handles long children natively but treats Python's extended
-    # device prefix as a network path. Keep that prefix for Python file IO only.
-    value = str(path)
-    if value.startswith('\\\\?\\UNC\\'):
-        return '\\\\' + value[8:]
-    return value[4:] if value.startswith('\\\\?\\') else value
-
-
-def install_commit_file_use(request,run,product,pm,helper,activity,manifest,root):
-    """Fail the real NSIS commit after readiness; release only this case's handle."""
-    previous=request.get('from_product')
-    if not re.fullmatch(r'[a-f0-9]{12}-[a-f0-9]{12}',previous or '') or request.get('recover_product'):
-        raise ValueError('The commit file-use journey requires the exact healthy original installation')
-    prior=manifest(root/'bundles'/previous)
-    roots,before,shell=installed(helper,root/'bundles'/previous,prior)
-    old=Path(before['marker']['record']['install_root'])
-    allowed={old/'hirouted.exe',old/'libexec/cliproxyapi.exe'}
-    if any(Path(p.get('ExecutablePath') or '') not in allowed for p in activity.get('processes',[])):
-        raise ValueError('Quit Desktop and preserve unrelated activity before the commit fixture')
-    if not desktop_state().get('interactive'):
-        raise ValueError('The existing input desktop is unavailable; no commit fixture was created')
-    admit_nsis_install(request,helper,activity,manifest,root)
-    ready=subprocess.run([str(old/'hiroute.exe'),'system','status','--output','json'],capture_output=True,timeout=150,creationflags=0x08000000)
-    (run/'before-commit-fixture-system.stdout').write_bytes(ready.stdout);(run/'before-commit-fixture-system.stderr').write_bytes(ready.stderr)
-    if ready.returncode or json.loads(ready.stdout).get('data',{}).get('gateway')!='ready':
-        raise ValueError('The original Gateway must be healthy before the commit file-use fixture')
-    inventory=helper.plain(roots['programs']/'shell-package.json');original=helper.digest(inventory)
-    kernel=ctypes.WinDLL('kernel32',use_last_error=True)
-    from ctypes import wintypes
-    kernel.CreateFileW.argtypes=[wintypes.LPCWSTR,wintypes.DWORD,wintypes.DWORD,ctypes.c_void_p,wintypes.DWORD,wintypes.DWORD,wintypes.HANDLE]
-    kernel.CreateFileW.restype=wintypes.HANDLE;kernel.CloseHandle.argtypes=[wintypes.HANDLE]
-    # Allow preparation/hash reads, but refuse the final atomic inventory replacement.
-    handle=kernel.CreateFileW(str(inventory),0x80000000,1,None,3,0x00200000,None)
-    if handle==wintypes.HANDLE(-1).value:raise ctypes.WinError(ctypes.get_last_error())
-    code=None
-    try:
-        try:nsis_install(product/'installer.exe',run,roots)
-        except subprocess.CalledProcessError as error:code=error.returncode
-    finally:kernel.CloseHandle(handle)
-    after=helper.inspect_installation(Path.home(),Path(os.environ['LOCALAPPDATA']))
-    (run/'commit-file-use.after.json').write_text(json.dumps(after,indent=2),encoding='utf-8')
-    pending=after.get('install-pending.json',{}).get('record',{})
-    current=Path(after.get('marker',{}).get('record',{}).get('install_root',''))
-    if (not code or pending.get('phase')!='prepared' or 'shell-package.json' not in pending.get('new',{})
-            or helper.digest(inventory)!=original or current.parent!=old.parent
-            or not current.name.endswith(pm['source_revision'][:12])):
-        raise ValueError('The installer did not reach the intended post-startup inventory-publication refusal')
-    for name in ('hiroute.exe','hirouted.exe'):
-        if helper.digest(current/name)!=pm['files'][name]['sha256']:
-            raise ValueError('The current program changed during the controlled commit refusal')
-    source=helper.original_recovery_source(Path.home(),Path(os.environ['LOCALAPPDATA']),prior)
-    if helper.original_desktop_locations(source,prior,roots) is None:
-        raise ValueError('The complete original Desktop source was not retained before cutover')
-    done=subprocess.run([str(current/'hiroute.exe'),'system','status','--output','json'],capture_output=True,timeout=150,creationflags=0x08000000)
-    (run/'post-failure-system.stdout').write_bytes(done.stdout);(run/'post-failure-system.stderr').write_bytes(done.stderr)
-    if done.returncode or json.loads(done.stdout).get('data',{}).get('gateway')!='ready':
-        raise ValueError('Actual current Gateway readiness was not established after the commit refusal')
-    images=','.join("'"+str(p).replace("'","''")+"'" for p in allowed)
-    check=subprocess.run(['powershell.exe','-NoProfile','-NonInteractive','-Command',
-        "$ErrorActionPreference='Stop';$old=@("+images+");@(Get-CimInstance Win32_Process | Where-Object {$_.ExecutablePath -in $old}).Count"],capture_output=True,text=True,timeout=30,creationflags=0x08000000)
-    if check.returncode or check.stdout.strip()!='0':raise ValueError('An older daemon was observed after current storage cutover')
-    replacement=helper.plain(roots['programs']/'hiroute-shell.exe')
-    if helper.digest(replacement)!=pm['shell_sha256']:
-        raise ValueError('The prepared replacement shell differs from the measured NSIS payload')
-    # Use the same bounded report entry launched by the failed recovery helper.
-    # This observes the real prepared transaction without attempting rollback.
-    child=subprocess.Popen([str(replacement),'--recovery-report'],stdin=subprocess.DEVNULL,stdout=subprocess.DEVNULL,stderr=subprocess.DEVNULL)
-    try:
-        time.sleep(10)
-        languages=failure_page_languages(run,replacement,child.pid,'installer_recovery',source)
-    finally:
-        if child.poll() is None:
-            try:ui_action(run,dict(desktop_action='quit'),replacement,child.pid);child.wait(timeout=20)
-            except Exception:
-                if child.poll() is None:child.terminate();child.wait(timeout=20)
-    return dict(native_entry='NSIS /S with real post-startup commit file use',installer_exit_code=code,
-                current_gateway_ready=True,older_daemon_running=False,original_batch_id=source['batch_id'],
-                incomplete_installation_page_languages=languages,
-                original_locator_sha256=source['locator_sha256'],
-                service_state='current version ready; shell transaction remains prepared for explicit same-installer repair')
-
-
-def copy_recovery_tree(helper, source, target, log):
-    """Offline operator copy, including DACLs and long paths; never mirror/delete."""
-    source, target = helper.plain(source), helper.plain(target)
-    if not source.is_dir() or target.exists() or source == target or source in target.parents:
-        raise ValueError('Recovery copies require a distinct absent destination')
-    expected = helper.inventory(source)
-    with log.open('wb') as stream:
-        done = subprocess.run(['robocopy.exe', robocopy_path(source), robocopy_path(target), '/E', '/COPY:DATS',
-            '/DCOPY:DAT', '/R:0', '/W:0', '/XJ', '/NFL', '/NDL', '/NJH', '/NJS', '/NP'],
-            stdout=stream, stderr=subprocess.STDOUT, timeout=120, creationflags=0x08000000)
-    if done.returncode >= 8 or not target.is_dir() or helper.inventory(target) != expected:
-        raise ValueError('Offline recovery copy failed verification; preserve both directories: ' + log.stem)
-    return expected
-
-
-def copy_recovery_file(helper, source, target, directory):
-    """Restore one admitted native entry under its recorded name with its DACL."""
-    source, target = helper.plain(source), helper.plain(target)
-    directory.mkdir()
-    if target.exists():
-        target.rename(directory/'preserved-current')
-    staged = directory/'staged';staged.mkdir()
-    done = subprocess.run(['robocopy.exe',robocopy_path(source.parent),str(staged),source.name,
-        '/COPY:DATS','/R:0','/W:0','/NFL','/NDL','/NJH','/NJS','/NP'],
-        capture_output=True,timeout=30,creationflags=0x08000000)
-    copy = staged/source.name
-    if done.returncode >= 8 or not copy.is_file() or helper.digest(copy) != helper.digest(source):
-        raise ValueError('The admitted original native entry could not be restored; preserve partial recovery')
-    target.parent.mkdir(parents=True,exist_ok=True)
-    copy.rename(target)
-
-
-def restore_original(request, run, product, pm, helper, activity, manifest, root):
-    """Execute the documented whole-group operator recovery, never an automatic retry."""
-    previous, observation = request.get('from_product'), request.get('observation_run')
-    if not re.fullmatch(r'[a-f0-9]{12}-[a-f0-9]{12}', previous or '') or not re.fullmatch(r'[a-f0-9]{32}', observation or ''):
-        raise ValueError('Original restoration requires exact products and a recent successful source preview')
-    preview = root / 'runs' / observation
-    original = helper.bounded_json(preview / 'request.json')
-    result = helper.bounded_json(preview / 'result.json')
-    if (original.get('desktop_action') != 'recovery-preview' or original['product'] != request['product']
-            or original.get('from_product') != previous or not result.get('passed')
-            or result.get('administrator') is not False
-            or original['config']['user'] != request['config']['user']
-            or original['config']['session_id'] != request['config']['session_id']
-            or time.time() - (preview / 'result.json').stat().st_mtime > 3600):
-        raise ValueError('Original restoration preview is stale or belongs to another product/account')
-    current = root / 'bundles' / previous
-    current_manifest = manifest(current)
-    if current_manifest['source_revision'] == pm['source_revision']:
-        raise ValueError('Whole-group restoration requires distinct current and original programs')
-    roots, facts, shell = installed(helper, current, current_manifest)
-    source = helper.original_recovery_source(Path.home(), Path(os.environ['LOCALAPPDATA']), pm)
-    locations = helper.original_desktop_locations(source,pm,roots)
-    measured = helper.bounded_json(preview / 'recovery-source.json')
-    if (measured.get('batch_id') != source['batch_id']
-            or measured.get('locator_sha256') != source['locator_sha256']):
-        raise ValueError('The original recovery source changed after preview')
-    marker = facts['marker']['record']
-    definition = json.loads(facts['definition']['text'])
-    task = definition.get('name', '')
-    if not re.fullmatch(r'HiRoute-[a-f0-9]{64}', task) or definition.get('manager') != 'task':
-        raise ValueError('Original restoration requires the exact owned Task definition')
-    if locations is not None and locations['task_name'] != task:
-        raise ValueError('The original Task belongs to another account')
-    install = helper.plain(marker['install_root'])
-    allowed = {install / 'hirouted.exe', install / 'libexec/cliproxyapi.exe'}
-    if (any(Path(p.get('ExecutablePath') or '') not in allowed for p in activity.get('processes', []))
-            or any(t.get('TaskName') != task for t in activity.get('tasks', []))):
-        raise ValueError('Quit the measured Desktop and preserve unrelated product activity before restoration')
-    extras = source['record'].get('extra_locations', {})
-    for name, target in extras.items():
-        target = helper.plain(target)
-        if (name not in ('gateway.lkg', 'gateway-listener.json') or target.name != name
-                or helper.native_directory_identity(target.parent) != helper.native_directory_identity(roots['state'])):
-            raise ValueError('An original auxiliary destination is outside this native state root')
-    newer = run / 'preserved-current'
-    newer.mkdir()
-    stages = []
-    def stage(name):
-        stages.append(name)
-        (run / 'recovery-operator.json').write_text(json.dumps(dict(batch_id=source['batch_id'],
-            old_revision=pm['source_revision'], current_revision=manifest(current)['source_revision'],
-            stages=stages, preserved_current=str(newer)), indent=2), encoding='utf-8')
-    def command(program, args, label):
-        done = subprocess.run([str(program), *args], capture_output=True, timeout=150, creationflags=0x08000000)
-        (run / (label + '.stdout')).write_bytes(done.stdout)
-        (run / (label + '.stderr')).write_bytes(done.stderr)
-        if done.returncode:
-            raise ValueError('The owned recovery command failed: ' + label)
-        return done
-    native_before = {str(p): helper.digest(p) for p in (Path.home()/'.codex/config.toml', Path.home()/'.codex/hiroute.config.toml') if p.is_file()}
-    import winreg
-    run_key = r'Software\Microsoft\Windows\CurrentVersion\Run'
-    with winreg.OpenKey(winreg.HKEY_CURRENT_USER, run_key, 0, winreg.KEY_QUERY_VALUE | winreg.KEY_SET_VALUE) as key:
-        try:
-            login, kind = winreg.QueryValueEx(key, 'HiRoute')
-        except FileNotFoundError:
-            login, kind = None, None
-        if login is not None and (kind != winreg.REG_SZ or login != '"' + str(shell) + '" --background'):
-            raise ValueError('The current-user HiRoute login value belongs to another installation')
-        (newer / 'shell-login.json').write_text(json.dumps(dict(value=login, kind=kind)), encoding='utf-8')
-        command('reg.exe', ['export', r'HKCU\Software\Microsoft\Windows\CurrentVersion\Uninstall\HiRoute', str(newer/'uninstall.reg'), '/y'], 'preserve-registration')
-        command('schtasks.exe', ['/Query', '/TN', task, '/XML'], 'preserve-task')
-        if login is not None:
-            winreg.DeleteValue(key, 'HiRoute')
-    stage('preserved-registration-and-disabled-owned-shell-login')
-    command(install/'hiroute.exe', ['service','autostart','disable','--output','json'], 'disable-current-task-login')
-    command(install/'hiroute.exe', ['service','stop','--output','json'], 'stop-current')
-    images = ','.join("'" + str(p).replace("'", "''") + "'" for p in allowed | {shell})
-    check = subprocess.run(['powershell.exe','-NoProfile','-NonInteractive','-Command',
-        "$ErrorActionPreference='Stop';$images=@(" + images + ");@(Get-CimInstance Win32_Process | Where-Object {$_.ExecutablePath -in $images}).Count"],
-        capture_output=True, timeout=30, text=True, creationflags=0x08000000)
-    if check.returncode or check.stdout.strip() != '0':
-        raise ValueError('Owned processes remain; preserve the stopped recovery state before copying data')
-    stage('current-task-stopped-login-disabled-and-processes-exited')
-    if locations is not None:
-        # Follow the guide's ordering: remove the stopped registration before
-        # activating old data, so a pending failure restart cannot launch the
-        # newer daemon against that restored group.
-        command('schtasks.exe',['/Delete','/TN',task,'/F'],'remove-stopped-current-task')
-        stopped_again=subprocess.run(['powershell.exe','-NoProfile','-NonInteractive','-Command',
-            "$ErrorActionPreference='Stop';$images=@("+images+");@(Get-CimInstance Win32_Process | Where-Object {$_.ExecutablePath -in $images}).Count"],
-            capture_output=True,timeout=30,text=True,creationflags=0x08000000)
-        if stopped_again.returncode or stopped_again.stdout.strip()!='0':
-            raise ValueError('An owned process raced Task removal; no old data was activated')
-        stage('stopped-current-registration-removed-before-old-data-activation')
-    for label, path in [('program',install),('desktop',roots['programs']),('installation',roots['data'])]:
-        copy_recovery_tree(helper, path, newer/label, run/(label+'-copy.log'))
-    storage = helper.plain(helper.extended_windows_path(str(roots['state']/'storage')))
-    replacement = storage.with_name('storage.original-restore.' + request['run_id'])
-    expected = copy_recovery_tree(helper, source['source']/'storage', replacement, run/'storage-copy.log')
-    stage('verified-complete-old-group-offline-copy')
-    storage.rename(newer/'storage')
-    replacement.rename(storage)
-    auxiliary = newer/'auxiliary';auxiliary.mkdir()
-    for name, target in extras.items():
-        target = helper.plain(target)
-        if target.exists():target.rename(auxiliary/name)
-        done = subprocess.run(['robocopy.exe',robocopy_path(source['source']),robocopy_path(target.parent),name,'/COPY:DATS','/R:0','/W:0','/NFL','/NDL','/NJH','/NJS','/NP'],
-            capture_output=True, timeout=30, creationflags=0x08000000)
-        if done.returncode >= 8 or helper.digest(target) != helper.digest(source['source']/name):
-            raise ValueError('Original auxiliary restoration failed; do not start either program')
-    if helper.inventory(storage) != expected:
-        raise ValueError('The complete restored original group changed before program replacement')
-    stage('complete-old-group-and-auxiliary-files-restored')
-    timing = None
-    restored_choices = None
-    if locations is None:
-        # The legacy source has no complete Desktop registration. Use its exact
-        # independently verified original NSIS only after pairing the old group.
-        timing = nsis_install(product/'installer.exe',run,roots)
-        stage('matching-original-native-installer-completed')
-    else:
-        package = source['source']/'recovery-package'
-        for label,old,target in [('program',package/'program',Path(locations['program'])),
-                                 ('desktop',package/'desktop',Path(locations['desktop']))]:
-            target = helper.plain(target)
-            if target.exists():target.rename(newer/('displaced-'+label))
-            copy_recovery_tree(helper,old,target,run/('restore-'+label+'.log'))
-        for index,(name,target) in enumerate(sorted(locations['files'].items())):
-            copy_recovery_file(helper,package/name,Path(target),newer/('native-entry-'+str(index)))
-        command('reg.exe',['import',robocopy_path(package/'installation/uninstall.reg')],'restore-registration')
-        command('schtasks.exe',['/Create','/TN',task,'/XML',robocopy_path(package/'installation/task.xml')],'restore-original-task')
-        with winreg.OpenKey(winreg.HKEY_CURRENT_USER,run_key,0,winreg.KEY_QUERY_VALUE|winreg.KEY_SET_VALUE) as key:
-            try:winreg.QueryValueEx(key,'HiRoute')
-            except FileNotFoundError:pass
-            else:raise ValueError('A login registration appeared during recovery; preserve it')
-            if locations['shell_login']:
-                winreg.SetValueEx(key,'HiRoute',0,winreg.REG_SZ,'"'+str(shell)+'" --background')
-        command(roots['stable_cli'],['service','start','--output','json'],'start-original-task')
-        command(roots['stable_cli'],['service','autostart','enable' if locations['task_autostart'] else 'disable','--output','json'],'restore-original-task-login')
-        state=command(roots['stable_cli'],['service','status','--output','json'],'restored-login-status')
-        task_login=json.loads(state.stdout).get('data',{}).get('autostart_enabled')
-        with winreg.OpenKey(winreg.HKEY_CURRENT_USER,run_key,0,winreg.KEY_QUERY_VALUE) as key:
-            try:value,kind=winreg.QueryValueEx(key,'HiRoute')
-            except FileNotFoundError:value,kind=None,None
-        expected_login='"'+str(shell)+'" --background' if locations['shell_login'] else None
-        if (task_login!=locations['task_autostart'] or value!=expected_login
-                or value is not None and kind!=winreg.REG_SZ):
-            raise ValueError('The original independent Shell and Task login choices were not restored')
-        restored_choices=dict(task_autostart=task_login,shell_login=value is not None)
-        stage('original-programs-native-entries-apps-and-task-registration-restored')
-    installed(helper,product,pm)
-    status = command(roots['stable_cli'],['system','status','--output','json'],'restored-system')
-    if json.loads(status.stdout).get('data', {}).get('gateway') != 'ready':
-        raise ValueError('The restored original Gateway is not ready; preserve the recovery state')
-    if any(helper.digest(Path(p)) != checksum for p,checksum in native_before.items()):
-        raise ValueError('Native Agent configuration changed during whole-group restoration')
-    stage('original-control-readiness-and-native-config-verified')
-    return dict(native_entry='documented complete-group operator recovery with ' + ('exact original NSIS' if locations is None else 'retained complete Desktop and native Task XML'),
-                batch_id=source['batch_id'], stages=stages, installer=timing, preserved_current=str(newer),
-                restored_login_choices=restored_choices,
-                scope='legacy retained source; original Desktop preferences were not captured' if locations is None else 'complete original Desktop, program, native files and independent login choices')
-
-
-def failure_page_languages(run, shell, pid, cause, source=None):
+def failure_page_languages(run, shell, pid, cause):
     import shutil
     observed=ui_action(run,dict(desktop_action='snapshot'),shell,pid)
     deadline=time.monotonic()+75
@@ -1003,10 +723,8 @@ def failure_page_languages(run, shell, pid, cause, source=None):
                     or ('相同版本及构建' if language=='zh' else 'same version and build') not in names
                     or ('寻求支持' if language=='zh' else 'obtain support') not in names
                     or any(n.get('name') in ('重试','Try again') and not n.get('offscreen') for n in observed.get('nodes',[]))
-                    or source is not None and source['batch_id'] in names):
+                    or 'RECOVERY.md' in names):
                 raise ValueError('The incomplete installation page borrowed storage advice or lost its exact repair/support path')
-        elif source is not None and (source['batch_id'] not in names or source['batch'].name not in names or 'RECOVERY.md' not in names):
-            raise ValueError('The actual failure page did not locate the exact verified original batch and guide')
         languages.append(language)
         if index==0:
             buttons=[n for n in observed['nodes'] if n.get('name') in ('English','中文') and n.get('type')=='ControlType.Button' and not n.get('offscreen')]
@@ -1044,14 +762,10 @@ def startup_ui_context(request, product, pm, helper, activity, root):
     return roots,facts,shell
 
 
-def locked_startup_ui(request, run, product, pm, helper, activity, root, baseline=None):
+def locked_startup_ui(request, run, product, pm, helper, activity, root, file_use=False):
     """Own one bounded lock fixture, inspect both real languages, then reopen normally."""
     import shutil
     roots,facts,shell = startup_ui_context(request,product,pm,helper,activity,root)
-    if baseline is not None:
-        source = helper.original_recovery_source(Path.home(),Path(os.environ['LOCALAPPDATA']),baseline)
-        if helper.original_desktop_locations(source,baseline,roots) is None:
-            raise ValueError('The file-use case requires a complete retained Desktop source')
     cli = Path(facts['marker']['record']['install_root'])/'hiroute.exe'
     def command(args,label):
         done=subprocess.run([str(cli),*args],capture_output=True,timeout=150,creationflags=0x08000000)
@@ -1068,7 +782,7 @@ def locked_startup_ui(request, run, product, pm, helper, activity, root, baselin
     from ctypes import wintypes
     kernel.CreateFileW.argtypes=[wintypes.LPCWSTR,wintypes.DWORD,wintypes.DWORD,ctypes.c_void_p,wintypes.DWORD,wintypes.DWORD,wintypes.HANDLE]
     kernel.CreateFileW.restype=wintypes.HANDLE;kernel.CloseHandle.argtypes=[wintypes.HANDLE]
-    target=storage/('live/control.db' if baseline is not None else 'startup.lock')
+    target=storage/('live/control.db' if file_use else 'startup.lock')
     handle=kernel.CreateFileW(str(helper.plain(target)),0,0,None,3,0x00200000,None)
     if handle==wintypes.HANDLE(-1).value:raise ctypes.WinError(ctypes.get_last_error())
     child=None
@@ -1093,7 +807,7 @@ def locked_startup_ui(request, run, product, pm, helper, activity, root, baselin
                 if child.poll() is None:child.terminate();child.wait(timeout=20)
     recovery_file=helper.plain(storage/'startup-recovery.json')
     unchanged=(helper.digest(recovery_file) if recovery_file.exists() else None)==report_before
-    if baseline is None and not unchanged and failure is None:
+    if not file_use and not unchanged and failure is None:
         failure=ValueError('A non-writer lock failure overwrote the previous recovery report')
     # Follow the visible instruction: release the file use and reopen this same
     # complete version. Keep business readiness separate from the window result.
@@ -1110,226 +824,20 @@ def locked_startup_ui(request, run, product, pm, helper, activity, root, baselin
             except Exception:
                 if reopened.poll() is None:reopened.terminate();reopened.wait(timeout=20)
     if failure is not None:raise failure
-    return dict(native_entry='real standard-user '+('current-Control file-use' if baseline is not None else 'locked-startup')+' page and current-version reopen',languages=languages,
+    return dict(native_entry='real standard-user '+('current-Control file-use' if file_use else 'locked-startup')+' page and current-version reopen',languages=languages,
                 recovery_report_unchanged=unchanged,gateway_ready_after_reopen=True)
-
-
-def restore_control_fixture(helper, storage, before, original_header):
-    """Undo only the fixture's four bytes, refusing any unexpected business write."""
-    control=helper.plain(storage/'live/control.db')
-    changed=str(control.relative_to(storage))
-    ignored={changed,'startup.lock','startup-recovery.json'}
-    after=helper.inventory(storage)
-    if any(before.get(name)!=after.get(name) for name in set(before)|set(after) if name not in ignored):
-        raise ValueError('Unexpected business changes; preserve both current copies and inspect before recovery')
-    with control.open('r+b') as file:
-        header=file.read(100)
-        if (len(header)!=100 or header[:60]!=original_header[:60] or header[64:]!=original_header[64:]
-                or header[60:64]!=(2147483647).to_bytes(4,'big')):
-            raise ValueError('The controlled format fixture changed; no bytes were restored')
-        check=hashlib.sha256(original_header)
-        for block in iter(lambda:file.read(1024*1024),b''):check.update(block)
-        if check.hexdigest()!=before[changed]['sha256']:
-            raise ValueError('Unexpected Control contents; no bytes were restored')
-        file.seek(60);file.write(original_header[60:64]);file.flush();os.fsync(file.fileno())
-
-
-def format_startup_ui(request, run, product, pm, helper, activity, root, baseline):
-    """Preserve a clean current group, refuse a future marker, then leave it offline for explicit restore."""
-    roots,facts,shell=startup_ui_context(request,product,pm,helper,activity,root)
-    source=helper.original_recovery_source(Path.home(),Path(os.environ['LOCALAPPDATA']),baseline)
-    locations=helper.original_desktop_locations(source,baseline,roots)
-    if locations is None:
-        raise ValueError('The format UI case requires a complete retained Desktop and original Task')
-    guides={}
-    for name in ('RECOVERY.md','恢复说明.md','PROGRAM-LOCATIONS.md'):
-        path=helper.plain(source['source']/name)
-        if not path.is_file() or not 1<=path.stat().st_size<=128*1024:
-            raise ValueError('The original platform/language recovery guide is unavailable')
-        text=path.read_text(encoding='utf-8')
-        if name!='PROGRAM-LOCATIONS.md' and source['batch_id'] not in text:
-            raise ValueError('A generated recovery guide belongs to another batch')
-        if name=='PROGRAM-LOCATIONS.md' and ('task.xml' not in text or locations['task_name'] not in text
-                or 'service install' in text or 'service uninstall' in text):
-            raise ValueError('The original Windows guide is not paired with its native registration')
-        (run/name).write_text(text,encoding='utf-8')
-        guides[name]=dict(sha256=helper.digest(path),bytes=path.stat().st_size)
-    install=Path(facts['marker']['record']['install_root']);cli=install/'hiroute.exe'
-    def command(args,label):
-        done=subprocess.run([str(cli),*args],capture_output=True,timeout=150,creationflags=0x08000000)
-        (run/(label+'.stdout')).write_bytes(done.stdout);(run/(label+'.stderr')).write_bytes(done.stderr)
-        if done.returncode:raise ValueError('The format fixture command failed: '+label)
-        return json.loads(done.stdout)
-    if command(['system','status','--output','json'],'before-system').get('data',{}).get('gateway')!='ready':
-        raise ValueError('The current Gateway must be healthy before the controlled format fixture')
-    storage=helper.plain(roots['state']/'storage')
-    saved=run/'preserved-clean-current';saved.mkdir()
-    changed=False;passed=False;child=None;original_header=None;before=None
-    command(['service','stop','--output','json'],'fixture-stop')
-    try:
-        images=','.join("'"+str(p).replace("'","''")+"'" for p in (install/'hirouted.exe',install/'libexec/cliproxyapi.exe',shell))
-        stopped=subprocess.run(['powershell.exe','-NoProfile','-NonInteractive','-Command',
-            "$ErrorActionPreference='Stop';$images=@("+images+");@(Get-CimInstance Win32_Process | Where-Object {$_.ExecutablePath -in $images}).Count"],
-            capture_output=True,text=True,timeout=30,creationflags=0x08000000)
-        if stopped.returncode or stopped.stdout.strip()!='0':raise ValueError('Owned processes remain; no format fixture was written')
-        for name,path in [('storage',storage),('program',install),('desktop',roots['programs']),('installation',roots['data'])]:
-            copy_recovery_tree(helper,path,saved/name,run/(name+'-preservation.log'))
-        before=helper.inventory(saved/'storage',exclude_startup_lock=True)
-        control=helper.plain(storage/'live/control.db')
-        wal=helper.plain(storage/'live/control.db-wal')
-        if wal.exists() and wal.stat().st_size:raise ValueError('A nonempty Control WAL must be preserved and diagnosed before this fixture')
-        import msvcrt
-        with helper.plain(storage/'startup.lock').open('r+b') as barrier:
-            msvcrt.locking(barrier.fileno(),msvcrt.LK_NBLCK,1)
-            try:
-                if helper.inventory(storage,exclude_startup_lock=True)!=before:
-                    raise ValueError('Current data changed after preservation; no format fixture was written')
-                with control.open('r+b') as file:
-                    original_header=file.read(100)
-                    if original_header[:16]!=b'SQLite format 3\0' or int.from_bytes(original_header[60:64],'big')!=29:
-                        raise ValueError('The current Control schema is not the admitted format-29 fixture source')
-                    changed=True
-                    file.seek(60);file.write((2147483647).to_bytes(4,'big'));file.flush();os.fsync(file.fileno())
-            finally:
-                barrier.seek(0);msvcrt.locking(barrier.fileno(),msvcrt.LK_UNLCK,1)
-        child=subprocess.Popen([str(shell)],stdin=subprocess.DEVNULL,stdout=subprocess.DEVNULL,stderr=subprocess.DEVNULL)
-        time.sleep(15)
-        languages=failure_page_languages(run,shell,child.pid,'unsupported_format',source)
-        offline=command(['service','recovery','--output','json'],'format-offline-recovery').get('data',{})
-        recovery=offline.get('recovery',{})
-        if (recovery.get('cause')!='unsupported_format' or recovery.get('action')!='restore_complete_group'
-                or recovery.get('backup_batch')!=source['batch_id'] or 'RECOVERY.md' not in offline.get('instructions','')
-                or robocopy_path(source['source']).casefold() not in offline.get('instructions','').casefold()):
-            raise ValueError('Offline recovery did not identify the exact complete source and guide')
-        (run/'recovery-source.json').write_text(json.dumps(dict(batch_id=source['batch_id'],source=str(source['source']),
-            locator_sha256=source['locator_sha256'],preserved_clean_current=str(saved)),indent=2),encoding='utf-8')
-        passed=True
-        return dict(native_entry='real standard-user future-format failure page and offline guide',languages=languages,
-                    batch_id=source['batch_id'],preserved_clean_current=str(saved),
-                    guide_files=guides,
-                    service_state='offline; explicit complete-group operator restoration required')
-    finally:
-        if child is not None and child.poll() is None:
-            try:ui_action(run,dict(desktop_action='quit'),shell,child.pid);child.wait(timeout=20)
-            except Exception:
-                if child.poll() is None:child.terminate();child.wait(timeout=20)
-        if not passed:
-            if changed:restore_control_fixture(helper,storage,before,original_header)
-            command(['service','start','--output','json'],'fixture-cleanup-start')
-            ready=command(['system','status','--output','json'],'fixture-cleanup-system').get('data',{}).get('gateway')=='ready'
-            if not ready:raise ValueError('The controlled fixture could not return the current Gateway to readiness')
-
-
-def prepare_manifest_bytes(value, pm):
-    """Admit data for the measured candidate; never accept executable paths or overrides."""
-    if (not isinstance(value,dict) or value.get('revision')!=pm['source_revision']
-            or value.get('target')!='x86_64-pc-windows-msvc' or not isinstance(value.get('files'),dict)):
-        raise ValueError('The preparation manifest is not the measured candidate')
-    for name in ('hiroute.exe','hirouted.exe'):
-        if value['files'].get('bin/'+name,{}).get('sha256')!=pm['files'][name]['sha256']:
-            raise ValueError('The preparation manifest substitutes a candidate binary')
-    data=json.dumps(value).encode('utf-8')
-    if not 1<=len(data)<=64*1024:raise ValueError('The preparation manifest exceeds its bound')
-    return data
-
-
-def prepare_shell_bytes(value,pm):
-    if not isinstance(value,str) or not 1<=len(value)<=48*1024*1024:
-        raise ValueError('The actual NSIS preparation shell is unavailable or exceeds its bound')
-    try:data=base64.b64decode(value,validate=True)
-    except ValueError as error:raise ValueError('The preparation shell encoding is invalid') from error
-    if not 1<=len(data)<=32*1024*1024 or hashlib.sha256(data).hexdigest()!=pm.get('shell_sha256'):
-        raise ValueError('The preparation shell differs from the measured NSIS member')
-    return data
-
-
-def installer_prepare(request,run,product,pm,helper,activity,manifest,root):
-    """Diagnose the real mutating pre-replacement adapter; never claim an NSIS result."""
-    previous,observation=request.get('from_product'),request.get('observation_run')
-    if not re.fullmatch(r'[a-f0-9]{12}-[a-f0-9]{12}',previous or '') or not re.fullmatch(r'[a-f0-9]{32}',observation or ''):
-        raise ValueError('Preparation diagnosis requires the exact installed product and recent inspection')
-    inspected=root/'runs'/observation
-    original=helper.bounded_json(inspected/'request.json');result=helper.bounded_json(inspected/'result.json')
-    if (original.get('operation')!='inspect' or original.get('product')!=previous or not result.get('passed')
-            or result.get('administrator') is not False or original['config']['user']!=request['config']['user']
-            or original['config']['session_id']!=request['config']['session_id']
-            or time.time()-(inspected/'result.json').stat().st_mtime>3600):
-        raise ValueError('Preparation inspection is stale or belongs to another product/account')
-    admit_nsis_install(request,helper,activity,manifest,root)
-    facts=helper.inspect_installation(Path.home(),Path(os.environ['LOCALAPPDATA']))
-    if facts.get('install-pending.json') or facts.get('install-journal.json'):
-        raise ValueError('Preserve the pending native transaction; do not replay preparation diagnosis')
-    path=run/'incoming-package.json';path.write_bytes(prepare_manifest_bytes(request.get('prepare_manifest'),pm))
-    adapter=run/'candidate-preparation.exe';adapter.write_bytes(prepare_shell_bytes(request.get('prepare_shell'),pm))
-    done=subprocess.run([str(adapter),'--installer-prepare',str(path),str(product/'hirouted.exe')],
-        capture_output=True,timeout=180,creationflags=0x08000000)
-    (run/'prepare-adapter.stdout').write_bytes(done.stdout);(run/'prepare-adapter.stderr').write_bytes(done.stderr)
-    (run/'prepare-adapter.after.json').write_text(json.dumps(
-        helper.inspect_installation(Path.home(),Path(os.environ['LOCALAPPDATA'])),indent=2),encoding='utf-8')
-    if done.returncode:raise ValueError('The native preparation adapter refused; inspect its captured stderr before another action')
-    return dict(native_entry='measured NSIS preparation adapter; not a full NSIS result',exit_code=done.returncode,
-                assessment='preparation_only; installed programs were not replaced')
 
 
 def execute(request, run, product, pm, helper, activity, manifest, root):
     if activity.get('administrator_groups') is not False:
         raise ValueError('Native Desktop evidence requires a standard account, not a filtered administrator')
     action = request['desktop_action']
-    if action not in ('install', 'install-commit-file-use', 'registration-probe', 'installer-prepare', 'installer-resume', 'installer-quarantine', 'launch', 'snapshot', 'invoke', 'text', 'click', 'scroll', 'close', 'quit', 'tray-observe', 'desktop-state', 'cli', 'native-files', 'codex-call', 'codex-inference', 'network-probe', 'recovery-preview', 'recovery-restore-original', 'recovery-lock-ui', 'recovery-file-use-ui', 'recovery-format-ui'):
+    if action not in ('install', 'installer-resume', 'installer-quarantine', 'launch', 'snapshot', 'invoke', 'text', 'click', 'scroll', 'close', 'quit', 'tray-observe', 'desktop-state', 'cli', 'native-files', 'codex-call', 'codex-inference', 'network-probe', 'recovery-lock-ui', 'recovery-file-use-ui'):
         raise ValueError('Unknown native Desktop action')
-    if action=='install-commit-file-use':
-        return install_commit_file_use(request,run,product,pm,helper,activity,manifest,root)
-    if action=='registration-probe':
-        installed(helper,product,pm)
-        identifier=request.get('probe_product')
-        if not re.fullmatch(r'[a-f0-9]{12}-[a-f0-9]{12}',identifier or ''):
-            raise ValueError('Registration diagnosis requires its exact native probe bundle')
-        probe=root/'bundles'/identifier;measured=manifest(probe)
-        if (measured.get('target')!='x86_64-pc-windows-msvc' or set(measured.get('files',{}))!={'registry_probe.exe'}):
-            raise ValueError('The native probe bundle is not the bounded platform test')
-        case='windows::shell_registration::tests::installed_account_registration_export_probe'
-        done=subprocess.run([str(probe/'registry_probe.exe'),case,'--exact','--ignored','--nocapture','--test-threads=1'],
-            capture_output=True,timeout=90,creationflags=0x08000000)
-        (run/'registration-probe.stdout').write_bytes(done.stdout);(run/'registration-probe.stderr').write_bytes(done.stderr)
-        if done.returncode or b'test result: ok. 1 passed; 0 failed; 0 ignored;' not in done.stdout:
-            raise ValueError('The native registration probe failed; inspect its exact phase before retrying')
-        return dict(native_entry='bounded read-only installed-account registration probe',exit_code=done.returncode,
-                    probe_revision=measured['source_revision'],assessment='diagnostic_only_not_installation_acceptance')
-    if action=='installer-prepare':
-        return installer_prepare(request,run,product,pm,helper,activity,manifest,root)
-    if action == 'recovery-restore-original':
-        return restore_original(request, run, product, pm, helper, activity, manifest, root)
     if action == 'recovery-lock-ui':
         return locked_startup_ui(request,run,product,pm,helper,activity,root)
-    if action in ('recovery-file-use-ui','recovery-format-ui'):
-        previous=request.get('from_product')
-        if not re.fullmatch(r'[a-f0-9]{12}-[a-f0-9]{12}',previous or ''):
-            raise ValueError('The file-use case requires the independently measured original product')
-        baseline=manifest(root/'bundles'/previous)
-        if action=='recovery-format-ui':return format_startup_ui(request,run,product,pm,helper,activity,root,baseline)
-        return locked_startup_ui(request,run,product,pm,helper,activity,root,baseline)
-    if action == 'recovery-preview':
-        previous = request.get('from_product')
-        observation = request.get('observation_run')
-        if not re.fullmatch(r'[a-f0-9]{12}-[a-f0-9]{12}', previous or '') or not re.fullmatch(r'[a-f0-9]{32}', observation or ''):
-            raise ValueError('Original recovery preview requires the current product and recent inspection')
-        inspection = root / 'runs' / observation
-        original = json.loads((inspection / 'request.json').read_text(encoding='utf-8'))
-        result = json.loads((inspection / 'result.json').read_text(encoding='utf-8'))
-        if (original.get('operation') != 'inspect' or original['product'] != previous
-                or not result.get('passed') or result.get('administrator') is not False
-                or original['config']['user'] != request['config']['user']
-                or original['config']['session_id'] != request['config']['session_id']
-                or time.time() - (inspection / 'result.json').stat().st_mtime > 3600):
-            raise ValueError('The original recovery inspection is stale or belongs to another product/account')
-        installed(helper, root / 'bundles' / previous, manifest(root / 'bundles' / previous))
-        source = helper.original_recovery_source(Path.home(), Path(os.environ['LOCALAPPDATA']), pm)
-        facts = dict(batch_id=source['batch_id'], source=str(source['source']),
-                     baseline_revision=pm['source_revision'], copied_materials=len(source['record']['files']),
-                     locator_sha256=source['locator_sha256'], extra_locations=source['record'].get('extra_locations'),
-                     source_keys=list(source['record']), info_keys=list(source['record'].get('source_info', {})))
-        (run / 'recovery-source.json').write_text(json.dumps(facts, indent=2), encoding='utf-8')
-        return dict(native_entry='read-only original recovery material verification', **facts)
+    if action == 'recovery-file-use-ui':
+        return locked_startup_ui(request,run,product,pm,helper,activity,root,file_use=True)
     if action == 'desktop-state':
         return dict(native_entry='read-only input desktop inspection', state=desktop_state())
     if action == 'native-files':

@@ -24,6 +24,22 @@ pub(super) fn prepare(value: &Pending, incoming: &Package, daemon: &Path) -> io:
             Some(&report),
         );
     };
+    // Ordinary install/repair must not export historical Task/Apps state or
+    // duplicate the complete Desktop. Those are recovery inputs only when the
+    // actual candidate reports an admitted format-changing history cutover.
+    let report =
+        hiroute_host_runtime::checked_upgrade_preflight(daemon, &layout.storage_root(), previous)
+            .map_err(io::Error::other)?;
+    windows::preflight_desktop_space(
+        incoming,
+        &data()?,
+        fs::metadata(std::env::current_exe()?)?.len(),
+        0,
+        Some(&report),
+    )?;
+    if !report.history_cutover_required {
+        return Ok(());
+    }
     let marker = read_standalone_install_record(&layout.marker_path).map_err(io::Error::other)?;
     if marker.install_root != *previous {
         return Err(invalid());

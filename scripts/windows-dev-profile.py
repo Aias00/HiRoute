@@ -44,51 +44,6 @@ def locations(native_home, local_app_data):
             'stable_cli': native_home / '.local/bin/hiroute.exe'}
 
 
-def registration_values(text):
-    """Bounded diagnostic comparison only; this never admits a recovery source."""
-    if not text.startswith('Windows Registry Editor Version 5.00') or len(text)>32768:
-        raise ValueError('Unrecognized registration export')
-    values={}
-    for line in text.splitlines():
-        if not line or line.startswith(('Windows Registry Editor','[')):continue
-        match=re.fullmatch(r'("(?:[^"\\]|\\.)*")=(.*)',line)
-        if not match:raise ValueError('Unrecognized registration value')
-        name=json.loads(match[1]);data=match[2]
-        if data.startswith('"'):value=(1,json.loads(data))
-        elif re.fullmatch('dword:[0-9a-fA-F]{8}',data):value=(4,int(data[6:],16))
-        else:raise ValueError('Unrecognized registration value type')
-        if name in values:raise ValueError('Duplicate registration value')
-        values[name]=value
-    return values
-
-
-def registration_comparison(path):
-    import winreg
-    import subprocess
-    import tempfile
-    if path.stat().st_size>64*1024:return dict(assessment='export_exceeds_bound')
-    try:retained=registration_values(path.read_text(encoding='utf-16'))
-    except (ValueError,UnicodeError):return dict(assessment='unrecognized_retained_export')
-    current={}
-    with winreg.OpenKey(winreg.HKEY_CURRENT_USER,r'Software\Microsoft\Windows\CurrentVersion\Uninstall\HiRoute',0,winreg.KEY_READ) as key:
-        count=winreg.QueryInfoKey(key)[1]
-        if count>64:return dict(assessment='current_registration_exceeds_bound')
-        for i in range(count):
-            name,value,kind=winreg.EnumValue(key,i);current[name]=(kind,value)
-    observed={}
-    with tempfile.TemporaryDirectory(prefix='hiroute-registration-observe-') as temporary:
-        exported=Path(temporary)/'observed.reg'
-        done=subprocess.run([str(Path(os.environ['SystemRoot'])/'System32/reg.exe'),'export',
-            r'HKCU\Software\Microsoft\Windows\CurrentVersion\Uninstall\HiRoute',str(exported),'/y'],
-            capture_output=True,timeout=15,creationflags=0x08000000)
-        observed['system_export_exit_code']=done.returncode
-        if done.returncode==0 and exported.is_file() and exported.stat().st_size<=64*1024:
-            observed.update(system_export_sha256=digest(exported),system_export_bytes_equal=exported.read_bytes()==path.read_bytes())
-    return dict(assessment='diagnostic_only_not_recovery_admission',**observed,
-        values_equal=retained==current,changed_names=sorted(k for k in retained.keys()&current.keys() if retained[k]!=current[k]),
-        retained_only=sorted(retained.keys()-current.keys()),current_only=sorted(current.keys()-retained.keys()))
-
-
 def inspect_installation(native_home, local_app_data):
     """Read this account's installation facts without starting the product."""
     paths, facts = locations(native_home, local_app_data), {}
@@ -152,33 +107,6 @@ def inspect_installation(native_home, local_app_data):
                 tails[str(path.relative_to(diagnostics))] = dict(bytes=size, records=records)
     facts['diagnostics_tail'] = tails
     # Pre-replacement refusal may precede the transaction journal. Inspect only
-    # fixed, bounded preparation metadata; never walk sealed history or infer a
-    # restorable source from these staging files.
-    retained = plain(paths['shell_state'] / 'recovery-packages')
-    packages = []
-    if retained.is_dir():
-        from itertools import islice
-        entries = list(islice(retained.iterdir(), 33))
-        for entry in sorted(entries[:32]):
-            plain(entry)
-            if len(entry.name) != 64 or any(c not in '0123456789abcdef' for c in entry.name) or not entry.is_dir():
-                continue
-            files = {}
-            for name in ('desktop/shell-package.json', 'program/package-manifest.json',
-                         'installation/standalone.json', 'installation/windows-background.json',
-                         'installation/task.xml', 'installation/uninstall.reg', 'restore-locations.json'):
-                path = plain(entry / name)
-                if path.is_file():
-                    size = path.stat().st_size
-                    files[name] = dict(bytes=size)
-                    if size <= 4 * 1024 * 1024:
-                        files[name]['sha256'] = digest(path)
-                    if name=='installation/uninstall.reg' and os.name=='nt':
-                        try:files[name]['registration_comparison']=registration_comparison(path)
-                        except OSError as error:files[name]['registration_comparison']=dict(assessment='unavailable',winerror=getattr(error,'winerror',None))
-            packages.append(dict(name=entry.name, files=files))
-        facts['retained_preparation_metadata'] = dict(packages=packages, truncated=len(entries) > 32,
-                                                     assessment='staging_only_not_recovery_admission')
     expected = facts.get('shell-package.json', {}).get('record', {}).get('files', {})
     mismatches = []
     for name, wanted in expected.items():
@@ -197,7 +125,7 @@ def inspect_installation(native_home, local_app_data):
     return facts
 
 
-def inventory(root, exclude_startup_lock=False):
+def inventory(root):
     """Reject links/special entries before walking or hashing any child."""
     if os.name == 'nt':
         root = Path(extended_windows_path(os.path.abspath(root)))
@@ -209,10 +137,6 @@ def inventory(root, exclude_startup_lock=False):
             plain(path)
             info = path.lstat()
             key = str(path.relative_to(root))
-            if exclude_startup_lock and key == 'startup.lock':
-                if not stat.S_ISREG(info.st_mode) or info.st_size != 0:
-                    raise ValueError('Only the empty non-data startup lock may be excluded')
-                continue
             if stat.S_ISDIR(info.st_mode):
                 rows[key] = {'kind': 'directory'}
             elif stat.S_ISREG(info.st_mode):
@@ -335,211 +259,3 @@ def bounded_json(path, maximum=1024 * 1024):
     if len(content) > maximum:
         raise ValueError('Recovery metadata changed while reading')
     return json.loads(content)
-
-
-def native_directory_identity(path):
-    """The same volume/index pair as the product's retained-directory seal."""
-    import ctypes
-    from ctypes import wintypes
-    kernel = ctypes.WinDLL('kernel32', use_last_error=True)
-    class FileTime(ctypes.Structure):
-        _fields_ = [('low', wintypes.DWORD), ('high', wintypes.DWORD)]
-    class Information(ctypes.Structure):
-        _fields_ = [('attributes', wintypes.DWORD), ('created', FileTime),
-                    ('accessed', FileTime), ('written', FileTime),
-                    ('volume', wintypes.DWORD), ('size_high', wintypes.DWORD),
-                    ('size_low', wintypes.DWORD), ('links', wintypes.DWORD),
-                    ('index_high', wintypes.DWORD), ('index_low', wintypes.DWORD)]
-    kernel.CreateFileW.argtypes = [wintypes.LPCWSTR, wintypes.DWORD, wintypes.DWORD,
-        ctypes.c_void_p, wintypes.DWORD, wintypes.DWORD, wintypes.HANDLE]
-    kernel.CreateFileW.restype = wintypes.HANDLE
-    kernel.GetFileInformationByHandle.argtypes = [wintypes.HANDLE, ctypes.POINTER(Information)]
-    kernel.CloseHandle.argtypes = [wintypes.HANDLE]
-    path = plain(path)
-    handle = kernel.CreateFileW(str(path), 0x80, 7, None, 3, 0x02200000, None)
-    if handle == wintypes.HANDLE(-1).value:
-        raise ctypes.WinError(ctypes.get_last_error())
-    try:
-        information = Information()
-        if not kernel.GetFileInformationByHandle(handle, ctypes.byref(information)):
-            raise ctypes.WinError(ctypes.get_last_error())
-        if information.attributes & 1024 or not information.attributes & 16:
-            raise ValueError('The sealed source is not an ordinary directory')
-        return [information.volume, (information.index_high << 32) | information.index_low]
-    finally:
-        kernel.CloseHandle(handle)
-
-
-def original_recovery_source(native_home, local_app_data, baseline):
-    """Read the live locator's exact batch; never select a source by directory presence."""
-    paths = locations(native_home, local_app_data)
-    storage = plain(paths['state'] / 'storage')
-    if os.name == 'nt':
-        # Real retained native Agent material can exceed MAX_PATH under the
-        # batch/source prefix. Match the existing offline inventory helper.
-        storage = plain(extended_windows_path(str(storage)))
-    locator_path = storage / 'observation-source-backup.json'
-    locator = bounded_json(locator_path, 16 * 1024)
-    import re
-    def portable(value):
-        return isinstance(value, str) and '..' not in value and re.fullmatch(r'[A-Za-z0-9_.-]{1,128}', value)
-    name, batch_id = locator.get('backup_name'), locator.get('set_id')
-    if locator.get('schema') != 1 or not portable(name) or not portable(batch_id):
-        raise ValueError('Unknown or foreign original-batch locator')
-    parent = plain(storage.parent / (storage.name + '.upgrade-backups'))
-    batch = plain(parent / name)
-    row = bounded_json(batch / 'backup-set.manifest.json', 64 * 1024)
-    if row.get('set_id') != batch_id:
-        batch = plain(parent / ('migration-set.' + batch_id))
-        row = bounded_json(batch / 'backup-set.manifest.json', 64 * 1024)
-    if row.get('schema') != 'hiroute.sqlite-backup-set/v2' or row.get('set_id') != batch_id:
-        raise ValueError('Original batch identity changed')
-    source = plain(batch / 'source')
-    record = bounded_json(source / 'source-backup.json')
-    if record.get('schema') != 'hiroute.upgrade-source-backup/v2' or record.get('complete') is not True:
-        raise ValueError('The original recovery source is not a complete sealed group')
-    if record.get('source_info', {}).get('batch_id') != batch_id:
-        raise ValueError('The original recovery source belongs to another batch')
-    recorded_storage = record.get('source_storage')
-    if (not isinstance(recorded_storage, str) or not Path(recorded_storage).is_absolute()
-            or native_directory_identity(plain(recorded_storage)) != native_directory_identity(storage)):
-        raise ValueError('The original recovery source belongs to another native storage directory')
-    files = record.get('files')
-    if not isinstance(files, dict) or not 1 <= len(files) <= 10000:
-        raise ValueError('Original material inventory is unavailable')
-    required = {'storage/live/' + name + '.db' for name in ('control', 'runtime', 'secrets')}
-    required.update(('storage/master-key', 'storage/observation-hmac-key'))
-    if not required <= files.keys():
-        raise ValueError('The complete source lacks essential databases or keys')
-    for name, expected in files.items():
-        if (not isinstance(name, str) or '\\' in name or ':' in name
-                or any(part in ('', '.', '..') for part in name.split('/'))
-                or not isinstance(expected, str) or not re.fullmatch(r'sha256:[a-f0-9]{64}', expected)):
-            raise ValueError('Invalid original material inventory')
-        path = plain(source / name)
-        if not path.is_file() or digest(path) != expected[7:]:
-            raise ValueError('Original recovery material changed or is unavailable: ' + name)
-    candidates = [source / 'recovery-package', source / 'recovery-package/program']
-    matching = []
-    for candidate in candidates:
-        manifest = candidate / 'package-manifest.json'
-        if not manifest.exists():
-            continue
-        package = bounded_json(manifest)
-        if package.get('revision') != baseline['source_revision']:
-            continue
-        for binary in ('hiroute.exe', 'hirouted.exe'):
-            if digest(plain(candidate / binary)) != baseline['files'][binary]['sha256']:
-                raise ValueError('Original program does not match the independently staged baseline')
-        matching.append(candidate)
-    if len(matching) != 1:
-        raise ValueError('The exact native baseline program cannot be identified')
-    if native_directory_identity(source / 'storage/observation') != record.get('sealed_observation', {}).get('identity'):
-        raise ValueError('Original sealed history identity changed')
-    return dict(batch=batch, source=source, record=record, batch_id=batch_id,
-                locator_sha256=digest(locator_path), program=matching[0])
-
-
-def native_account_sid(account):
-    """Resolve Scheduler's account-name spelling to its SID; never authorize by a display name."""
-    import ctypes
-    from ctypes import wintypes
-    if os.name != 'nt' or not isinstance(account,str) or not account or len(account)>1024:
-        raise ValueError('Native Windows account resolution is required')
-    advapi=ctypes.WinDLL('advapi32',use_last_error=True)
-    kernel=ctypes.WinDLL('kernel32',use_last_error=True)
-    advapi.LookupAccountNameW.argtypes=[wintypes.LPCWSTR,wintypes.LPCWSTR,ctypes.c_void_p,
-        ctypes.POINTER(wintypes.DWORD),wintypes.LPWSTR,ctypes.POINTER(wintypes.DWORD),ctypes.POINTER(wintypes.DWORD)]
-    advapi.ConvertSidToStringSidW.argtypes=[ctypes.c_void_p,ctypes.POINTER(wintypes.LPWSTR)]
-    kernel.LocalFree.argtypes=[ctypes.c_void_p]
-    size,domain_size,kind=wintypes.DWORD(),wintypes.DWORD(),wintypes.DWORD()
-    advapi.LookupAccountNameW(None,account,None,ctypes.byref(size),None,ctypes.byref(domain_size),ctypes.byref(kind))
-    if not 1<=size.value<=256 or not 1<=domain_size.value<=1024:
-        raise ValueError('The native account could not be resolved within its bounds')
-    sid=ctypes.create_string_buffer(size.value);domain=ctypes.create_unicode_buffer(domain_size.value)
-    if not advapi.LookupAccountNameW(None,account,sid,ctypes.byref(size),domain,ctypes.byref(domain_size),ctypes.byref(kind)):
-        raise ctypes.WinError(ctypes.get_last_error())
-    result=wintypes.LPWSTR()
-    if not advapi.ConvertSidToStringSidW(sid,ctypes.byref(result)):
-        raise ctypes.WinError(ctypes.get_last_error())
-    try:return result.value
-    finally:kernel.LocalFree(result)
-
-
-def original_desktop_locations(source, baseline, paths):
-    """Admit only the installer-owned old destinations and actual limited-user Task."""
-    import re
-    import xml.etree.ElementTree as ET
-    root = source['source'] / 'recovery-package'
-    path = root / 'restore-locations.json'
-    if not path.exists():
-        return None
-    value = bounded_json(path, 16 * 1024)
-    required = {'schema','program','desktop','task_name','task_autostart','shell_login','files'}
-    if (set(value) != required or value['schema'] != 'hiroute.windows-desktop-restore/v1'
-            or type(value['task_autostart']) is not bool or type(value['shell_login']) is not bool):
-        raise ValueError('Unknown original Desktop location record')
-    package = bounded_json(source['program'] / 'package-manifest.json')
-    version = package.get('version')
-    home = paths['data'].parents[2]
-    if not isinstance(version, str) or not re.fullmatch(r'[A-Za-z0-9_.+-]{1,128}',version):
-        raise ValueError('Invalid original native package version')
-    program = home / '.local/lib/hiroute' / (version + '-' + baseline['source_revision'][:12])
-    if Path(value['program']) != program or Path(value['desktop'] or '') != paths['programs']:
-        raise ValueError('Original programs belong to another installer namespace')
-    if digest(plain(root/'desktop/hiroute-shell.exe')) != baseline['shell_sha256']:
-        raise ValueError('The retained original shell differs from the independently staged NSIS')
-    expected = {home/'.local/bin'/name: source['program']/name for name in ('hiroute.exe','hirouted.exe')}
-    for prefix in ('.agents','.claude'):
-        name = 'skills/hiroute-management/SKILL.md'
-        expected[home/prefix/name] = source['program']/name
-    for name in package.get('files', {}):
-        if name.startswith(('docs/','licenses/')):
-            expected[paths['data']/name] = source['program']/name
-    expected[paths['data']/'package-manifest.json'] = source['program']/'package-manifest.json'
-    expected[paths['data']/'standalone.json'] = root/'installation/standalone.json'
-    expected[paths['data']/'service/windows-background.json'] = root/'installation/windows-background.json'
-    files = value.get('files')
-    if (not isinstance(files, dict) or len(files) != len(expected)
-            or not {'installation/standalone.json','installation/windows-background.json'} <= files.keys()
-            or {Path(target) for target in files.values()} != set(expected)):
-        raise ValueError('The original native file map is incomplete or contains foreign destinations')
-    for name, target in files.items():
-        if (not re.fullmatch(r'installation/(standalone\.json|windows-background\.json|entry-[0-9]+\.bin)',name)
-                or digest(plain(root/name)) != digest(plain(expected[Path(target)]))):
-            raise ValueError('The original native entry is not paired with its package')
-    marker = bounded_json(root/'installation/standalone.json',64*1024)
-    if (marker.get('schema_version') != 'hiroute.standalone-install/v1'
-            or Path(marker.get('install_root','')) != program or marker.get('target') != baseline['target']
-            or Path(marker.get('service_definition','')) != paths['data']/'service/windows-background.json'):
-        raise ValueError('The original installation marker is not paired with its programs and native account')
-    definition = bounded_json(root/'installation/windows-background.json',64*1024)
-    task = value['task_name']
-    if (not re.fullmatch(r'HiRoute-[a-f0-9]{64}',task) or definition.get('name') != task
-            or not isinstance(definition.get('owner_sid'),str)
-            or task != 'HiRoute-' + hashlib.sha256(definition['owner_sid'].encode()).hexdigest()
-            or definition.get('manager') != 'task' or Path(definition.get('daemon','')) != program/'hirouted.exe'
-            or definition.get('daemon_sha256') != baseline['files']['hirouted.exe']['sha256']):
-        raise ValueError('The original Task does not match its original native program')
-    xml_path = plain(root/'installation/task.xml')
-    if not xml_path.is_file() or xml_path.stat().st_size > 512*1024:
-        raise ValueError('Original native Task XML is unavailable')
-    xml = ET.fromstring(xml_path.read_bytes())
-    ns = {'t':'http://schemas.microsoft.com/windows/2004/02/mit/task'}
-    text = lambda name: xml.findtext(name, namespaces=ns)
-    def owner(account):
-        if account==definition['owner_sid']:return True
-        try:return native_account_sid(account)==definition['owner_sid']
-        except (ValueError,OSError):return False
-    actions, triggers = xml.find('t:Actions',ns), xml.find('t:Triggers',ns)
-    if (xml.tag != '{'+ns['t']+'}Task' or actions is None or len(actions) != 1 or triggers is None or len(triggers) != 1
-            or not owner(text('t:Principals/t:Principal/t:UserId'))
-            or text('t:Principals/t:Principal/t:RunLevel') != 'LeastPrivilege'
-            or text('t:Principals/t:Principal/t:LogonType') != 'InteractiveToken'
-            or Path(text('t:Actions/t:Exec/t:Command') or '') != program/'hirouted.exe'
-            or Path(text('t:Actions/t:Exec/t:WorkingDirectory') or '') != program
-            or text('t:Actions/t:Exec/t:Arguments') != '--role all --standalone'
-            or not owner(text('t:Triggers/t:LogonTrigger/t:UserId'))
-            or {None:True,'true':True,'1':True,'false':False,'0':False}.get(text('t:Triggers/t:LogonTrigger/t:Enabled')) != value['task_autostart']):
-        raise ValueError('Original native Task XML has a foreign account, action, privilege or login policy')
-    return value

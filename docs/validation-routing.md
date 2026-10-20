@@ -182,14 +182,6 @@ candidate, `--from-product OLD_BUNDLE_ID` verifies the old images before invokin
 the new installer. Preserve existing data and identify both packages in the
 result. Different source revisions carrying the same semantic version prove a
 cross-build replacement, not a newer-version catalog selection or N-to-N+1 update.
-`--action recovery-preview --from-product CURRENT_BUNDLE --observation-run INSPECTION`
-uses the selected product as the independently measured original baseline. It
-verifies the live storage locator's exact source batch, copied-material hashes,
-essential keys, matching baseline CLI/daemon and native sealed-directory identity.
-It reads no historical content and makes no restoration or availability claim;
-its bounded metadata stays in private evidence. Another batch's presence cannot
-substitute for the live locator. A fresh inspection binds the current account,
-login session and installed product before this read-only recovery step.
 `--action cli --cli-args PRIVATE_JSON_FILE` executes a bounded argument array
 through the installed public CLI for preparation and effect readback; it does
 not establish a UI action. The selected standard account must have no
@@ -237,26 +229,6 @@ normal Rust installation entry with the captured login/tray defaults; it does
 not force a stop or bypass restoration. This mutates the prepared installation
 and is diagnostic evidence, never a successful full NSIS result. Inspect its
 output and resulting transaction before any further installation attempt.
-For a refusal before any transaction was published, `installer-prepare` captures
-the actual candidate preparation adapter's stderr. It requires the exact installed
-`--from-product`, recent inspection and `--prepare-manifest` independently extracted
-from that verified failed NSIS, plus its actual shell in `--prepare-shell`.
-The candidate revision, CLI/daemon digests and measured NSIS shell digest must
-match; the compiled acceptance test is never executed as an installer adapter.
-Pending transactions are refused. This can publish preparation material
-and must be inspected before another action. It does not replace installed programs
-and is never a successful full-installer verdict.
-Read-only installation inspection also compares bounded retained Apps-registration
-values with the fixed current-user product key. It reports only differing value
-names; this diagnostic neither imports registration nor admits a recovery source.
-For a remaining ordinary-account-only failure, the manual `windows-headless-compile`
-workflow's `registration_probe` input builds only the platform diagnostic test.
-Stage its verified bundle, then use `desktop-session --action registration-probe
---product INSTALLED_BUNDLE --probe-product PROBE_BUNDLE` under the existing account.
-It exports only the fixed current-user Apps key into disposable private files,
-reads bounded retained preparation exports and records the failing native phase.
-It changes neither installed registration nor installed programs and is diagnostic
-evidence, never full installer or recovery acceptance.
 If that failed unreleased producer never registered its generated uninstaller,
 manual `installer-quarantine` can preserve that one file in the run's evidence.
 It requires the same inspection/prior-product admission and an independently
@@ -270,16 +242,6 @@ To test a normal NSIS retry over that prepared replacement, `install` accepts
 the recent matching `--observation-run`. It verifies both retained and interrupted
 product images before launching the new installer. Recovery itself remains the
 normal NSIS/Rust path; this admission does not repair files or journals.
-For the post-startup/pre-commit boundary, `install-commit-file-use --from-product
-ORIGINAL_BUNDLE` starts from actual original Gateway readiness and holds only the
-verified shell inventory against replacement while allowing preparation reads.
-It runs the real NSIS, releases its own handle, then requires a nonzero installer
-exit, the new accepted program, a still-prepared shell transaction, verified
-complete original material, actual current Gateway readiness and no older daemon.
-This is a passing rollback-refusal scenario, never a successful install verdict.
-Inspect the resulting installation before an explicit normal `install` retry
-with the same `--product`, original `--from-product`, current `--recover-product`
-and that inspection. Verify completion and an unchanged original locator separately.
 Before native input, the runner checks that the existing session's input desktop
 is accessible and matches its ordinary desktop. `--action desktop-state` reads
 that prerequisite without unlocking or creating a login. UI observations require
@@ -288,25 +250,11 @@ Content-addressed validator helpers are verified and published once by atomic
 rename. Wait/status/collection never overwrite helper files that a running
 standard-user task may be importing.
 
-For complete-group recovery acceptance, `recovery-preview` requires the exact
-independently staged original `--product`, currently installed `--from-product`
-and recent installation inspection in `--observation-run`. It binds the live
-locator to its original batch, verifies copied recovery material and the original
-program, and checks the sealed history directory identity without traversing it.
-`recovery-restore-original` is an explicit mutating operator case requiring that
-successful preview. For legacy sources without complete Desktop location records,
-it disables login and stops only the verified current Task, preserves the newer group,
-programs and registration, copies and verifies the entire old group with native
-permissions, and runs the independently verified matching original NSIS. It never
-starts an old program against the new group, merges generations, or replays after
-failure. Offline copying may traverse history. Preserve partial states on failure.
-This legacy case does not certify recovery of original Desktop preferences.
-For a complete Desktop source, the same explicit operator case admits only the
-recorded installer namespaces, independently matched programs/native entries and
-original limited-user Task XML. It preserves displaced files, restores all recorded
-programs/entries and the fixed Apps registration, imports only the exact owned
-Task, and restores Shell/Task login choices independently. No original NSIS is run
-for that branch. Readiness and real-request checks remain separate verdicts.
+The generic complete-source, matching-program and native-state recovery design
+remains in production. A Windows development-build historical upgrade/restore
+matrix is not required first-release acceptance and does not establish a supported
+released predecessor. Preserve prior simulation evidence; do not mutate an
+existing installation to extend that deferred matrix.
 
 `recovery-lock-ui` requires a recent inspection of the currently installed product
 and an accessible existing input desktop. It starts from actual Gateway readiness,
@@ -316,24 +264,9 @@ button, releases its handle, quits and reopens the same installed Desktop, then
 checks actual Control/Gateway readiness. It never corrupts databases, changes keys,
 manufactures recovery reports or launches an older program. Its screenshots and
 native UI observations remain private evidence, separate from fixture parser tests.
-`recovery-file-use-ui --from-product ORIGINAL_BUNDLE` uses the same bounded
-sequence against the current Control file after independently verifying the
-complete original Desktop source. Both lock cases require offline current-version
+`recovery-file-use-ui` uses the same bounded sequence against the current
+Control file using only the admitted current installation. Both lock cases require offline current-version
 retry advice rather than borrowing a retained source as a reason to restore old data.
-
-`recovery-format-ui --from-product ORIGINAL_BUNDLE` is an explicitly selected
-fault/recovery journey, not ordinary smoke. It requires a healthy current installation,
-recent inspection and independently verified complete original source. After stopping
-owned processes, it preserves the entire clean current storage, both program namespaces
-and installation metadata, rechecks the clean copy under the existing startup writer
-barrier, then changes only the current Control's format-29 header
-to a future marker. The actual bundled page and offline CLI must name the verified
-original batch, source and guide in both languages. Success leaves the service offline
-for the immediately following `recovery-preview` / `recovery-restore-original` operator
-case and actual old-program request. A failed presentation assertion removes only the
-fixture's four bytes after proving no other business write, then checks current readiness;
-unexpected changes retain both copies for inspection. Product request deadlines stay
-unchanged. All copied data, fault observations and program material remain private.
 
 Stage separate product and harness bundles when reusing an unchanged product for
 a test-only repair. Results record both full revisions, binary hashes, driver hash,

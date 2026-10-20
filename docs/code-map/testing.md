@@ -23,23 +23,16 @@ uninstall remains the native evidence for restoring Agent files.
 The [native registration publication regression](../../crates/platform/src/windows/shell_registration.rs)
 uses a unique disposable registry key to reproduce inherited system-file permissions,
 verify private publication and refuse changed retained bytes or a failed export.
-The focused Windows candidate workflow runs it before packaging; it does not
-establish the ordinary-user installed restoration journey.
-Its ignored installed-account probe reads only the fixed Apps key and bounded
-preparation exports. The manual compile workflow can export that test alone for
-the existing ordinary-user runner; its exact failing phase is diagnostic evidence,
-without replacing the installed product or granting a recovery disposition.
+It verifies a generic recovery boundary; it does not establish a supported
+historical Windows release or a complete ordinary-user restoration journey.
 The [standalone journal cases](../../crates/host-runtime/src/standalone_install/journal/tests.rs)
 also prove that cutover facts stop rollback before manager effects, forward
 reapplication registers only the current definition and preserves the original
 backups, and changed native entries are refused before any manager call.
-The native session runner's commit file-use case holds only the old closed
-inventory, then independently verifies the actual NSIS failure after current
-storage startup, retained whole-source identity and absence of an older daemon.
-It also opens the real prepared-transaction report in both languages, checking
-the incomplete-installation heading, exact installer repair/support path and
-absence of a borrowed storage retry or batch location.
-An explicit same-installer retry is a separate installed-product verdict.
+Current-installation failure pages and finite installer waits have bounded
+component and production-style checks. Development cross-build simulations are
+not supported historical Windows upgrade evidence. The general complete-source
+recovery design remains; extending the development historical matrix is separate.
 
 Choose a user promise, then the layer that can observe its failure. Keep tests
 beside that owner and preserve independent assertions. A focused filesystem

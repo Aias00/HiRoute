@@ -100,14 +100,6 @@ jobs:
             --timeout 6600 --plan release-platforms --phase final -- \
             python3 scripts/build-release.py --target "$RELEASE_TARGET" \
             --cpa-source-repo "$RUNNER_TEMP/cpa"
-      - name: Verify native registry recovery publication
-        if: runner.os == 'Windows' && inputs.windows_desktop
-        shell: pwsh
-        run: |
-          New-Item artifacts/windows-desktop -ItemType Directory -Force | Out-Null
-          cargo test --locked -p hiroute-platform windows::shell_registration::tests::inherited_export_is_published_privately_and_changed_material_is_not_overwritten -- --exact --nocapture 2>&1 | Tee-Object artifacts/windows-desktop/registry-test.log
-          if ($LASTEXITCODE -ne 0) { throw 'Native registry recovery publication regression failed' }
-          if (-not (Select-String -LiteralPath artifacts/windows-desktop/registry-test.log -SimpleMatch 'test result: ok. 1 passed; 0 failed; 0 ignored;' -Quiet)) { throw 'The exact native registry regression was not executed' }
       - name: Build and verify the exact Windows candidate
         if: runner.os == 'Windows'
         shell: pwsh

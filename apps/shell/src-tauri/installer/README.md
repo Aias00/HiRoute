@@ -16,10 +16,15 @@ runs refuse it and exceptional removal always keeps business data. Package clean
 waits for both transaction owners to commit and preserves rollback sources.
 
 The preinstall helper also receives the manifest-bound candidate daemon extracted
-into the private plugin directory. It checks storage prerequisites before overlay,
-retains the complete old Desktop/native installation and fixed HKCU registration,
-and accounts for simultaneous allocations on their actual native volumes. The
+into the private plugin directory. It checks storage prerequisites before overlay.
+Only a preflight requiring format-changing history cutover retains the complete
+previous Desktop/native installation and fixed HKCU registration; ordinary current
+repair avoids this archival work. It accounts for simultaneous allocations on their actual native volumes. The
 interactive history notice precedes replacement; silent/passive callers receive
 the corresponding notice through installation help or the originating Updates UI.
 The generated whole-group guide uses the installation owner's file map and actual
 Task/login choices, including separate choices, rather than reconstructing paths.
+
+The first supported Windows release has no supported published predecessor.
+Generic complete recovery remains; development historical compatibility promises
+and exhaustive development upgrade matrices are outside this change.

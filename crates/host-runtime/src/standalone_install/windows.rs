@@ -433,9 +433,9 @@ pub fn install(request: InstallRequest) -> io::Result<Value> {
     {
         let target = root.join("hirouted.exe");
         let source = retained_source(&layout, previous, &target)?;
-        crate::run_upgrade_preflight(&target, &layout.storage_root(), &source)
+        let report = crate::checked_upgrade_preflight(&target, &layout.storage_root(), &source)
             .map_err(io::Error::other)?;
-        Some(source)
+        report.history_cutover_required.then_some(source)
     } else {
         None
     };

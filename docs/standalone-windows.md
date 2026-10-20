@@ -101,7 +101,11 @@ version too. Changed or foreign entries are preserved for repair.
 
 ## Storage upgrade recovery
 
-A Task-started daemon reads the installer's protected matching-old-package handoff;
+Windows has no supported released predecessor in this first release. General
+complete-group recovery remains available, but development-build simulations do
+not establish a historical support promise or a required released-upgrade matrix.
+
+When an admitted format-changing cutover is required, a Task-started daemon reads the installer's protected matching-old-package handoff;
 it does not depend on an environment variable from another PowerShell session.
 The native installer checks the verified candidate before changing programs and
 retains the previous package while recovery needs it. For startup refusal, use

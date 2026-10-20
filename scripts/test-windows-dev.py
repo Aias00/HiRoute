@@ -40,44 +40,18 @@ class Runner(unittest.TestCase):
                        dict(name='相同版本及构建；缺包时寻求支持'),button])
         en=dict(nodes=[dict(name='Installation is incomplete'),dict(name='SHELL_INSTALL_RECOVERY_REQUIRED'),
                        dict(name='same version and build; obtain support if missing')])
-        source=dict(batch_id='original-batch')
         with patch.object(desktop,'ui_action',side_effect=[zh,en]) as action:
-            self.assertEqual(desktop.failure_page_languages(self.root,Path('shell.exe'),42,'installer_recovery',source),['zh','en'])
+            self.assertEqual(desktop.failure_page_languages(self.root,Path('shell.exe'),42,'installer_recovery'),['zh','en'])
         self.assertEqual(action.call_args_list[1].args[-1],button,
                          'Native invocation needs the entire observed element for identity recheck')
-        for extra in [dict(name='original-batch'),dict(name='重试',offscreen=False)]:
+        for extra in [dict(name='RECOVERY.md'),dict(name='重试',offscreen=False)]:
             with self.subTest(extra=extra),patch.object(desktop,'ui_action',return_value=dict(nodes=zh['nodes']+[extra])), \
                     self.assertRaisesRegex(ValueError,'borrowed storage advice'):
-                desktop.failure_page_languages(self.root,Path('shell.exe'),42,'installer_recovery',source)
+                desktop.failure_page_languages(self.root,Path('shell.exe'),42,'installer_recovery')
         with patch.object(desktop,'ui_action',return_value=dict(nodes=[n for n in zh['nodes'] if '相同版本' not in n['name']])), \
                 self.assertRaisesRegex(ValueError,'exact repair/support'):
-            desktop.failure_page_languages(self.root,Path('shell.exe'),42,'installer_recovery',source)
+            desktop.failure_page_languages(self.root,Path('shell.exe'),42,'installer_recovery')
 
-    def test_registration_diagnosis_compares_values_without_granting_recovery(self):
-        text='Windows Registry Editor Version 5.00\r\n\r\n[HKEY_CURRENT_USER\\Software\\Example]\r\n"Path"="C:\\\\Program Files\\\\Example"\r\n"Size"=dword:000000ff\r\n'
-        self.assertEqual(profiles.registration_values(text),dict(Path=(1,r'C:\Program Files\Example'),Size=(4,255)))
-        for other in (text+'"Binary"=hex:ff\r\n',text+'"Size"=dword:000000ff\r\n','unrecognized'):
-            with self.assertRaises(ValueError):profiles.registration_values(other)
-
-    def test_preparation_executes_only_the_measured_actual_nsis_shell(self):
-        data=b'actual NSIS shell';encoded=base64.b64encode(data).decode('ascii')
-        pm=dict(shell_sha256=hashlib.sha256(data).hexdigest())
-        self.assertEqual(desktop.prepare_shell_bytes(encoded,pm),data)
-        for substituted in (None,'invalid!',base64.b64encode(b'test harness').decode('ascii')):
-            with self.assertRaises(ValueError):desktop.prepare_shell_bytes(substituted,pm)
-
-    def test_prepare_manifest_binds_both_binaries_and_revision(self):
-        pm=dict(source_revision='a'*40,files={name:dict(sha256=name) for name in ('hiroute.exe','hirouted.exe')})
-        value=dict(revision='a'*40,target='x86_64-pc-windows-msvc',
-                   files={'bin/'+name:dict(sha256=name) for name in pm['files']})
-        self.assertEqual(json.loads(desktop.prepare_manifest_bytes(value,pm)),value)
-        for name in pm['files']:
-            other=json.loads(json.dumps(value));other['files']['bin/'+name]['sha256']='changed'
-            with self.assertRaisesRegex(ValueError,'substitutes'):
-                desktop.prepare_manifest_bytes(other,pm)
-        value['revision']='b'*40
-        with self.assertRaisesRegex(ValueError,'not the measured'):
-            desktop.prepare_manifest_bytes(value,pm)
 
     def setUp(self):
         self.temporary = tempfile.TemporaryDirectory()
@@ -191,55 +165,12 @@ class Runner(unittest.TestCase):
         self.assertTrue(result['timed_out'])
         self.assertNotIn('exit_code', result)
 
-    def test_recovery_preview_binds_the_live_batch_source_and_independent_baseline(self):
-        home, local = self.root / 'home', self.root / 'local'
-        storage = local / 'HiRoute/cli/storage'
-        batch = storage.parent / 'storage.upgrade-backups/original'
-        source = batch / 'source'
-        storage.mkdir(parents=True)
-        (storage / 'observation-source-backup.json').write_text(json.dumps(dict(schema=1, backup_name='original', set_id='batch-1')))
-        (source / 'storage/observation').mkdir(parents=True)
-        (batch / 'backup-set.manifest.json').write_text(json.dumps(dict(schema='hiroute.sqlite-backup-set/v2', set_id='batch-1')))
-        files = {}
-        def original(name, content):
-            path = source / name
-            path.parent.mkdir(parents=True, exist_ok=True)
-            path.write_bytes(content)
-            files[name] = 'sha256:' + profiles.digest(path)
-        for name in ('control', 'runtime', 'secrets'):
-            original('storage/live/' + name + '.db', b'original database fixture')
-        for name in ('master-key', 'observation-hmac-key'):
-            original('storage/' + name, b'original key fixture')
-        original('recovery-package/package-manifest.json', json.dumps(dict(revision='a'*40)).encode())
-        binaries = {}
-        for name in ('hiroute.exe', 'hirouted.exe'):
-            original('recovery-package/' + name, name.encode())
-            binaries[name] = dict(sha256=profiles.digest(source / 'recovery-package' / name))
-        record = dict(schema='hiroute.upgrade-source-backup/v2', complete=True, source_storage=str(storage),
-                      source_info=dict(batch_id='batch-1'), files=files, sealed_observation=dict(identity=[1, 2]))
-        (source / 'source-backup.json').write_text(json.dumps(record))
-        baseline = dict(source_revision='a'*40, files=binaries)
-        with patch.object(profiles, 'native_directory_identity', return_value=[1, 2]):
-            self.assertEqual(profiles.original_recovery_source(home, local, baseline)['batch_id'], 'batch-1')
-            with patch.object(profiles, 'native_directory_identity', side_effect=[[9, 9], [1, 2]]):
-                with self.assertRaisesRegex(ValueError, 'another native storage'):
-                    profiles.original_recovery_source(home, local, baseline)
-            (source / 'storage/master-key').write_bytes(b'changed authority')
-            with self.assertRaisesRegex(ValueError, 'material changed'):
-                profiles.original_recovery_source(home, local, baseline)
-        self.assertFalse((source / 'preserved-current').exists(), 'read-only preview never prepares a restore')
 
     def test_desktop_refuses_filtered_administrator_before_native_actions(self):
         with self.assertRaisesRegex(ValueError, 'filtered administrator'), patch.object(desktop.subprocess, 'run') as run:
             desktop.execute({}, self.root, self.root, {}, profiles, {'administrator_groups': True}, host.manifest, self.root)
         run.assert_not_called()
 
-    def test_original_restore_requires_exact_preview_before_any_native_mutation(self):
-        with patch.object(desktop.subprocess, 'run') as run, patch.object(desktop, 'nsis_install') as install:
-            with self.assertRaisesRegex(ValueError, 'recent successful source preview'):
-                desktop.restore_original({}, self.root, self.root, {}, profiles, {}, host.manifest, self.root)
-        run.assert_not_called()
-        install.assert_not_called()
 
     def test_native_lock_ui_requires_current_inspection_before_stopping_any_service(self):
         with patch.object(desktop.subprocess,'run') as run,patch.object(desktop,'installed') as admit:
@@ -247,13 +178,6 @@ class Runner(unittest.TestCase):
                 desktop.locked_startup_ui({},self.root,self.root,{},profiles,{},self.root)
         run.assert_not_called();admit.assert_not_called()
 
-    def test_recovery_ui_fixtures_require_an_independent_original_before_native_mutation(self):
-        for action in ('recovery-file-use-ui','recovery-format-ui'):
-            with patch.object(desktop.subprocess,'run') as run,patch.object(desktop,'installed') as admit:
-                with self.assertRaisesRegex(ValueError,'independently measured original product'):
-                    desktop.execute(dict(desktop_action=action),self.root,self.root,{},profiles,
-                                    {'administrator_groups':False},host.manifest,self.root)
-            run.assert_not_called();admit.assert_not_called()
 
     def test_startup_fixture_refuses_foreign_activity_before_desktop_or_service_mutation(self):
         observed='a'*32;folder=self.root/'runs'/observed;folder.mkdir(parents=True)
@@ -272,141 +196,8 @@ class Runner(unittest.TestCase):
                     desktop.startup_ui_context(request,self.root,{},profiles,activity,self.root)
             state.assert_not_called();run.assert_not_called()
 
-    def test_control_fixture_cleanup_refuses_unexpected_business_changes(self):
-        import sqlite3
-        storage=self.root/'storage';(storage/'live').mkdir(parents=True)
-        control=storage/'live/control.db'
-        with sqlite3.connect(control) as db:
-            db.executescript('CREATE TABLE business(value); INSERT INTO business VALUES(42); PRAGMA user_version=29;')
-        original=control.read_bytes();header=original[:100];before=profiles.inventory(storage)
-        def future():
-            with control.open('r+b') as file:file.seek(60);file.write((2147483647).to_bytes(4,'big'))
-        future()
-        desktop.restore_control_fixture(profiles,storage,before,header)
-        self.assertEqual(control.read_bytes(),original)
-        future()
-        with control.open('r+b') as file:file.seek(200);file.write(b'changed business')
-        changed=control.read_bytes()
-        with self.assertRaisesRegex(ValueError,'Unexpected Control contents'):
-            desktop.restore_control_fixture(profiles,storage,before,header)
-        self.assertEqual(control.read_bytes(),changed,'an unexpected write must be preserved')
-        control.write_bytes(original);future()
-        (storage/'live/runtime.db').write_bytes(b'unexpected concurrent state')
-        changed=control.read_bytes()
-        with self.assertRaisesRegex(ValueError,'Unexpected business changes'):
-            desktop.restore_control_fixture(profiles,storage,before,header)
-        self.assertEqual(control.read_bytes(),changed)
 
-    def test_fault_inventory_can_exclude_only_the_empty_non_data_startup_lock(self):
-        storage=self.root/'storage';storage.mkdir()
-        (storage/'startup.lock').write_bytes(b'')
-        (storage/'master-key').write_bytes(b'original key')
-        strict=profiles.inventory(storage)
-        self.assertIn('startup.lock',strict)
-        current=profiles.inventory(storage,exclude_startup_lock=True)
-        self.assertNotIn('startup.lock',current)
-        self.assertEqual(current['master-key'],strict['master-key'])
-        (storage/'startup.lock').write_bytes(b'unknown state')
-        with self.assertRaisesRegex(ValueError,'empty non-data startup lock'):
-            profiles.inventory(storage,exclude_startup_lock=True)
 
-    def test_preparation_inspection_is_bounded_metadata_and_not_recovery_admission(self):
-        home, local = self.root/'home', self.root/'local'
-        program = local/'Programs/HiRoute'; program.mkdir(parents=True)
-        (program/'shell-package.json').write_text(json.dumps(dict(files={'hiroute-shell.exe':'0'*64})))
-        staging = local/'HiRoute/shell/recovery-packages'/('a'*64)
-        (staging/'installation').mkdir(parents=True)
-        (staging/'installation/task.xml').write_bytes(b'captured task definition')
-        (staging/'source-history').mkdir()
-        history = staging/'source-history/never-inspected'
-        history.write_bytes(b'not part of bounded preparation metadata')
-        backups = local/'HiRoute/shell/install-backups'; backups.mkdir()
-        (backups/'hiroute-shell.exe').write_bytes(b'substituted backup')
-        digest = profiles.digest
-        def bounded_digest(path):
-            if Path(path) == history:
-                raise AssertionError('Preparation inspection read historical content')
-            return digest(path)
-        with patch.object(profiles,'digest',side_effect=bounded_digest):
-            facts = profiles.inspect_installation(home,local)
-        self.assertEqual(facts['shell_backup_mismatches'],['hiroute-shell.exe'])
-        retained = facts['retained_preparation_metadata']
-        self.assertEqual(retained['assessment'],'staging_only_not_recovery_admission')
-        self.assertEqual(list(retained['packages'][0]['files']),['installation/task.xml'])
-        self.assertEqual(retained['packages'][0]['files']['installation/task.xml']['sha256'],
-                         profiles.digest(staging/'installation/task.xml'))
-        self.assertNotIn('source-history',json.dumps(retained))
-
-    def test_full_desktop_restore_admits_only_the_original_native_map_and_limited_task(self):
-        home, local = self.root/'home', self.root/'local'
-        paths = profiles.locations(home,local)
-        package = self.root/'source/recovery-package'
-        program = package/'program'; program.mkdir(parents=True)
-        baseline = dict(source_revision='a'*40,target='x86_64-pc-windows-msvc',files={})
-        original = home/'.local/lib/hiroute/0.3.1-aaaaaaaaaaaa'
-        expected = {}
-        def material(name,content):
-            path=package/name;path.parent.mkdir(parents=True,exist_ok=True);path.write_bytes(content);return path
-        for name in ('hiroute.exe','hirouted.exe'):
-            expected[home/'.local/bin'/name]=material('program/'+name,name.encode())
-            baseline['files'][name]=dict(sha256=profiles.digest(program/name))
-        skill=material('program/skills/hiroute-management/SKILL.md',b'original skill')
-        for prefix in ('.agents','.claude'):expected[home/prefix/'skills/hiroute-management/SKILL.md']=skill
-        expected[paths['data']/'package-manifest.json']=material('program/package-manifest.json',json.dumps(dict(version='0.3.1',revision='a'*40,files={})).encode())
-        baseline['shell_sha256']=profiles.digest(material('desktop/hiroute-shell.exe',b'original shell'))
-        sid='S-1-5-21-1000';task='HiRoute-'+hashlib.sha256(sid.encode()).hexdigest()
-        definition=dict(manager='task',name=task,owner_sid=sid,daemon=str(original/'hirouted.exe'),daemon_sha256=baseline['files']['hirouted.exe']['sha256'])
-        marker=dict(schema_version='hiroute.standalone-install/v1',install_root=str(original),target=baseline['target'],service_definition=str(paths['data']/'service/windows-background.json'))
-        expected[paths['data']/'standalone.json']=material('installation/standalone.json',json.dumps(marker).encode())
-        expected[paths['data']/'service/windows-background.json']=material('installation/windows-background.json',json.dumps(definition).encode())
-        files={}
-        for index,(target,source) in enumerate(expected.items()):
-            name=str(source.relative_to(package)) if source.parent==package/'installation' else 'installation/entry-'+str(index)+'.bin'
-            if source.parent!=package/'installation':material(name,source.read_bytes())
-            files[name]=str(target)
-        value=dict(schema='hiroute.windows-desktop-restore/v1',program=str(original),desktop=str(paths['programs']),task_name=task,task_autostart=False,shell_login=True,files=files)
-        location=material('restore-locations.json',json.dumps(value).encode())
-        xml=f'<Task xmlns="http://schemas.microsoft.com/windows/2004/02/mit/task"><Principals><Principal><UserId>{sid}</UserId><RunLevel>LeastPrivilege</RunLevel><LogonType>InteractiveToken</LogonType></Principal></Principals><Triggers><LogonTrigger><UserId>{sid}</UserId><Enabled>false</Enabled></LogonTrigger></Triggers><Actions><Exec><Command>{original}/hirouted.exe</Command><WorkingDirectory>{original}</WorkingDirectory><Arguments>--role all --standalone</Arguments></Exec></Actions></Task>'
-        task_file=material('installation/task.xml',xml.encode('utf-16'))
-        source=dict(source=package.parent,program=program)
-        self.assertEqual(profiles.original_desktop_locations(source,baseline,paths),value)
-        task_file.write_bytes(xml.replace(sid,r'LOCAL\standard-user').encode('utf-16'))
-        with patch.object(profiles,'native_account_sid',return_value=sid) as resolve:
-            self.assertEqual(profiles.original_desktop_locations(source,baseline,paths),value)
-            self.assertEqual(resolve.call_count,2)
-        with patch.object(profiles,'native_account_sid',return_value='S-1-5-21-9999'),self.assertRaisesRegex(ValueError,'foreign account'):
-            profiles.original_desktop_locations(source,baseline,paths)
-        task_file.write_bytes(xml.replace('LeastPrivilege','HighestAvailable').encode('utf-16'))
-        with self.assertRaisesRegex(ValueError,'privilege'):
-            profiles.original_desktop_locations(source,baseline,paths)
-        task_file.write_bytes(xml.encode('utf-16'))
-        value['files'][next(iter(files))]=str(home/'.ssh/config')
-        location.write_text(json.dumps(value))
-        with self.assertRaisesRegex(ValueError,'foreign destinations'):
-            profiles.original_desktop_locations(source,baseline,paths)
-        self.assertFalse((home/'.ssh/config').exists())
-
-    def test_offline_restore_copy_never_overwrites_an_existing_generation(self):
-        source, target = self.root/'source', self.root/'current'
-        source.mkdir(); target.mkdir()
-        (target/'newer').write_bytes(b'preserve this generation')
-        with patch.object(desktop.subprocess, 'run') as run, self.assertRaisesRegex(ValueError, 'absent destination'):
-            desktop.copy_recovery_tree(profiles, source, target, self.root/'copy.log')
-        run.assert_not_called()
-        self.assertEqual((target/'newer').read_bytes(), b'preserve this generation')
-
-    def test_native_copy_tool_receives_drive_or_unc_paths_without_device_prefix(self):
-        self.assertEqual(desktop.robocopy_path(r'\\?\C:\profile\source'), r'C:\profile\source')
-        self.assertEqual(desktop.robocopy_path(r'\\?\UNC\server\share\source'), r'\\server\share\source')
-        self.assertEqual(desktop.robocopy_path(r'C:\profile\source'), r'C:\profile\source')
-
-    def test_offline_restore_copy_requires_a_complete_matching_inventory(self):
-        source, target = self.root/'source', self.root/'restored'
-        source.mkdir(); (source/'master-key').write_bytes(b'original fixture key')
-        with patch.object(desktop.subprocess, 'run', return_value=types.SimpleNamespace(returncode=1)), \
-             self.assertRaisesRegex(ValueError, 'failed verification'):
-            desktop.copy_recovery_tree(profiles, source, target, self.root/'copy.log')
-        self.assertEqual((source/'master-key').read_bytes(), b'original fixture key')
 
     def test_desktop_helper_requires_the_exact_committed_hash(self):
         path = self.root / 'desktop.py'

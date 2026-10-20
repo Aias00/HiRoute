@@ -110,10 +110,27 @@ recovery succeeded. The next shell start reads the private outcome and can recov
 an interrupted transaction after the installer is no longer active. An unresolved
 file or service conflict stays on the bundled failure page with a diagnostics path.
 
+## Windows support and acceptance scope
+
+This is the first supported Windows release, with no supported released Windows
+predecessor. General complete-group recovery, matching programs/native-state
+preservation and the existing transaction safety boundaries remain available.
+Their presence is not a historical compatibility promise. Development builds and
+simulated cross-build replacements are not released-version upgrade evidence;
+expanding their historical upgrade/restore matrix is separate follow-up work.
+
+Current installation, failure/interruption repair, actionable errors and data
+protection remain required. Ordinary current-format repair does not duplicate the
+complete Desktop or export Task/Apps registration merely to support a historical
+simulation. Those complete-source operations are used when authoritative candidate
+preflight actually requires a format-changing history cutover. Retained recovery
+material is never deleted to narrow acceptance.
+
 ## Storage-format failure and whole-group recovery
 
 Before NSIS replaces installed files, its verified candidate daemon checks the
-stopped-source requirements. Preparation retains both the complete previous
+stopped-source requirements. When an actual history cutover is required,
+preparation retains both the complete previous
 Desktop (including shell, uninstaller and inventory) and standalone version root,
 the native transaction's CLI/daemon/Skill/documentation file map, owned native Task XML and definition,
 login choices and the fixed current-user HiRoute Apps registration. The protected
@@ -152,7 +169,7 @@ still cannot be verified, preserve the material and use the verified batch's
 whole-group guide or obtain support. Check actual service/Gateway readiness and a
 request after repair; do not infer recovery from installer or Task exit alone.
 
-For complete restoration, stop the owned Task/daemon and automatic starts, keep
+When complete restoration is required and the source is verified, stop the owned Task/daemon and automatic starts, keep
 newer storage with its matching program separately, and follow the exact verified
 batch's Chinese/English generated guide. Restore all stores, keys, Observation and
 recorded auxiliary locations together, then the matching full package and Task
@@ -169,7 +186,8 @@ development packages retain separate evidence boundaries.
 
 ### Chinese recovery quick guide
 
-升级或启动失败时，先保留两版完整程序、全部数据、密钥、安装记录与恢复包。
+本次是 Windows 首个受支持版本，没有已发布旧版的历史兼容承诺。通用完整恢复能力和数据保护仍保留；开发构建模拟不等于正式升级支持。
+安装或启动失败时，先保留完整程序、全部数据、密钥、安装记录与恢复包。
 文件占用、权限或空间问题应按当前提示处理后再试；不要清空历史、批量修改权限或删除安装记录。
 如果新服务已启动但安装尚未完成，解除占用并核对权限、空间后，重新运行**同一当前版的完整安装器**。
 安装器会核对原先接受的程序包与任务注册，再继续完成安装；程序或记录不符时会拒绝，不能换任意旧安装器覆盖。

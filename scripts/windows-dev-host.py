@@ -325,7 +325,6 @@ def worker(request):
             outcome = desktop_helper(request).execute(request, run, product, pm, profile_helper(request),
                                                      activity, manifest, root)
             assessment = {'codex-call':'native_codex_gateway_call', 'codex-inference':'native_codex_gateway_inference',
-                          'install-commit-file-use':'native_installer_poststart_failure_guard',
                           'installer-quarantine':'preparation_only',
                           'network-probe':'diagnostic_only'}
             result.update(passed=True, assessment=assessment.get(request.get('desktop_action'),'native_desktop_observation'), desktop=outcome)
