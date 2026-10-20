@@ -3,8 +3,9 @@ use super::InstalledProduct;
 use super::windows_headless_business::{Business, cli};
 use super::windows_routing_business::Plan;
 use super::windows_worker_business::{
-    cancel, command, exec_args, oracle, selected, wait_result, write_new,
+    cancel, command, exec_args, oracle, select_native, selected, wait_result, write_new,
 };
+use hiroute_application_api::WorkerHarnessV1;
 use hiroute_platform::windows::security;
 use serde_json::{Value, json};
 use std::ffi::OsString;
@@ -111,22 +112,7 @@ impl Journey {
             ],
             None,
         );
-        let revision = discovered["data"]["selection_revisions"]
-            .as_array()
-            .unwrap()
-            .iter()
-            .find(|row| row["harness"] == "opencode")
-            .unwrap()["revision"]
-            .as_u64()
-            .unwrap();
-        let selection = json!({"harness":"opencode","cli_path":binary,"adapter_path":null,
-            "node_path":null,"expected_selection_revision":revision});
-        command(
-            product,
-            &["worker", "dependencies", "select", "--request-stdin"],
-            Some(&selection),
-            Duration::from_secs(120),
-        );
+        select_native(product, &discovered, WorkerHarnessV1::OpenCode, &binary);
         let prompt = workspace.join("direct.txt");
         let continued_prompt = workspace.join("continue.txt");
         write_new(&prompt, format!("{}: Load the windows-worker-receipt Skill and complete its bounded tool receipt.\n", oracle::DIRECT).as_bytes());

@@ -456,6 +456,21 @@ pub(super) fn selected(variable: &str) -> PathBuf {
         .filter(|path| path.is_absolute() && path.is_file())
         .unwrap_or_else(|| panic!("{variable} must select the fixed actual native client"))
 }
+pub(super) fn select_native(
+    product: &InstalledProduct,
+    discovered: &Value,
+    harness: hiroute_application_api::WorkerHarnessV1,
+    binary: &Path,
+) {
+    let selection = dependency_selection::select_native(discovered, harness, binary);
+    command(
+        product,
+        &["worker", "dependencies", "select"],
+        Some(&serde_json::to_value(&selection.request).unwrap()),
+        Duration::from_secs(120),
+    );
+}
+
 fn select_pi(product: &InstalledProduct) {
     let discovered = cli(
         product,
