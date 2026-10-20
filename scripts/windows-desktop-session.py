@@ -873,14 +873,100 @@ def restore_original(request, run, product, pm, helper, activity, manifest, root
                 scope='legacy retained source; original Desktop preferences were not captured' if locations is None else 'complete original Desktop, program, native files and independent login choices')
 
 
+def locked_startup_ui(request, run, product, pm, helper, activity, root):
+    """Own one bounded lock fixture, inspect both real languages, then reopen normally."""
+    import shutil
+    observation = request.get('observation_run')
+    if not re.fullmatch(r'[a-f0-9]{32}',observation or ''):
+        raise ValueError('The native lock UI case requires a recent current-product inspection')
+    inspected = root/'runs'/observation
+    before_request = helper.bounded_json(inspected/'request.json')
+    before_result = helper.bounded_json(inspected/'result.json')
+    if (before_request.get('operation') != 'inspect' or before_request['product'] != request['product']
+            or not before_result.get('passed') or before_result.get('administrator') is not False
+            or before_request['config']['user'] != request['config']['user']
+            or before_request['config']['session_id'] != request['config']['session_id']
+            or time.time()-(inspected/'result.json').stat().st_mtime>3600):
+        raise ValueError('The native lock UI inspection is stale or belongs to another product/account')
+    roots,facts,shell = installed(helper,product,pm)
+    if any(Path(p.get('ExecutablePath') or '') == shell for p in activity.get('processes', [])):
+        raise ValueError('Quit the installed Desktop before the bounded native UI case')
+    if not desktop_state().get('interactive'):
+        raise ValueError('The existing input desktop is unavailable; no lock fixture was created')
+    cli = Path(facts['marker']['record']['install_root'])/'hiroute.exe'
+    def command(args,label):
+        done=subprocess.run([str(cli),*args],capture_output=True,timeout=150,creationflags=0x08000000)
+        (run/(label+'.stdout')).write_bytes(done.stdout);(run/(label+'.stderr')).write_bytes(done.stderr)
+        if done.returncode:raise ValueError('The current-product fixture command failed: '+label)
+        return json.loads(done.stdout)
+    if command(['system','status','--output','json'],'before-system').get('data',{}).get('gateway') != 'ready':
+        raise ValueError('The current Gateway must be healthy before the native lock fixture')
+    command(['service','stop','--output','json'],'fixture-stop')
+    storage=roots['state']/'storage'
+    report=helper.plain(storage/'startup-recovery.json')
+    report_before=helper.digest(report) if report.exists() else None
+    kernel=ctypes.WinDLL('kernel32',use_last_error=True)
+    from ctypes import wintypes
+    kernel.CreateFileW.argtypes=[wintypes.LPCWSTR,wintypes.DWORD,wintypes.DWORD,ctypes.c_void_p,wintypes.DWORD,wintypes.DWORD,wintypes.HANDLE]
+    kernel.CreateFileW.restype=wintypes.HANDLE;kernel.CloseHandle.argtypes=[wintypes.HANDLE]
+    handle=kernel.CreateFileW(str(helper.plain(storage/'startup.lock')),0,0,None,3,0x00200000,None)
+    if handle==wintypes.HANDLE(-1).value:raise ctypes.WinError(ctypes.get_last_error())
+    child=None
+    languages=[]
+    try:
+        child=subprocess.Popen([str(shell)],stdin=subprocess.DEVNULL,stdout=subprocess.DEVNULL,stderr=subprocess.DEVNULL)
+        time.sleep(15)
+        observed=ui_action(run,dict(desktop_action='snapshot'),shell,child.pid)
+        for index in range(2):
+            names='\n'.join(n.get('name','') for n in observed.get('nodes',[]))
+            language='zh' if '另一个 HiRoute 实例' in names else 'en' if 'Another HiRoute instance' in names else None
+            if language is None:raise ValueError('The native failure page did not report the current lock cause')
+            languages.append(language)
+            shutil.copyfile(run/'window.png',run/('locked-'+language+'.png'))
+            shutil.copyfile(run/'ui.json',run/('locked-'+language+'.json'))
+            if index==0:
+                buttons=[n for n in observed['nodes'] if n.get('name') in ('English','中文') and n.get('type')=='ControlType.Button' and not n.get('offscreen')]
+                if len(buttons)!=1:raise ValueError('The actual failure page language control is unavailable')
+                observed=ui_action(run,dict(desktop_action='invoke'),shell,child.pid,buttons[0]['runtime_id'])
+        if set(languages)!={'zh','en'}:raise ValueError('Both native failure-page languages were not observed')
+    finally:
+        kernel.CloseHandle(handle)
+        if child is not None and child.poll() is None:
+            try:
+                ui_action(run,dict(desktop_action='quit'),shell,child.pid)
+                child.wait(timeout=20)
+            except Exception:
+                if child.poll() is None:child.terminate();child.wait(timeout=20)
+    if (helper.digest(report) if report.exists() else None)!=report_before:
+        raise ValueError('A non-writer lock failure overwrote the previous recovery report')
+    # Follow the visible instruction: release the file use and reopen this same
+    # complete version. Keep business readiness separate from the window result.
+    reopened=subprocess.Popen([str(shell)],stdin=subprocess.DEVNULL,stdout=subprocess.DEVNULL,stderr=subprocess.DEVNULL)
+    try:
+        time.sleep(15)
+        ui_action(run,dict(desktop_action='snapshot'),shell,reopened.pid)
+        shutil.copyfile(run/'window.png',run/'reopened-current.png')
+        if command(['system','status','--output','json'],'reopened-system').get('data',{}).get('gateway')!='ready':
+            raise ValueError('Reopening the current version did not restore actual Gateway readiness')
+    finally:
+        if reopened.poll() is None:
+            try:ui_action(run,dict(desktop_action='quit'),shell,reopened.pid);reopened.wait(timeout=20)
+            except Exception:
+                if reopened.poll() is None:reopened.terminate();reopened.wait(timeout=20)
+    return dict(native_entry='real standard-user locked-startup page and current-version reopen',languages=languages,
+                recovery_report_unchanged=True,gateway_ready_after_reopen=True)
+
+
 def execute(request, run, product, pm, helper, activity, manifest, root):
     if activity.get('administrator_groups') is not False:
         raise ValueError('Native Desktop evidence requires a standard account, not a filtered administrator')
     action = request['desktop_action']
-    if action not in ('install', 'installer-resume', 'installer-quarantine', 'launch', 'snapshot', 'invoke', 'text', 'click', 'scroll', 'close', 'quit', 'tray-observe', 'desktop-state', 'cli', 'native-files', 'codex-call', 'codex-inference', 'network-probe', 'recovery-preview', 'recovery-restore-original'):
+    if action not in ('install', 'installer-resume', 'installer-quarantine', 'launch', 'snapshot', 'invoke', 'text', 'click', 'scroll', 'close', 'quit', 'tray-observe', 'desktop-state', 'cli', 'native-files', 'codex-call', 'codex-inference', 'network-probe', 'recovery-preview', 'recovery-restore-original', 'recovery-lock-ui'):
         raise ValueError('Unknown native Desktop action')
     if action == 'recovery-restore-original':
         return restore_original(request, run, product, pm, helper, activity, manifest, root)
+    if action == 'recovery-lock-ui':
+        return locked_startup_ui(request,run,product,pm,helper,activity,root)
     if action == 'recovery-preview':
         previous = request.get('from_product')
         observation = request.get('observation_run')

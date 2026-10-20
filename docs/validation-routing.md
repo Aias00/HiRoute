@@ -276,6 +276,15 @@ programs/entries and the fixed Apps registration, imports only the exact owned
 Task, and restores Shell/Task login choices independently. No original NSIS is run
 for that branch. Readiness and real-request checks remain separate verdicts.
 
+`recovery-lock-ui` requires a recent inspection of the currently installed product
+and an accessible existing input desktop. It starts from actual Gateway readiness,
+stops the owned service, holds only an owned startup-lock file handle and opens the
+real bundled failure page. It observes both languages through the visible language
+button, releases its handle, quits and reopens the same installed Desktop, then
+checks actual Control/Gateway readiness. It never corrupts databases, changes keys,
+manufactures recovery reports or launches an older program. Its screenshots and
+native UI observations remain private evidence, separate from fixture parser tests.
+
 Stage separate product and harness bundles when reusing an unchanged product for
 a test-only repair. Results record both full revisions, binary hashes, driver hash,
 client hashes, actual OS/session/elevation and exactly one test outcome. Zero exit

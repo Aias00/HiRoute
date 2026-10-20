@@ -194,6 +194,12 @@ class Runner(unittest.TestCase):
         run.assert_not_called()
         install.assert_not_called()
 
+    def test_native_lock_ui_requires_current_inspection_before_stopping_any_service(self):
+        with patch.object(desktop.subprocess,'run') as run,patch.object(desktop,'installed') as admit:
+            with self.assertRaisesRegex(ValueError,'recent current-product inspection'):
+                desktop.locked_startup_ui({},self.root,self.root,{},profiles,{},self.root)
+        run.assert_not_called();admit.assert_not_called()
+
     def test_full_desktop_restore_admits_only_the_original_native_map_and_limited_task(self):
         home, local = self.root/'home', self.root/'local'
         paths = profiles.locations(home,local)
