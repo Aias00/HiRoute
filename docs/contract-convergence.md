@@ -61,14 +61,14 @@ if that local presentation boundary is retired.
 | Managed artifact markers | Store/key binding, operation/effect identity, target fingerprint, native permissions, backup, activation/compensation state, and created directories | Unix emits V4 and authenticates/migrates V2/V3 recovery. Windows emits Windows V5, binding the actual owner/DACL/read-only facts to its fingerprint and encrypted backup AAD; it never invents POSIX permission bits for recovery | Zero V2/V3 Unix markers in active restore directories; every supported Unix backup proves restore-to-V4 or is explicitly retired. Windows has no previously released producer or legacy Windows recovery format |
 | Execution observations | Immutable V1 event bytes and their authenticated digest | Live ingestion accepts only the current contract; recovery may read V1 for projection/backfill without rewriting it as a current event | Zero V1 rows across every active `activity.db` and supported backup, or explicit backup retirement |
 | Historical Oracle fixtures | Exact sealed launcher/schema/input evidence only | Never converted into current-product success evidence | Delete the fixture, schema/types, dedicated historical test, and registration together |
-| Client-bundled ReleaseFacts | The one current manifest, registry, model data and cross-reference generated with the client | The daemon accepts only the manifest bytes pinned into the same client revision, then validates all resource digests and cross-references before exposing facts; there is no older production fallback | The embedded bundle remains authoritative; signed feed records may only augment it through their separately registered admission contract |
+| Client-bundled ReleaseFacts | The one current manifest, registry, model data and cross-reference generated with the client | The daemon accepts only the manifest bytes pinned into the same client revision, then validates all resource digests and cross-references before exposing facts; there is no older production fallback | The embedded bundle remains authoritative; HTTPS feed records may only augment it through their separately registered admission contract |
 
 Current E2E and product smoke create current inputs. Historical Oracle and golden inputs stay in
 their explicitly registered paths and cannot be cited as current-product success. Production
 embeds the sole `release-facts/current` manifest, registry and model data in the daemon build.
-Invalid embedded facts fail closed. The signed [model feed](../assets/model-feed/README.md)
+Invalid embedded facts fail closed. The HTTPS [model feed](../assets/model-feed/README.md)
 is a separate additive boundary: it never replaces registry adapters, ratings or embedded model
-identities. Its verified immutable catalog snapshot travels with an admission generation; new
+identities. Its validated immutable catalog snapshot travels with an admission generation; new
 source saves and Plan publication check that generation, while already published Plans retain
 their frozen facts. The independent accepted-sequence watermark survives cache removal.
 

@@ -1,31 +1,26 @@
-//! Signed, non-executable model facts. Registry authority always stays in the client.
+//! HTTPS-delivered, non-executable model facts. Registry authority always stays in the client.
 
 mod admission;
 mod contract;
 mod transport;
-mod verification;
+mod validation;
 
 pub use admission::*;
 pub use contract::*;
 pub use transport::{FeedDownload, retrieve_feed};
-pub use verification::{VerifiedFeed, verify_envelope};
-
-#[cfg(any(test, feature = "test-support"))]
-pub use verification::verify_envelope_with_keys;
+pub use validation::{ValidatedFeed, parse_feed};
 
 use serde::{Deserialize, Serialize};
 
 pub const MODEL_FEED_URL: &str = "https://hiroute.ai/model-feed/v1.json";
 pub const MAX_MODEL_FEED_BYTES: usize = 2 * 1024 * 1024;
 pub const MODEL_FEED_SCHEMA: &str = "hiroute.model-feed/v1";
-pub const MODEL_FEED_ENVELOPE_SCHEMA: &str = "hiroute.model-feed.envelope/v1";
 
 #[derive(Clone, Copy, Debug, Deserialize, Eq, PartialEq, Serialize)]
 #[serde(rename_all = "snake_case")]
 pub enum FeedFailureKind {
     Network,
     Size,
-    Signature,
     Schema,
     Validation,
     OlderSequence,

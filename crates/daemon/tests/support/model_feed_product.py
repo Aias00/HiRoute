@@ -1,4 +1,4 @@
-"""Installed CLI/daemon/Gateway lifecycle with signed feed and external provider/ACP fixtures.
+"""Installed CLI/daemon/Gateway lifecycle with HTTPS feed and external provider/ACP fixtures.
 
 Only the integration-test-hooks binary accepts the private feed transport fixture. Product
 state is changed exclusively through released commands. TLS dialing uses the existing E2E map.
@@ -173,7 +173,7 @@ def main_session(product):
 
 def preserve_failure_diagnostics(product, stage, upstream):
     """Retain safe daemon JSONL before the installed fixture removes its state."""
-    report = {'scenario': 'installed-signed-feed-lifecycle', 'state': 'red',
+    report = {'scenario': 'installed-https-feed-lifecycle', 'state': 'red',
               'candidate': product.sha, 'stage': stage,
               'upstream_calls': len(upstream.requests),
               'tls_connections': upstream.tls_connections, 'tls_failures': upstream.tls_failures}
@@ -214,7 +214,7 @@ def run(repository):
         status = product.cli('models', 'feed', 'refresh')['data']
         assert status['held']['sequence'] == 17 and status['counts']['applied'] >= 3, status
         stage = 'registered-check-save-publish'
-        print(json.dumps({'scenario': 'installed-signed-feed-lifecycle', 'stage': stage}), flush=True)
+        print(json.dumps({'scenario': 'installed-https-feed-lifecycle', 'stage': stage}), flush=True)
         candidate_ref = 'candidate/feed/product'
         product.register_secret(candidate_ref, 'feed-product-key')
         product.secrets.add('feed-product-key')
@@ -267,7 +267,7 @@ def run(repository):
         assert not configured['pending_activation'], configured
         quote = configured['items'][0]['quote']
         assert quote['rates'] == reference_rates and quote['applied_override_refs'], quote
-        print(json.dumps({'scenario': 'signed-feed-default-and-api-reference-prices', 'state': 'green'}), flush=True)
+        print(json.dumps({'scenario': 'https-feed-default-and-api-reference-prices', 'state': 'green'}), flush=True)
         discovered = product.cli('worker', 'dependencies', 'discover')['data']
         revision = next(x['revision'] for x in discovered['selection_revisions'] if x['harness'] == 'codex_cli')
         product.cli('worker', 'dependencies', 'select', '--request-stdin', payload={'harness': 'codex_cli',
@@ -288,7 +288,7 @@ def run(repository):
         new_draft = {'change': plan_change('update', editor, plan, frozen['head']['head_revision'])}
         assert product.cli('routing', 'preview', '--request-stdin', payload=new_draft)['status'] == 'succeeded'
         stage = 'withdraw-remove-restart'
-        print(json.dumps({'scenario': 'installed-signed-feed-lifecycle', 'stage': stage}), flush=True)
+        print(json.dumps({'scenario': 'installed-https-feed-lifecycle', 'stage': stage}), flush=True)
         withdrawn = publication(product, 18, False)
         (fixture / 'publication.json').write_bytes(wire(withdrawn))
         assert product.cli('models', 'feed', 'refresh')['data']['held']['sequence'] == 18
@@ -298,14 +298,14 @@ def run(repository):
         restart(product)
         assert product.cli('models', 'feed', 'status')['data']['highest_accepted_sequence'] == 18
         stage = 'frozen-execution-after-withdrawal'
-        print(json.dumps({'scenario': 'installed-signed-feed-lifecycle', 'stage': stage}), flush=True)
+        print(json.dumps({'scenario': 'installed-https-feed-lifecycle', 'stage': stage}), flush=True)
         main_session(product)
         worker(product, plan, 'feed-new-after')
         worker(product, plan, 'feed-continue-after', prior)
         retained = product.cli('routing', 'show', plan)['data']
         assert retained['head'] == frozen['head'] and retained['desired'] == frozen['desired'], 'published route changed'
         stage = 'new-admission-rejected'
-        print(json.dumps({'scenario': 'installed-signed-feed-lifecycle', 'stage': stage}), flush=True)
+        print(json.dumps({'scenario': 'installed-https-feed-lifecycle', 'stage': stage}), flush=True)
         available = product.cli('models', 'availability')['data']
         retained_model = next(x for x in available['models'] if x['model_configuration_id'] == MODEL)
         assert retained_model['availability']['kind'] == 'used_by_published_plans' and not retained_model['binding_ids'], retained_model
@@ -327,7 +327,7 @@ def run(repository):
         rejected = raw(product, 'compute', 'connection', 'test', payload=recheck)
         assert rejected['status'] != 'succeeded' or not any(m['selectable'] for m in rejected['data']['candidate']['models']), rejected
         stage = 'rollback-and-identical-restoration'
-        print(json.dumps({'scenario': 'installed-signed-feed-lifecycle', 'stage': stage}), flush=True)
+        print(json.dumps({'scenario': 'installed-https-feed-lifecycle', 'stage': stage}), flush=True)
         (fixture / 'publication.json').write_bytes(wire(included))
         status = product.cli('models', 'feed', 'refresh')['data']
         assert status['last_attempt']['reason'] == 'older_sequence' and status['held'] is None, status
@@ -337,7 +337,7 @@ def run(repository):
         (fixture / 'publication.json').write_bytes(wire(conflicting))
         assert product.cli('models', 'feed', 'refresh')['data']['last_attempt']['reason'] == 'same_sequence_conflicting_digest'
         stage = 'embedded-absorption'
-        print(json.dumps({'scenario': 'installed-signed-feed-lifecycle', 'stage': stage}), flush=True)
+        print(json.dumps({'scenario': 'installed-https-feed-lifecycle', 'stage': stage}), flush=True)
         restored = publication(product, 19)
         (fixture / 'publication.json').write_bytes(wire(restored))
         assert product.cli('models', 'feed', 'refresh')['data']['held']['sequence'] == 19
@@ -349,7 +349,7 @@ def run(repository):
         admitted = product.cli('routing', 'preview', '--request-stdin', payload=new_draft)
         assert admitted['status'] == 'succeeded', 'absorption must admit a new draft without rechecking the saved source'
         assert len(upstream.requests) >= 7 and all(x['model'] == UPSTREAM for x in upstream.requests)
-        print(json.dumps({'scenario': 'installed-signed-feed-lifecycle', 'state': 'green', 'candidate': product.sha,
+        print(json.dumps({'scenario': 'installed-https-feed-lifecycle', 'state': 'green', 'candidate': product.sha,
             'upstream_calls': len(upstream.requests), 'published_session_after_withdrawal': True,
             'new_worker_after_withdrawal': True, 'continue_after_restart': True, 'new_admission_rejected': True,
             'rollback_and_restore': True, 'embedded_absorption': True}))

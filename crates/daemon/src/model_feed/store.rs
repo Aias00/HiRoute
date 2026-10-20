@@ -28,7 +28,6 @@ struct AcceptanceCheckpoint {
 pub struct HeldPublication {
     pub sequence: u64,
     pub payload_digest: CanonicalDigest,
-    pub envelope_digest: CanonicalDigest,
     pub retrieved_at_ms: u64,
     pub issued_at: String,
 }
@@ -86,7 +85,7 @@ impl FeedStore {
     pub fn open(storage_root: &Path) -> Result<Self, String> {
         let root = storage_root.join("model-feed");
         private_directory(&root)?;
-        private_directory(&root.join("envelopes"))?;
+        private_directory(&root.join("publications"))?;
         Ok(Self {
             root,
             acceptance: storage_root.join("model-feed-acceptance.json"),
@@ -120,7 +119,7 @@ impl FeedStore {
             return Err("feed_state_invalid".into());
         }
         if let Some(held) = &state.held
-            && (CanonicalDigest::parse(held.envelope_digest.as_str()).is_err()
+            && (CanonicalDigest::parse(held.payload_digest.as_str()).is_err()
                 || !state.highest_accepted.as_ref().is_some_and(|high| {
                     high.sequence == held.sequence && high.payload_digest == held.payload_digest
                 }))
@@ -190,16 +189,13 @@ impl FeedStore {
         CanonicalDigest::parse(digest.as_str()).map_err(|_| "feed_blob_invalid_digest")?;
         Ok(self
             .root
-            .join("envelopes")
+            .join("publications")
             .join(format!("{}.json", &digest.as_str()[7..])))
     }
     pub fn blob(&self, held: &HeldPublication) -> Result<Vec<u8>, String> {
-        let bytes = bounded_read(
-            &self.blob_path(&held.envelope_digest)?,
-            MAX_MODEL_FEED_BYTES,
-        )
-        .map_err(|_| "feed_blob_unreadable")?;
-        if CanonicalDigest::of_bytes(&bytes) != held.envelope_digest {
+        let bytes = bounded_read(&self.blob_path(&held.payload_digest)?, MAX_MODEL_FEED_BYTES)
+            .map_err(|_| "feed_blob_unreadable")?;
+        if CanonicalDigest::of_bytes(&bytes) != held.payload_digest {
             return Err("feed_blob_digest_mismatch".into());
         }
         Ok(bytes)
@@ -219,8 +215,8 @@ impl FeedStore {
             .map_err(|_| "feed_blob_write_failed".into())
     }
     pub fn retire_unreferenced(&self, held: Option<&HeldPublication>) {
-        let keep = held.and_then(|held| self.blob_path(&held.envelope_digest).ok());
-        if let Ok(entries) = std::fs::read_dir(self.root.join("envelopes")) {
+        let keep = held.and_then(|held| self.blob_path(&held.payload_digest).ok());
+        if let Ok(entries) = std::fs::read_dir(self.root.join("publications")) {
             for entry in entries.flatten().take(8192) {
                 let name = entry.file_name();
                 let name = name.to_string_lossy();

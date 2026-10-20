@@ -1,6 +1,6 @@
-# Signed model feed
+# Model feed over HTTPS
 
-The service retrieves `https://hiroute.ai/model-feed/v1.json`. This is a signed,
+The service retrieves `https://hiroute.ai/model-feed/v1.json`. This is a validated,
 versioned projection of the existing model metadata source, with editorial
 announcements. It does not introduce a second editable model catalog.
 
@@ -11,14 +11,12 @@ announcements. It does not introduce a second editable model catalog.
 | `featured.json` | Editorial array of `new_model` and `model_update` announcements; plain bilingual text and links restricted to `https://hiroute.ai/` |
 | `publication.json` | Publication `sequence` and UTC `issued_at`; increase the sequence whenever payload bytes change |
 | `policy.json` | `minimum_feed_client`, the first feed-capable release |
-| `public-keys.json` | Reviewed production trust roots as `{ "keys": [{ "key_id": "…", "ed25519": "…" }] }`; `ed25519` is standard padded base64 of the raw 32-byte public key |
-| `payload.json` | Generated unsigned payload; never hand-edit model facts here |
+| `payload.json` | Generated payload; never hand-edit model facts here |
 
 The Desktop client also bundles the maintained `featured.json` editorial input.
 When no feed announcements are available, Home and quick start use only these
 resolvable announcements, rather than labeling the first directory entries as new.
-Bundled announcements keep the model's built-in origin and never claim signature
-verification. An update headline may name an announced release while its note
+Bundled announcements keep the model's built-in origin and never claim website retrieval. An update headline may name an announced release while its note
 distinguishes that announcement from the version served by a connection. The
 underlying model identity, connection checks, prices and published routing remain
 owned by the ordinary catalog and saved connection. An unresolved announcement
@@ -46,62 +44,55 @@ The payload's `source_revision` is the Git tree ID of the committed
 reproduces a file with `git show <tree-id>:model-data.json`; it is provenance,
 not each website deployment's commit SHA.
 One sequence identifies one immutable payload digest and source revision. Keep the
-referenced bundle tree reachable from main history. Node structural checks
-and signature checks complement, and never replace, Rust admission validation.
+referenced bundle tree reachable from main history. Node structural checks complement, and never replace, Rust admission validation.
 
 Before a feed-capable release is recorded, `payload.json` contains `null` followed
 by a newline. Both build checks report bootstrap; deployment skips network access
-and signing and still uploads the ordinary website. An empty production key list
-is valid during development. Bootstrap is not a production feed publication.
+and feed publication and still uploads the ordinary website. Bootstrap is not a
+production feed publication.
 
-## Production keys and publication
+## Production publication and trust
 
-The owner must review and embed the production public key **before releasing the
-first feed-capable client**. Provision the matching secret in the
-`website-production` GitHub environment before the first feed publication. Never
-commit private keys or use development/test keys as production trust roots.
-
-`MODEL_FEED_SIGNING_KEYS` is a JSON object mapping one or two trusted `key_id`
-strings to **unencrypted PKCS#8 PEM Ed25519 private keys**. Each value begins with
-`-----BEGIN PRIVATE KEY-----`; PEM line breaks are JSON `\n` escapes. It is not a
-base64-encoded PEM string, an OpenSSH key, or a raw seed. Store that complete JSON
-object only in the environment secret. The publisher derives each public key and
-requires it to match the repository's trusted public key before signing. Errors
-never include key material.
+The fixed HTTPS origin and the production website pipeline are the content trust
+boundary. Clients validate TLS certificates, refuse redirects and production URL
+overrides, and validate the direct `hiroute.model-feed/v1` JSON payload. There is
+no signature envelope, compiled feed public key, signing secret or key rotation.
+A digest binds exact publication bytes for cache integrity and sequence identity;
+it is not independent publisher authentication. Feed records cannot introduce
+connection endpoints, authentication or executable adapters. Embedded facts and
+manual price overrides retain their existing precedence.
 
 The [website workflow](../../.github/workflows/website.yml) runs the shared Rust
-check and Node check on the same source revision before uploading the unsigned
-payload as a separate artifact. PR jobs have no signing secret and never publish.
-Only `main` production pushes or dispatches enter the production environment. The
-deploy job downloads that workflow revision's payload and runs:
+check and Node check on the same source revision before uploading the validated
+payload as a separate artifact. PR jobs never publish. Only `main` production
+pushes or dispatches enter the production environment. The deploy job downloads
+that workflow revision's payload and runs:
 
 ```sh
 node apps/website/scripts/model-feed.mjs publish --payload <validated-payload-path>
 ```
 
 The publisher requests the fixed feed URL without redirects or cached-response
-reuse. Only a real 404 permits first publication. Every existing envelope must
-verify against a trusted key before its sequence or payload digest can be used.
-Other HTTP responses, network errors, malformed envelopes, and invalid signatures
-fail deployment before any upload.
+reuse. Only a real 404 permits first publication. Existing publications must pass
+bounded JSON validation before their sequence or digest is used. Other HTTP
+responses, network errors or invalid content fail deployment before upload.
 
 An identical payload digest is a no-op: no feed file is written, and the existing
 OSS object is preserved by the non-deleting upload. Different content requires a
-strictly greater sequence. The script signs the exact payload bytes, self-verifies
-the envelope, enforces the 2 MiB envelope limit, and atomically writes
-`apps/website/dist/model-feed/v1.json`. It refuses a website artifact that already
-contains a feed. Signing or validation failure leaves the existing served website
-and feed intact. The job summary records status, sequence, payload SHA-256 and
-source revision.
+strictly greater sequence. The script enforces the 2 MiB limit and atomically
+stages the exact validated payload at `apps/website/dist/model-feed/v1.json`.
+It refuses a website artifact that already contains a feed. Retrieval or validation
+failure leaves the existing served website and feed intact. The job summary records
+status, sequence, payload SHA-256 and source revision.
 
-For rotation, include both public keys and sign with both matching private keys
-until the oldest supported client trusts the new key. Clients accept a publication
-when any trusted signature verifies. Keep the endpoint version stable for its
-supported clients; introduce a new versioned endpoint and compatibility-register
-entry if the contract changes incompatibly.
+Keep the endpoint stable for supported clients. An incompatible future contract
+needs a new versioned endpoint and compatibility-register entry. The direct JSON
+contract is introduced before any supported feed-capable release; the abandoned
+signed-envelope development format is not a supported legacy format.
 
-Ensure infrastructure serves missing `/model-feed/*` objects as real 404s, without
+Ensure infrastructure serves missing `/model-feed/*` objects as real 404s without
 an HTML fallback or redirect. The existing short-cache OSS upload remains in use.
-After the first feed-capable release and production key provisioning, verify a real
-publication through both a standalone Linux service and macOS Desktop. Local tests
-with ephemeral keys do not establish production signing or live retrieval.
+After the first feed-capable release, verify a real publication through both a
+standalone Linux service and macOS Desktop. Controlled fixtures do not establish
+live hiroute.ai retrieval. Keep sequence/checkpoint, private atomic cache, restart
+validation, fallback and frozen-published-route lifecycle regressions in place.

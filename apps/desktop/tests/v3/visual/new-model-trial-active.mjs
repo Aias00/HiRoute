@@ -136,6 +136,9 @@ try {
   await waitFor(client,`!!document.querySelector('.model-feed-actions')`);
   await click('.model-feed-actions button',lang==='zh'?'详情':'Details');
   await waitFor(client,`!!document.querySelector('.model-feed-details')`);
+  const feedText = await evaluate(client,`document.querySelector('.model-feed-panel').textContent`);
+  assert.ok(feedText.includes(lang==='zh'?'内容已校验':'Content validated'));
+  assert.ok(!/signature|签名/i.test(feedText));
   await shot(`feed-${lang}-${theme}-${width}`);
   for(const g of await geometry()){assert.ok(g.scroll<=g.width+1,JSON.stringify(g));assert.ok(g.left>=-1 && g.right<=width+1,JSON.stringify(g));}
   await click('button',lang==='zh'?'移除本机缓存…':'Remove local copy…');

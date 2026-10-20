@@ -132,17 +132,16 @@ preview or unlisted candidate and never starts the service automatically.
 ## Model feed
 
 The website build validates the generated model feed with the shared Rust admission
-code and Node structural checks. The unsigned payload travels in its own artifact,
-outside `dist`. Only the production deploy signs it, verifies the served publication
-and its own signatures, and writes `/model-feed/v1.json` before any upload. PR builds
-need no signing secrets. An unchanged payload writes no feed file, so the currently
-served object stays intact. Before the first feed-capable release, the JSON null
-payload skips publication and ordinary website deployment continues.
+code and Node structural checks. The validated payload travels in its own artifact,
+outside `dist`. Only the production deploy checks the current HTTPS publication and
+stages the exact payload at `/model-feed/v1.json` before upload. PR builds publish
+nothing. An unchanged payload writes no feed file, so the served object stays intact.
+Before the first feed-capable release, the JSON null payload skips publication and
+ordinary website deployment continues. No feed signing key or client public key is
+required; the fixed HTTPS origin and production pipeline are the trust boundary.
 
 See the [feed maintainer guide](../../assets/model-feed/README.md) for regeneration,
-sequence rules, exact `MODEL_FEED_SIGNING_KEYS` encoding, rotation and release gates.
-That secret is separate from the OSS upload credentials below. The production public
-key must be compiled into the first feed-capable client before release.
+sequence rules and release compatibility. OSS upload credentials are described below.
 
 ## OSS deployment
 

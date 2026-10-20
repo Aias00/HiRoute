@@ -7,15 +7,11 @@ rust-version.workspace = true
 
 [features]
 integration-test-hooks = [
-    "dep:base64",
-    "dep:ring",
     "hiroute-gateway/e2e-test-control",
     "hiroute-integrations/test-support",
 ]
 
 [dependencies]
-base64 = { workspace = true, optional = true }
-ring = { version = "0.17.14", optional = true }
 bytes.workspace = true
 hyper = { version = "=1.11.1", features = ["server", "http1"] }
 hyper-util = { version = "=0.1.20", features = ["tokio"] }
@@ -62,7 +58,6 @@ path = "src/control/bin.rs"
 [dev-dependencies]
 hiroute-observation = { path = "../observation", features = ["test-support"] }
 base64.workspace = true
-ring = "0.17.14"
 hiroute-integrations = { path = "../integrations", features = ["test-support"] }
 hiroute-client-core = { path = "../client-core" }
 tokio = { workspace = true, features = ["test-util"] }

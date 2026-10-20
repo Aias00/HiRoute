@@ -34,8 +34,8 @@ pub(super) fn files() -> Vec<(&'static str, String)> {
     let status = object(
         json!({
             "recovery_available":{"type":"boolean"},"retrieval_enabled":{"type":"boolean"},"held":nullable(object(json!({"sequence":number(),"issued_at":text(),"retrieved_at":number()}),&["sequence","issued_at","retrieved_at"])),
-            "highest_accepted_sequence":nullable(number()),"last_attempt":nullable(object(json!({"at":number(),"result":{"enum":["ok","not_modified","already_current","not_published","network","size","signature","schema","validation","older_sequence"]},"reason":nullable(text())}),&["at","result","reason"])),
-            "verification":{"oneOf":[object(json!({"kind":{"enum":["verified","none"]}}),&["kind"]),object(json!({"kind":{"const":"discarded"},"reason":text()}),&["kind","reason"])]},
+            "highest_accepted_sequence":nullable(number()),"last_attempt":nullable(object(json!({"at":number(),"result":{"enum":["ok","not_modified","already_current","not_published","network","size","schema","validation","older_sequence"]},"reason":nullable(text())}),&["at","result","reason"])),
+            "verification":{"oneOf":[object(json!({"kind":{"enum":["validated","none"]}}),&["kind"]),object(json!({"kind":{"const":"discarded"},"reason":text()}),&["kind","reason"])]},
             "counts":object(json!({"applied":number(),"ignored_embedded":number(),"newer_client":number(),"unresolved":number()}),&["applied","ignored_embedded","newer_client","unresolved"]),
             "next_automatic_attempt_at":nullable(number()),"disclosure":text(),"disclosure_acknowledged":{"type":"boolean"}
         }),

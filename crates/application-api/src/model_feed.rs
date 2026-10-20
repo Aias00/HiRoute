@@ -33,7 +33,7 @@ pub struct ModelFeedAttemptV1 {
 #[derive(Clone, Debug, Deserialize, Eq, PartialEq, Serialize)]
 #[serde(tag = "kind", rename_all = "snake_case", deny_unknown_fields)]
 pub enum ModelFeedVerificationV1 {
-    Verified,
+    Validated,
     None,
     Discarded { reason: String },
 }

@@ -1,18 +1,8 @@
 use super::*;
-use hiroute_integrations::model_feed::{FeedError, FeedPayload, MODEL_FEED_SCHEMA};
+use hiroute_integrations::model_feed::{FeedPayload, MODEL_FEED_SCHEMA};
 
-use base64::{Engine, engine::general_purpose::STANDARD};
-use ring::signature::{Ed25519KeyPair, KeyPair};
-fn test_key() -> Ed25519KeyPair {
-    Ed25519KeyPair::from_seed_unchecked(&[19; 32]).unwrap()
-}
-// Test-only trust root. Production open never accepts a runtime key/URL override.
-fn verify_fixture(bytes: &[u8]) -> Result<VerifiedFeed, FeedError> {
-    let keys=serde_json::to_vec(&serde_json::json!({"keys":[{"key_id":"daemon-test","ed25519":STANDARD.encode(test_key().public_key().as_ref())}]})).unwrap();
-    hiroute_integrations::model_feed::verify_envelope_with_keys(bytes, &keys)
-}
 fn payload(sequence: u64) -> Vec<u8> {
-    sign(&FeedPayload {
+    publication_bytes(&FeedPayload {
         schema: MODEL_FEED_SCHEMA.into(),
         sequence,
         issued_at: "2026-10-18T00:00:00Z".into(),
@@ -21,16 +11,15 @@ fn payload(sequence: u64) -> Vec<u8> {
         featured: vec![],
     })
 }
-fn sign(payload: &FeedPayload) -> Vec<u8> {
-    let bytes = serde_json::to_vec(payload).unwrap();
-    serde_json::to_vec(&serde_json::json!({"schema":hiroute_integrations::model_feed::MODEL_FEED_ENVELOPE_SCHEMA,"payload":STANDARD.encode(&bytes),"signatures":[{"key_id":"daemon-test","ed25519":STANDARD.encode(test_key().sign(&bytes).as_ref())}]})).unwrap()
+fn publication_bytes(payload: &FeedPayload) -> Vec<u8> {
+    serde_json::to_vec(payload).unwrap()
 }
 
 #[test]
 fn model_feed_restart_and_removal_preserve_captured_catalog_without_authorizing_new_use() {
     let root = tempfile::tempdir().unwrap();
     let service = open(root.path(), 0);
-    let bytes = sign(&super::fixtures::publication(17));
+    let bytes = publication_bytes(&super::fixtures::publication(17));
     service
         .refresh_using(
             |_| {
@@ -105,12 +94,11 @@ fn model_feed_restart_and_removal_preserve_captured_catalog_without_authorizing_
     );
 }
 fn open(path: &Path, min: u64) -> ModelFeedService {
-    ModelFeedService::open_with_verifier(
+    ModelFeedService::open(
         path,
         crate::release_catalog::current_fixture_catalog(),
         min,
         0,
-        verify_fixture,
     )
     .unwrap()
 }
@@ -293,8 +281,8 @@ fn model_feed_invalid_cache_retains_high_water_on_reopen() {
     let held = service.status().unwrap().held.unwrap();
     std::fs::remove_file(
         root.path()
-            .join("model-feed/envelopes")
-            .join(format!("{}.json", &held.envelope_digest.as_str()[7..])),
+            .join("model-feed/publications")
+            .join(format!("{}.json", &held.payload_digest.as_str()[7..])),
     )
     .unwrap();
     drop(service);
@@ -396,17 +384,17 @@ fn model_feed_acceptance_commit_precedes_state_and_never_adopts_orphan_blob() {
     let service = open(root.path(), 0);
     fetch(&service, 5).unwrap();
     let bytes = payload(20);
-    let verified = verify_fixture(&bytes).unwrap();
+    let validated = parse_feed(&bytes).unwrap();
     service
         .store
-        .persist_blob(&bytes, &verified.envelope_digest)
+        .persist_blob(&bytes, &validated.payload_digest)
         .unwrap();
     // Crash after high-water commit but before the state/activation commit.
     service
         .store
         .retain_acceptance(&HighestAccepted {
             sequence: 20,
-            payload_digest: verified.payload_digest,
+            payload_digest: validated.payload_digest,
         })
         .unwrap();
     drop(service);
@@ -423,12 +411,11 @@ fn model_feed_acceptance_commit_precedes_state_and_never_adopts_orphan_blob() {
 #[test]
 fn model_feed_unknown_digest_floor_requires_a_strictly_higher_sequence() {
     let root = tempfile::tempdir().unwrap();
-    let service = ModelFeedService::open_with_verifier(
+    let service = ModelFeedService::open(
         root.path(),
         crate::release_catalog::current_fixture_catalog(),
         4,
         11,
-        verify_fixture,
     )
     .unwrap();
     assert_eq!(
@@ -438,4 +425,80 @@ fn model_feed_unknown_digest_floor_requires_a_strictly_higher_sequence() {
     assert!(!service.status().unwrap().retrieval_enabled);
     assert_eq!(fetch(&service, 11).unwrap_err(), "older_sequence");
     fetch(&service, 12).unwrap();
+}
+
+#[test]
+fn model_feed_invalid_refresh_keeps_the_last_good_catalog_and_private_cache() {
+    let root = tempfile::tempdir().unwrap();
+    let service = open(root.path(), 0);
+    let bytes = publication_bytes(&super::fixtures::publication(17));
+    service
+        .refresh_using(
+            |_| {
+                Ok(FeedDownload::Content {
+                    bytes: bytes.clone(),
+                    etag: None,
+                })
+            },
+            |_, _| Ok(()),
+        )
+        .unwrap();
+    let captured = service.current();
+    let held = service.status().unwrap().held.unwrap();
+    for invalid in [b"invalid JSON".to_vec(), b"null".to_vec(), payload(16)] {
+        assert!(
+            service
+                .refresh_using(
+                    |_| Ok(FeedDownload::Content {
+                        bytes: invalid.clone(),
+                        etag: None
+                    }),
+                    |_, _| panic!("invalid or older publication cannot activate"),
+                )
+                .is_err()
+        );
+        assert_eq!(service.current().generation, captured.generation);
+        assert!(
+            service
+                .current()
+                .model_data()
+                .model(super::fixtures::MODEL)
+                .is_some()
+        );
+        assert_eq!(service.store.blob(&held).unwrap(), bytes);
+    }
+    drop(service);
+    let reopened = open(root.path(), captured.generation);
+    assert!(
+        reopened
+            .current()
+            .model_data()
+            .model(super::fixtures::MODEL)
+            .is_some()
+    );
+    assert_eq!(reopened.status().unwrap().verification, "validated");
+}
+
+#[test]
+fn model_feed_valid_json_with_changed_cached_bytes_is_discarded_without_lowering_acceptance() {
+    let root = tempfile::tempdir().unwrap();
+    let service = open(root.path(), 0);
+    fetch(&service, 17).unwrap();
+    let held = service.status().unwrap().held.unwrap();
+    let file = root
+        .path()
+        .join("model-feed/publications")
+        .join(format!("{}.json", &held.payload_digest.as_str()[7..]));
+    let mut changed = payload(17);
+    changed.push(b'\n');
+    std::fs::write(&file, changed).unwrap();
+    drop(service);
+    let reopened = open(root.path(), 1);
+    assert!(reopened.status().unwrap().held.is_none());
+    assert_eq!(
+        reopened.status().unwrap().highest_accepted_sequence,
+        Some(17)
+    );
+    assert_eq!(fetch(&reopened, 16).unwrap_err(), "older_sequence");
+    fetch(&reopened, 17).unwrap();
 }
