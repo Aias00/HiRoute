@@ -203,6 +203,11 @@ class Runner(unittest.TestCase):
         run.assert_not_called()
         self.assertEqual((target/'newer').read_bytes(), b'preserve this generation')
 
+    def test_native_copy_tool_receives_drive_or_unc_paths_without_device_prefix(self):
+        self.assertEqual(desktop.robocopy_path(r'\\?\C:\profile\source'), r'C:\profile\source')
+        self.assertEqual(desktop.robocopy_path(r'\\?\UNC\server\share\source'), r'\\server\share\source')
+        self.assertEqual(desktop.robocopy_path(r'C:\profile\source'), r'C:\profile\source')
+
     def test_offline_restore_copy_requires_a_complete_matching_inventory(self):
         source, target = self.root/'source', self.root/'restored'
         source.mkdir(); (source/'master-key').write_bytes(b'original fixture key')

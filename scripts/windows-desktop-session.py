@@ -690,6 +690,15 @@ def nsis_install(installer, run, locations):
             time.sleep(0.5)
 
 
+def robocopy_path(path):
+    # Robocopy handles long children natively but treats Python's extended
+    # device prefix as a network path. Keep that prefix for Python file IO only.
+    value = str(path)
+    if value.startswith('\\\\?\\UNC\\'):
+        return '\\\\' + value[8:]
+    return value[4:] if value.startswith('\\\\?\\') else value
+
+
 def copy_recovery_tree(helper, source, target, log):
     """Offline operator copy, including DACLs and long paths; never mirror/delete."""
     source, target = helper.plain(source), helper.plain(target)
@@ -697,11 +706,11 @@ def copy_recovery_tree(helper, source, target, log):
         raise ValueError('Recovery copies require a distinct absent destination')
     expected = helper.inventory(source)
     with log.open('wb') as stream:
-        done = subprocess.run(['robocopy.exe', str(source), str(target), '/E', '/COPY:DATS',
+        done = subprocess.run(['robocopy.exe', robocopy_path(source), robocopy_path(target), '/E', '/COPY:DATS',
             '/DCOPY:DAT', '/R:0', '/W:0', '/XJ', '/NFL', '/NDL', '/NJH', '/NJS', '/NP'],
             stdout=stream, stderr=subprocess.STDOUT, timeout=120, creationflags=0x08000000)
     if done.returncode >= 8 or not target.is_dir() or helper.inventory(target) != expected:
-        raise ValueError('Offline recovery copy failed verification; preserve both directories')
+        raise ValueError('Offline recovery copy failed verification; preserve both directories: ' + log.stem)
     return expected
 
 
@@ -797,7 +806,7 @@ def restore_original(request, run, product, pm, helper, activity, manifest, root
     for name, target in extras.items():
         target = helper.plain(target)
         if target.exists():target.rename(auxiliary/name)
-        done = subprocess.run(['robocopy.exe',str(source['source']),str(target.parent),name,'/COPY:DATS','/R:0','/W:0','/NFL','/NDL','/NJH','/NJS','/NP'],
+        done = subprocess.run(['robocopy.exe',robocopy_path(source['source']),robocopy_path(target.parent),name,'/COPY:DATS','/R:0','/W:0','/NFL','/NDL','/NJH','/NJS','/NP'],
             capture_output=True, timeout=30, creationflags=0x08000000)
         if done.returncode >= 8 or helper.digest(target) != helper.digest(source['source']/name):
             raise ValueError('Original auxiliary restoration failed; do not start either program')
