@@ -358,3 +358,78 @@ def original_recovery_source(native_home, local_app_data, baseline):
         raise ValueError('Original sealed history identity changed')
     return dict(batch=batch, source=source, record=record, batch_id=batch_id,
                 locator_sha256=digest(locator_path), program=matching[0])
+
+
+def original_desktop_locations(source, baseline, paths):
+    """Admit only the installer-owned old destinations and actual limited-user Task."""
+    import re
+    import xml.etree.ElementTree as ET
+    root = source['source'] / 'recovery-package'
+    path = root / 'restore-locations.json'
+    if not path.exists():
+        return None
+    value = bounded_json(path, 16 * 1024)
+    required = {'schema','program','desktop','task_name','task_autostart','shell_login','files'}
+    if (set(value) != required or value['schema'] != 'hiroute.windows-desktop-restore/v1'
+            or type(value['task_autostart']) is not bool or type(value['shell_login']) is not bool):
+        raise ValueError('Unknown original Desktop location record')
+    package = bounded_json(source['program'] / 'package-manifest.json')
+    version = package.get('version')
+    home = paths['data'].parents[2]
+    if not isinstance(version, str) or not re.fullmatch(r'[A-Za-z0-9_.+-]{1,128}',version):
+        raise ValueError('Invalid original native package version')
+    program = home / '.local/lib/hiroute' / (version + '-' + baseline['source_revision'][:12])
+    if Path(value['program']) != program or Path(value['desktop'] or '') != paths['programs']:
+        raise ValueError('Original programs belong to another installer namespace')
+    if digest(plain(root/'desktop/hiroute-shell.exe')) != baseline['shell_sha256']:
+        raise ValueError('The retained original shell differs from the independently staged NSIS')
+    expected = {home/'.local/bin'/name: source['program']/name for name in ('hiroute.exe','hirouted.exe')}
+    for prefix in ('.agents','.claude'):
+        name = 'skills/hiroute-management/SKILL.md'
+        expected[home/prefix/name] = source['program']/name
+    for name in package.get('files', {}):
+        if name.startswith(('docs/','licenses/')):
+            expected[paths['data']/name] = source['program']/name
+    expected[paths['data']/'package-manifest.json'] = source['program']/'package-manifest.json'
+    expected[paths['data']/'standalone.json'] = root/'installation/standalone.json'
+    expected[paths['data']/'service/windows-background.json'] = root/'installation/windows-background.json'
+    files = value.get('files')
+    if (not isinstance(files, dict) or len(files) != len(expected)
+            or not {'installation/standalone.json','installation/windows-background.json'} <= files.keys()
+            or {Path(target) for target in files.values()} != set(expected)):
+        raise ValueError('The original native file map is incomplete or contains foreign destinations')
+    for name, target in files.items():
+        if (not re.fullmatch(r'installation/(standalone\.json|windows-background\.json|entry-[0-9]+\.bin)',name)
+                or digest(plain(root/name)) != digest(plain(expected[Path(target)]))):
+            raise ValueError('The original native entry is not paired with its package')
+    marker = bounded_json(root/'installation/standalone.json',64*1024)
+    if (marker.get('schema_version') != 'hiroute.standalone-install/v1'
+            or Path(marker.get('install_root','')) != program or marker.get('target') != baseline['target']
+            or Path(marker.get('service_definition','')) != paths['data']/'service/windows-background.json'):
+        raise ValueError('The original installation marker is not paired with its programs and native account')
+    definition = bounded_json(root/'installation/windows-background.json',64*1024)
+    task = value['task_name']
+    if (not re.fullmatch(r'HiRoute-[a-f0-9]{64}',task) or definition.get('name') != task
+            or not isinstance(definition.get('owner_sid'),str)
+            or task != 'HiRoute-' + hashlib.sha256(definition['owner_sid'].encode()).hexdigest()
+            or definition.get('manager') != 'task' or Path(definition.get('daemon','')) != program/'hirouted.exe'
+            or definition.get('daemon_sha256') != baseline['files']['hirouted.exe']['sha256']):
+        raise ValueError('The original Task does not match its original native program')
+    xml_path = plain(root/'installation/task.xml')
+    if not xml_path.is_file() or xml_path.stat().st_size > 512*1024:
+        raise ValueError('Original native Task XML is unavailable')
+    xml = ET.fromstring(xml_path.read_bytes())
+    ns = {'t':'http://schemas.microsoft.com/windows/2004/02/mit/task'}
+    text = lambda name: xml.findtext(name, namespaces=ns)
+    actions, triggers = xml.find('t:Actions',ns), xml.find('t:Triggers',ns)
+    if (xml.tag != '{'+ns['t']+'}Task' or actions is None or len(actions) != 1 or triggers is None or len(triggers) != 1
+            or text('t:Principals/t:Principal/t:UserId') != definition['owner_sid']
+            or text('t:Principals/t:Principal/t:RunLevel') != 'LeastPrivilege'
+            or text('t:Principals/t:Principal/t:LogonType') != 'InteractiveToken'
+            or Path(text('t:Actions/t:Exec/t:Command') or '') != program/'hirouted.exe'
+            or Path(text('t:Actions/t:Exec/t:WorkingDirectory') or '') != program
+            or text('t:Actions/t:Exec/t:Arguments') != '--role all --standalone'
+            or text('t:Triggers/t:LogonTrigger/t:UserId') != definition['owner_sid']
+            or (text('t:Triggers/t:LogonTrigger/t:Enabled') != 'false') != value['task_autostart']):
+        raise ValueError('Original native Task XML has a foreign account, action, privilege or login policy')
+    return value

@@ -714,6 +714,23 @@ def copy_recovery_tree(helper, source, target, log):
     return expected
 
 
+def copy_recovery_file(helper, source, target, directory):
+    """Restore one admitted native entry under its recorded name with its DACL."""
+    source, target = helper.plain(source), helper.plain(target)
+    directory.mkdir()
+    if target.exists():
+        target.rename(directory/'preserved-current')
+    staged = directory/'staged';staged.mkdir()
+    done = subprocess.run(['robocopy.exe',robocopy_path(source.parent),str(staged),source.name,
+        '/COPY:DATS','/R:0','/W:0','/NFL','/NDL','/NJH','/NJS','/NP'],
+        capture_output=True,timeout=30,creationflags=0x08000000)
+    copy = staged/source.name
+    if done.returncode >= 8 or not copy.is_file() or helper.digest(copy) != helper.digest(source):
+        raise ValueError('The admitted original native entry could not be restored; preserve partial recovery')
+    target.parent.mkdir(parents=True,exist_ok=True)
+    copy.rename(target)
+
+
 def restore_original(request, run, product, pm, helper, activity, manifest, root):
     """Execute the documented whole-group operator recovery, never an automatic retry."""
     previous, observation = request.get('from_product'), request.get('observation_run')
@@ -730,10 +747,12 @@ def restore_original(request, run, product, pm, helper, activity, manifest, root
             or time.time() - (preview / 'result.json').stat().st_mtime > 3600):
         raise ValueError('Original restoration preview is stale or belongs to another product/account')
     current = root / 'bundles' / previous
-    roots, facts, shell = installed(helper, current, manifest(current))
+    current_manifest = manifest(current)
+    if current_manifest['source_revision'] == pm['source_revision']:
+        raise ValueError('Whole-group restoration requires distinct current and original programs')
+    roots, facts, shell = installed(helper, current, current_manifest)
     source = helper.original_recovery_source(Path.home(), Path(os.environ['LOCALAPPDATA']), pm)
-    if (source['source']/'recovery-package/restore-locations.json').exists():
-        raise ValueError('This batch requires its complete Desktop location recovery, not the legacy NSIS operator path')
+    locations = helper.original_desktop_locations(source,pm,roots)
     measured = helper.bounded_json(preview / 'recovery-source.json')
     if (measured.get('batch_id') != source['batch_id']
             or measured.get('locator_sha256') != source['locator_sha256']):
@@ -743,6 +762,8 @@ def restore_original(request, run, product, pm, helper, activity, manifest, root
     task = definition.get('name', '')
     if not re.fullmatch(r'HiRoute-[a-f0-9]{64}', task) or definition.get('manager') != 'task':
         raise ValueError('Original restoration requires the exact owned Task definition')
+    if locations is not None and locations['task_name'] != task:
+        raise ValueError('The original Task belongs to another account')
     install = helper.plain(marker['install_root'])
     allowed = {install / 'hirouted.exe', install / 'libexec/cliproxyapi.exe'}
     if (any(Path(p.get('ExecutablePath') or '') not in allowed for p in activity.get('processes', []))
@@ -813,20 +834,43 @@ def restore_original(request, run, product, pm, helper, activity, manifest, root
     if helper.inventory(storage) != expected:
         raise ValueError('The complete restored original group changed before program replacement')
     stage('complete-old-group-and-auxiliary-files-restored')
-    # A source retained before full Desktop location records existed must use
-    # the independently verified matching original NSIS, after pairing old data.
-    timing = nsis_install(product/'installer.exe',run,roots)
+    timing = None
+    if locations is None:
+        # The legacy source has no complete Desktop registration. Use its exact
+        # independently verified original NSIS only after pairing the old group.
+        timing = nsis_install(product/'installer.exe',run,roots)
+        stage('matching-original-native-installer-completed')
+    else:
+        package = source['source']/'recovery-package'
+        command('schtasks.exe',['/Delete','/TN',task,'/F'],'remove-stopped-current-task')
+        for label,old,target in [('program',package/'program',Path(locations['program'])),
+                                 ('desktop',package/'desktop',Path(locations['desktop']))]:
+            target = helper.plain(target)
+            if target.exists():target.rename(newer/('displaced-'+label))
+            copy_recovery_tree(helper,old,target,run/('restore-'+label+'.log'))
+        for index,(name,target) in enumerate(sorted(locations['files'].items())):
+            copy_recovery_file(helper,package/name,Path(target),newer/('native-entry-'+str(index)))
+        command('reg.exe',['import',robocopy_path(package/'installation/uninstall.reg')],'restore-registration')
+        command('schtasks.exe',['/Create','/TN',task,'/XML',robocopy_path(package/'installation/task.xml')],'restore-original-task')
+        with winreg.OpenKey(winreg.HKEY_CURRENT_USER,run_key,0,winreg.KEY_QUERY_VALUE|winreg.KEY_SET_VALUE) as key:
+            try:winreg.QueryValueEx(key,'HiRoute')
+            except FileNotFoundError:pass
+            else:raise ValueError('A login registration appeared during recovery; preserve it')
+            if locations['shell_login']:
+                winreg.SetValueEx(key,'HiRoute',0,winreg.REG_SZ,'"'+str(shell)+'" --background')
+        command(roots['stable_cli'],['service','start','--output','json'],'start-original-task')
+        command(roots['stable_cli'],['service','autostart','enable' if locations['task_autostart'] else 'disable','--output','json'],'restore-original-task-login')
+        stage('original-programs-native-entries-apps-and-task-registration-restored')
     installed(helper,product,pm)
-    stage('matching-original-native-installer-completed')
     status = command(roots['stable_cli'],['system','status','--output','json'],'restored-system')
     if json.loads(status.stdout).get('data', {}).get('gateway') != 'ready':
         raise ValueError('The restored original Gateway is not ready; preserve the recovery state')
     if any(helper.digest(Path(p)) != checksum for p,checksum in native_before.items()):
         raise ValueError('Native Agent configuration changed during whole-group restoration')
     stage('original-control-readiness-and-native-config-verified')
-    return dict(native_entry='documented complete-group operator recovery with exact original NSIS',
+    return dict(native_entry='documented complete-group operator recovery with ' + ('exact original NSIS' if locations is None else 'retained complete Desktop and native Task XML'),
                 batch_id=source['batch_id'], stages=stages, installer=timing, preserved_current=str(newer),
-                scope='legacy retained source; complete Desktop preference restoration requires a newly captured Desktop bundle')
+                scope='legacy retained source; original Desktop preferences were not captured' if locations is None else 'complete original Desktop, program, native files and independent login choices')
 
 
 def execute(request, run, product, pm, helper, activity, manifest, root):

@@ -194,6 +194,49 @@ class Runner(unittest.TestCase):
         run.assert_not_called()
         install.assert_not_called()
 
+    def test_full_desktop_restore_admits_only_the_original_native_map_and_limited_task(self):
+        home, local = self.root/'home', self.root/'local'
+        paths = profiles.locations(home,local)
+        package = self.root/'source/recovery-package'
+        program = package/'program'; program.mkdir(parents=True)
+        baseline = dict(source_revision='a'*40,target='x86_64-pc-windows-msvc',files={})
+        original = home/'.local/lib/hiroute/0.3.1-aaaaaaaaaaaa'
+        expected = {}
+        def material(name,content):
+            path=package/name;path.parent.mkdir(parents=True,exist_ok=True);path.write_bytes(content);return path
+        for name in ('hiroute.exe','hirouted.exe'):
+            expected[home/'.local/bin'/name]=material('program/'+name,name.encode())
+            baseline['files'][name]=dict(sha256=profiles.digest(program/name))
+        skill=material('program/skills/hiroute-management/SKILL.md',b'original skill')
+        for prefix in ('.agents','.claude'):expected[home/prefix/'skills/hiroute-management/SKILL.md']=skill
+        expected[paths['data']/'package-manifest.json']=material('program/package-manifest.json',json.dumps(dict(version='0.3.1',revision='a'*40,files={})).encode())
+        baseline['shell_sha256']=profiles.digest(material('desktop/hiroute-shell.exe',b'original shell'))
+        sid='S-1-5-21-1000';task='HiRoute-'+hashlib.sha256(sid.encode()).hexdigest()
+        definition=dict(manager='task',name=task,owner_sid=sid,daemon=str(original/'hirouted.exe'),daemon_sha256=baseline['files']['hirouted.exe']['sha256'])
+        marker=dict(schema_version='hiroute.standalone-install/v1',install_root=str(original),target=baseline['target'],service_definition=str(paths['data']/'service/windows-background.json'))
+        expected[paths['data']/'standalone.json']=material('installation/standalone.json',json.dumps(marker).encode())
+        expected[paths['data']/'service/windows-background.json']=material('installation/windows-background.json',json.dumps(definition).encode())
+        files={}
+        for index,(target,source) in enumerate(expected.items()):
+            name=str(source.relative_to(package)) if source.parent==package/'installation' else 'installation/entry-'+str(index)+'.bin'
+            if source.parent!=package/'installation':material(name,source.read_bytes())
+            files[name]=str(target)
+        value=dict(schema='hiroute.windows-desktop-restore/v1',program=str(original),desktop=str(paths['programs']),task_name=task,task_autostart=False,shell_login=True,files=files)
+        location=material('restore-locations.json',json.dumps(value).encode())
+        xml=f'<Task xmlns="http://schemas.microsoft.com/windows/2004/02/mit/task"><Principals><Principal><UserId>{sid}</UserId><RunLevel>LeastPrivilege</RunLevel><LogonType>InteractiveToken</LogonType></Principal></Principals><Triggers><LogonTrigger><UserId>{sid}</UserId><Enabled>false</Enabled></LogonTrigger></Triggers><Actions><Exec><Command>{original}/hirouted.exe</Command><WorkingDirectory>{original}</WorkingDirectory><Arguments>--role all --standalone</Arguments></Exec></Actions></Task>'
+        task_file=material('installation/task.xml',xml.encode('utf-16'))
+        source=dict(source=package.parent,program=program)
+        self.assertEqual(profiles.original_desktop_locations(source,baseline,paths),value)
+        task_file.write_bytes(xml.replace('LeastPrivilege','HighestAvailable').encode('utf-16'))
+        with self.assertRaisesRegex(ValueError,'privilege'):
+            profiles.original_desktop_locations(source,baseline,paths)
+        task_file.write_bytes(xml.encode('utf-16'))
+        value['files'][next(iter(files))]=str(home/'.ssh/config')
+        location.write_text(json.dumps(value))
+        with self.assertRaisesRegex(ValueError,'foreign destinations'):
+            profiles.original_desktop_locations(source,baseline,paths)
+        self.assertFalse((home/'.ssh/config').exists())
+
     def test_offline_restore_copy_never_overwrites_an_existing_generation(self):
         source, target = self.root/'source', self.root/'current'
         source.mkdir(); target.mkdir()

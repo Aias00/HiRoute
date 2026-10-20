@@ -268,8 +268,13 @@ programs and registration, copies and verifies the entire old group with native
 permissions, and runs the independently verified matching original NSIS. It never
 starts an old program against the new group, merges generations, or replays after
 failure. Offline copying may traverse history. Preserve partial states on failure.
-This legacy case does not certify recovery of original Desktop preferences;
-sources with complete Desktop records require their recorded location procedure.
+This legacy case does not certify recovery of original Desktop preferences.
+For a complete Desktop source, the same explicit operator case admits only the
+recorded installer namespaces, independently matched programs/native entries and
+original limited-user Task XML. It preserves displaced files, restores all recorded
+programs/entries and the fixed Apps registration, imports only the exact owned
+Task, and restores Shell/Task login choices independently. No original NSIS is run
+for that branch. Readiness and real-request checks remain separate verdicts.
 
 Stage separate product and harness bundles when reusing an unchanged product for
 a test-only repair. Results record both full revisions, binary hashes, driver hash,
