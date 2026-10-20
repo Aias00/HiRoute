@@ -151,13 +151,22 @@ Panel {
     onTriggered: root.refresh()
   }
 
+  TextMetrics {
+    id: labelMetrics
+    font.family: root.fontFamily
+    font.pixelSize: Style.bar.iconFont
+    text: button.labelText
+  }
+
   BarIconButton {
     id: button
     anchors.fill: parent
     bar: root.bar
     text: "󰑪"
-    labelText: root.barState.percent >= 0 ? root.number(root.barState.percent, root.barState.decimals) + "%"
+    // Like the battery percentage, the label shows only on a horizontal bar and widens the slot.
+    labelText: vertical ? "" : root.barState.percent >= 0 ? root.number(root.barState.percent, root.barState.decimals) + "%"
       : (root.ready ? "–" : "")
+    slotSize: Style.bar.iconSlot + (labelText !== "" ? Math.ceil(labelMetrics.advanceWidth) + Style.space(4) : 0)
     active: !root.ready || root.barState.warning
     tooltipText: root.barTooltip()
     onPressed: function(buttonCode) {
@@ -245,7 +254,8 @@ Panel {
 
           PanelHero {
             title: "HiRoute"
-            meta: root.ready ? strings.t("headline.share") : strings.t("panel.unavailable")
+            meta: !root.ready ? strings.t("panel.unavailable")
+              : strings.t(root.barState.percent >= 0 ? "headline.share" : root.barState.tooltipKey)
             detail: root.ready && root.barState.percent >= 0 ? root.number(root.barState.percent, root.barState.decimals) + "%" : ""
             foreground: root.foreground
             fontFamily: root.fontFamily
@@ -253,8 +263,9 @@ Panel {
 
           PlainLine {
             width: column.width
-            visible: root.ready
-            text: root.ready ? root.headlineText() + (root.barState.percent >= 0 && root.barState.unknown ? " · " + strings.t("bar.someUnknown") : "") : ""
+            visible: root.ready && root.barState.percent >= 0 && root.barState.unknown
+            color: root.dim
+            text: strings.t("bar.someUnknown")
           }
 
           PlainLine {
@@ -364,6 +375,8 @@ Panel {
             }
 
             Action {
+              // Without a current summary, whether a routed session exists is unknown.
+              visible: root.ready
               available: root.ready && root.summary.latest_routed_session !== null
               label: available ? strings.t("action.timeline") : strings.t("action.noSession")
               onActivated: root.openTimeline()
