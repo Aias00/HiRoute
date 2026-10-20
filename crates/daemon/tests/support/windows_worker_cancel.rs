@@ -33,7 +33,7 @@ pub(super) fn verify(
     verify_for(product, workspace, plan, nonce, "pi")
 }
 
-pub(super) fn verify_opencode(
+pub(crate) fn verify_opencode(
     product: &InstalledProduct,
     workspace: &Path,
     plan: &str,
