@@ -548,7 +548,7 @@ fn select_pi(product: &InstalledProduct) {
     );
     assert_eq!(replay["data"]["selected"], selected["data"]["selected"]);
 }
-fn exec_args<'a>(
+pub(crate) fn exec_args<'a>(
     plan: &'a str,
     workspace: &'a Path,
     prompt: &'a Path,
