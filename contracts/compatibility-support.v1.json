@@ -266,7 +266,6 @@
     "hiroute.model-feed-settings/v1",
     "hiroute.model-feed-status/v1",
     "hiroute.model-feed.acceptance/v1",
-    "hiroute.model-feed.envelope/v1",
     "hiroute.model-feed.state/v1",
     "hiroute.model-feed/v1",
     "hiroute.model-metadata-catalog/v1",

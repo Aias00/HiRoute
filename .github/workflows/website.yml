@@ -97,7 +97,7 @@ jobs:
           feed_args=()
           if [[ -n "$MODEL_FEED_BASE" && "$MODEL_FEED_BASE" != "0000000000000000000000000000000000000000" ]]; then feed_args=(--base "$MODEL_FEED_BASE"); fi
           cargo run -p hiroute-release-facts -- feed build --check "${feed_args[@]}"
-      - name: Check unsigned feed structure
+      - name: Check feed structure
         run: node apps/website/scripts/model-feed.mjs check
       - uses: actions/upload-artifact@v4
         with:
@@ -151,9 +151,7 @@ jobs:
         with:
           name: hiroute-model-feed-${{ github.sha }}
           path: ${{ runner.temp }}/validated-model-feed
-      - name: Sign validated model feed before upload
-        env:
-          MODEL_FEED_SIGNING_KEYS: ${{ secrets.MODEL_FEED_SIGNING_KEYS }}
+      - name: Prepare validated model feed before upload
         run: node apps/website/scripts/model-feed.mjs publish --payload "$RUNNER_TEMP/validated-model-feed/payload.json"
       - name: Install Aliyun CLI
         run: .github/scripts/install-aliyun-cli.sh "$RUNNER_TEMP/bin"

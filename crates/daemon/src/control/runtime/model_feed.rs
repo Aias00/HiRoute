@@ -85,7 +85,7 @@ impl ModelFeedPort for LocalControlAdapter {
             .status()
             .map_err(feed_error)?;
         let verification = match status.verification.as_str() {
-            "verified" => ModelFeedVerificationV1::Verified,
+            "validated" => ModelFeedVerificationV1::Validated,
             "none" => ModelFeedVerificationV1::None,
             reason => ModelFeedVerificationV1::Discarded {
                 reason: reason.into(),

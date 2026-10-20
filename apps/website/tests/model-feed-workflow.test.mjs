@@ -13,7 +13,7 @@ function before(source, first, second) {
   assert.ok(source.indexOf(first) < source.indexOf(second), `${first} must precede ${second}`);
 }
 
-test('website PR build validates with shared Rust admission before uploading the unsigned payload', () => {
+test('website PR build validates with shared Rust admission before uploading the validated payload', () => {
   assert.match(build, /fetch-depth: 0/);
   before(build, 'cargo run -p hiroute-release-facts -- feed build --check', 'model-feed.mjs check');
   before(build, 'model-feed.mjs check', 'name: hiroute-model-feed-${{ github.sha }}');
@@ -26,14 +26,14 @@ test('website PR build validates with shared Rust admission before uploading the
   }
 });
 
-test('production deploy consumes this revision artifact and signs before the existing OSS upload', () => {
+test('production deploy consumes this revision artifact before the existing OSS upload', () => {
   assert.match(deploy, /needs: build/);
   assert.match(deploy, /if: github\.event_name != 'pull_request' && github\.ref == 'refs\/heads\/main'/);
   assert.match(deploy, /environment: website-production/);
   assert.match(deploy, /name: hiroute-model-feed-\$\{\{ github\.sha \}\}/);
   before(deploy, 'path: ${{ runner.temp }}/validated-model-feed', 'model-feed.mjs publish --payload "$RUNNER_TEMP/validated-model-feed/payload.json"');
   before(deploy, 'model-feed.mjs publish', '.github/scripts/deploy-website-oss.sh apps/website/dist apps/website/data/releases.json');
-  assert.match(deploy, /MODEL_FEED_SIGNING_KEYS: \$\{\{ secrets\.MODEL_FEED_SIGNING_KEYS \}\}/);
+  assert.doesNotMatch(deploy, /MODEL_FEED_SIGNING_KEYS|signing.key|Sign validated/i);
   assert.match(workflow, /\|\| 'hiroute-ai-production'/);
   assert.match(workflow, /cancel-in-progress: \$\{\{ github\.event_name == 'pull_request' \}\}/);
 });

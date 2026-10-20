@@ -1,12 +1,11 @@
-import { createHash, createPrivateKey, createPublicKey, sign, verify } from 'node:crypto';
+import { createHash } from 'node:crypto';
 import { appendFile, lstat, mkdir, open, rename, rm } from 'node:fs/promises';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 
 export const FEED_URL = 'https://hiroute.ai/model-feed/v1.json';
-export const MAX_ENVELOPE_BYTES = 2 * 1024 * 1024;
+export const MAX_FEED_BYTES = 2 * 1024 * 1024;
 const repository = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '../../..');
-const SPKI_PREFIX = Buffer.from('302a300506032b6570032100', 'hex');
 const U64_MAX = (1n << 64n) - 1n;
 const recordIdFields = {
   model: 'model_configuration_id', model_endpoint_capability: 'capability_id',
@@ -56,7 +55,7 @@ function rejectDuplicateKeys(source) {
 }
 
 function parseJson(bytes, label) {
-  requireThat(bytes.length <= MAX_ENVELOPE_BYTES, `${label}: exceeds 2 MiB`);
+  requireThat(bytes.length <= MAX_FEED_BYTES, `${label}: exceeds 2 MiB`);
   let source;
   try { source = new TextDecoder('utf-8', { fatal: true, ignoreBOM: true }).decode(bytes); }
   catch { throw new Error(`${label}: invalid UTF-8`); }
@@ -155,93 +154,21 @@ export function checkPayload(bytes) {
   return payload;
 }
 
-function base64(value, label, length) {
-  requireThat(typeof value === 'string' && value.length > 0
-    && /^(?:[A-Za-z0-9+/]{4})*(?:[A-Za-z0-9+/]{2}==|[A-Za-z0-9+/]{3}=)?$/.test(value), `${label}: invalid base64`);
-  const bytes = Buffer.from(value, 'base64');
-  requireThat(bytes.toString('base64') === value && (length === undefined || bytes.length === length), `${label}: invalid bytes`);
-  return bytes;
-}
-
-export function trustedKeys(document) {
-  fields(document, ['keys'], [], 'public keys');
-  requireThat(Array.isArray(document.keys), 'public keys: expected an array');
-  const keys = new Map();
-  for (const entry of document.keys) {
-    fields(entry, ['key_id', 'ed25519'], [], 'public key');
-    text(entry.key_id, 'public key id', 128);
-    requireThat(!keys.has(entry.key_id), 'public keys: duplicate key id');
-    const raw = base64(entry.ed25519, 'public key', 32);
-    keys.set(entry.key_id, createPublicKey({ key: Buffer.concat([SPKI_PREFIX, raw]), format: 'der', type: 'spki' }));
-  }
-  return keys;
-}
-
 export function payloadDigest(bytes) {
   return createHash('sha256').update(bytes).digest('hex');
-}
-
-export function verifyEnvelope(bytes, keys) {
-  const envelope = parseJson(bytes, 'envelope');
-  fields(envelope, ['schema', 'payload', 'signatures'], [], 'envelope');
-  requireThat(envelope.schema === 'hiroute.model-feed.envelope/v1', 'envelope: unsupported schema');
-  requireThat(Array.isArray(envelope.signatures) && envelope.signatures.length >= 1
-    && envelope.signatures.length <= 2, 'envelope: expected 1 or 2 signatures');
-  const payloadBytes = base64(envelope.payload, 'envelope payload');
-  const ids = new Set();
-  let verified = false;
-  for (const signature of envelope.signatures) {
-    fields(signature, ['key_id', 'ed25519'], [], 'signature');
-    text(signature.key_id, 'signature key id', 128);
-    requireThat(!ids.has(signature.key_id), 'envelope: duplicate signing key');
-    ids.add(signature.key_id);
-    const signatureBytes = base64(signature.ed25519, 'signature', 64);
-    const key = keys.get(signature.key_id);
-    if (key && verify(null, payloadBytes, key, signatureBytes)) verified = true;
-  }
-  requireThat(verified, 'envelope: no trusted valid signature');
-  // Never parse unauthenticated payload bytes.
-  const payload = checkPayload(payloadBytes);
-  requireThat(payload !== null, 'envelope: bootstrap payload cannot be published');
-  return { payload, digest: payloadDigest(payloadBytes) };
-}
-
-export function signEnvelope(payloadBytes, secret, keys) {
-  let privateKeys;
-  try {
-    privateKeys = JSON.parse(secret);
-    object(privateKeys, 'signing keys');
-    requireThat(Object.keys(privateKeys).length >= 1 && Object.keys(privateKeys).length <= 2, 'signing keys');
-  } catch { throw new Error('signing: MODEL_FEED_SIGNING_KEYS must contain 1 or 2 PKCS#8 PEM keys'); }
-  const signatures = [];
-  for (const [keyId, pem] of Object.entries(privateKeys)) {
-    let key;
-    try {
-      requireThat(typeof pem === 'string' && pem.startsWith('-----BEGIN PRIVATE KEY-----'), 'PKCS#8 PEM required');
-      key = createPrivateKey({ key: pem, format: 'pem', type: 'pkcs8' });
-      requireThat(key.asymmetricKeyType === 'ed25519', 'Ed25519 required');
-      const trusted = keys.get(keyId);
-      requireThat(trusted && createPublicKey(key).export({ type: 'spki', format: 'der' })
-        .equals(trusted.export({ type: 'spki', format: 'der' })), 'public key mismatch');
-      signatures.push({ key_id: keyId, ed25519: sign(null, payloadBytes, key).toString('base64') });
-    } catch { throw new Error('signing: private key is invalid or does not match a trusted public key'); }
-  }
-  const bytes = Buffer.from(`${JSON.stringify({ schema: 'hiroute.model-feed.envelope/v1', payload: payloadBytes.toString('base64'), signatures })}\n`);
-  verifyEnvelope(bytes, keys);
-  return bytes;
 }
 
 async function readBounded(filename) {
   const file = await open(filename, 'r');
   try {
-    const bytes = Buffer.alloc(MAX_ENVELOPE_BYTES + 1);
+    const bytes = Buffer.alloc(MAX_FEED_BYTES + 1);
     let total = 0;
     while (total < bytes.length) {
       const { bytesRead } = await file.read(bytes, total, bytes.length - total, null);
       if (bytesRead === 0) break;
       total += bytesRead;
     }
-    requireThat(total <= MAX_ENVELOPE_BYTES, 'feed input: exceeds 2 MiB');
+    requireThat(total <= MAX_FEED_BYTES, 'feed input: exceeds 2 MiB');
     return bytes.subarray(0, total);
   } finally { await file.close(); }
 }
@@ -257,18 +184,13 @@ export async function checkFeed({ sourceDirectory = path.join(repository, 'asset
   publication(metadata);
   const featured = parseJson(await readBounded(path.join(sourceDirectory, 'featured.json')), 'featured');
   featuredEntries(featured);
-  const keys = trustedKeys(parseJson(await readBounded(path.join(sourceDirectory, 'public-keys.json')), 'public keys'));
   if (payload) {
     requireThat(payload.sequence === metadata.sequence && payload.issued_at === metadata.issued_at, 'payload: publication metadata differs; regenerate the feed');
-    // Reserve room for both rotation signatures before accepting an unsigned artifact.
-    const estimate = Buffer.byteLength(JSON.stringify({ schema: 'hiroute.model-feed.envelope/v1',
-      payload: payloadBytes.toString('base64'), signatures: Array.from({ length: 2 }, () => ({ key_id: '𐀀'.repeat(128), ed25519: 'x'.repeat(88) })) }));
-    requireThat(estimate <= MAX_ENVELOPE_BYTES, 'payload: signed envelope would exceed 2 MiB');
   }
-  return { payloadBytes, payload, keys, digest: payloadDigest(payloadBytes) };
+  return { payloadBytes, payload, digest: payloadDigest(payloadBytes) };
 }
 
-async function servedFeed(fetchImpl, keys) {
+async function servedFeed(fetchImpl) {
   let response;
   try {
     response = await fetchImpl(FEED_URL, { redirect: 'error', credentials: 'omit', cache: 'no-store',
@@ -280,7 +202,7 @@ async function servedFeed(fetchImpl, keys) {
   }
   requireThat(response.status === 200 && !response.redirected, `served feed: unexpected HTTP status ${response.status}`);
   const length = response.headers.get('content-length');
-  requireThat(length === null || (/^\d+$/.test(length) && BigInt(length) <= BigInt(MAX_ENVELOPE_BYTES)), 'served feed: exceeds 2 MiB or invalid content length');
+  requireThat(length === null || (/^\d+$/.test(length) && BigInt(length) <= BigInt(MAX_FEED_BYTES)), 'served feed: exceeds 2 MiB or invalid content length');
   requireThat(response.body, 'served feed: missing body');
   const reader = response.body.getReader();
   const chunks = [];
@@ -290,17 +212,20 @@ async function servedFeed(fetchImpl, keys) {
       const { done, value } = await reader.read();
       if (done) break;
       total += value.length;
-      requireThat(total <= MAX_ENVELOPE_BYTES, 'served feed: exceeds 2 MiB');
+      requireThat(total <= MAX_FEED_BYTES, 'served feed: exceeds 2 MiB');
       chunks.push(value);
     }
   } finally { await reader.cancel(); }
-  return verifyEnvelope(Buffer.concat(chunks, total), keys);
+  const bytes = Buffer.concat(chunks, total);
+  const payload = checkPayload(bytes);
+  requireThat(payload !== null, 'served feed: bootstrap payload cannot be published');
+  return { payload, digest: payloadDigest(bytes) };
 }
 
 async function assertMissing(filename) {
   try { await lstat(filename); }
   catch (error) { if (error.code === 'ENOENT') return; throw error; }
-  throw new Error('publication: dist already contains a feed; use the unsigned website build artifact');
+  throw new Error('publication: dist already contains a feed; use the validated website build artifact');
 }
 
 function resultFor(status, checked) {
@@ -310,33 +235,33 @@ function resultFor(status, checked) {
 
 export async function publishFeed({ sourceDirectory, payloadPath, distDirectory = path.join(repository, 'apps/website/dist'),
   env = process.env, fetchImpl = fetch } = {}) {
-  requireThat(env.GITHUB_EVENT_NAME === 'push' || env.GITHUB_EVENT_NAME === 'workflow_dispatch', 'publication: only a production push or dispatch may sign');
-  requireThat(env.GITHUB_REF === 'refs/heads/main', 'publication: only main may sign');
+  requireThat(env.GITHUB_EVENT_NAME === 'push' || env.GITHUB_EVENT_NAME === 'workflow_dispatch', 'publication: only a production push or dispatch may publish');
+  requireThat(env.GITHUB_REF === 'refs/heads/main', 'publication: only main may publish');
   const destination = path.join(distDirectory, 'model-feed/v1.json');
   await assertMissing(destination);
   const checked = await checkFeed({ sourceDirectory, payloadPath });
   let result;
-  let envelope;
+  let outputBytes;
   if (!checked.payload) result = resultFor('bootstrap', checked);
   else {
-    const served = await servedFeed(fetchImpl, checked.keys);
+    const served = await servedFeed(fetchImpl);
     if (served?.digest === checked.digest) result = resultFor('already_current', checked);
     else {
       requireThat(!served || checked.payload.sequence > served.payload.sequence,
         'publication: proposed sequence must exceed the served sequence when payload content differs');
-      envelope = signEnvelope(checked.payloadBytes, env.MODEL_FEED_SIGNING_KEYS, checked.keys);
+      outputBytes = checked.payloadBytes;
       result = resultFor(served ? 'published' : 'first_publication', checked);
     }
   }
   if (env.GITHUB_STEP_SUMMARY) {
     await appendFile(env.GITHUB_STEP_SUMMARY, `\n### Model feed\n\n- Status: ${result.status}\n- Sequence: ${result.sequence ?? 'none'}\n- Payload SHA-256: ${result.payload_digest ?? 'none'}\n- Source revision: ${result.source_revision ?? 'none'}\n`);
   }
-  if (envelope) {
+  if (outputBytes) {
     await mkdir(path.dirname(destination), { recursive: true });
     const temporary = `${destination}.${process.pid}.tmp`;
     try {
       const file = await open(temporary, 'wx', 0o644);
-      try { await file.writeFile(envelope); await file.sync(); } finally { await file.close(); }
+      try { await file.writeFile(outputBytes); await file.sync(); } finally { await file.close(); }
       await rename(temporary, destination);
     } finally { await rm(temporary, { force: true }); }
   }

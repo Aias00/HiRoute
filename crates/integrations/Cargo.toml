@@ -6,9 +6,7 @@ license.workspace = true
 rust-version.workspace = true
 
 [dependencies]
-base64.workspace = true
 semver.workspace = true
-ring = "0.17.14"
 getrandom.workspace = true
 hiroute-domain = { path = "../domain" }
 hiroute-application = { path = "../application" }

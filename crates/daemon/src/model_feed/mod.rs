@@ -1,4 +1,4 @@
-//! Service-owned signed catalog state. A catalog and its admission generation travel together.
+//! Service-owned HTTPS model catalog state. A catalog and its admission generation travel together.
 
 #[cfg(feature = "integration-test-hooks")]
 pub(crate) mod product_fixture;
@@ -10,7 +10,7 @@ use arc_swap::ArcSwap;
 use hiroute_domain::CanonicalDigest;
 use hiroute_integrations::{
     TrustedReleaseCatalog,
-    model_feed::{FeedCounts, FeedDownload, VerifiedFeed, admit, retrieve_feed, verify_envelope},
+    model_feed::{FeedCounts, FeedDownload, ValidatedFeed, admit, parse_feed, retrieve_feed},
 };
 use serde::Serialize;
 use std::{
@@ -62,10 +62,7 @@ struct MutableFeed {
     failures: u32,
 }
 
-type FeedVerifier = fn(&[u8]) -> Result<VerifiedFeed, hiroute_integrations::model_feed::FeedError>;
-
 pub(crate) struct ModelFeedService {
-    verify: FeedVerifier,
     embedded: Arc<TrustedReleaseCatalog>,
     current: ArcSwap<ReleaseCatalogSnapshot>,
     store: FeedStore,
@@ -82,31 +79,6 @@ impl ModelFeedService {
         minimum_generation: u64,
         minimum_sequence: u64,
     ) -> Result<Self, String> {
-        #[cfg(feature = "integration-test-hooks")]
-        if product_fixture::root().is_some() {
-            return Self::open_with_verifier(
-                root,
-                embedded,
-                minimum_generation,
-                minimum_sequence,
-                product_fixture::verify,
-            );
-        }
-        Self::open_with_verifier(
-            root,
-            embedded,
-            minimum_generation,
-            minimum_sequence,
-            verify_envelope,
-        )
-    }
-    fn open_with_verifier(
-        root: &Path,
-        embedded: TrustedReleaseCatalog,
-        minimum_generation: u64,
-        minimum_sequence: u64,
-        verify: FeedVerifier,
-    ) -> Result<Self, String> {
         let store = FeedStore::open(root)?;
         let (mut state, refused, recovery_available) =
             recovery::restore_state(&store, minimum_generation, minimum_sequence)?;
@@ -116,14 +88,14 @@ impl ModelFeedService {
         if let Some(held) = &state.held {
             let restored = store
                 .blob(held)
-                .and_then(|bytes| verify(&bytes).map_err(|e| e.to_string()))
-                .and_then(|verified| {
-                    if verified.payload.sequence != held.sequence
-                        || verified.payload_digest != held.payload_digest
+                .and_then(|bytes| parse_feed(&bytes).map_err(|e| e.to_string()))
+                .and_then(|validated| {
+                    if validated.payload.sequence != held.sequence
+                        || validated.payload_digest != held.payload_digest
                     {
                         return Err("feed_cache_identity_mismatch".into());
                     }
-                    let admission = admit(&embedded, &verified.payload, &client_version)
+                    let admission = admit(&embedded, &validated.payload, &client_version)
                         .map_err(|e| e.to_string())?;
                     Ok((
                         embedded.with_feed(&admission).map_err(|e| e.to_string())?,
@@ -157,7 +129,6 @@ impl ModelFeedService {
             .retrieval_enabled
             .then(|| now_ms() + startup_delay_ms());
         Ok(Self {
-            verify,
             embedded: Arc::new(embedded),
             current: ArcSwap::from_pointee(ReleaseCatalogSnapshot {
                 catalog: effective,
@@ -209,7 +180,7 @@ impl ModelFeedService {
             last_attempt: state.last_attempt.clone(),
             verification: guard.refused.clone().unwrap_or_else(|| {
                 if state.held.is_some() {
-                    "verified".into()
+                    "validated".into()
                 } else {
                     "none".into()
                 }
@@ -348,9 +319,9 @@ impl ModelFeedService {
             return Err("feed_retrieval_superseded".into());
         }
         let result = match fetched {
-            Ok(FeedDownload::Content { bytes, etag }) => (self.verify)(&bytes)
+            Ok(FeedDownload::Content { bytes, etag }) => parse_feed(&bytes)
                 .map_err(|e| failure_code(e.kind).into())
-                .and_then(|verified| self.apply(&mut guard, verified, &bytes, etag, install)),
+                .and_then(|validated| self.apply(&mut guard, validated, &bytes, etag, install)),
             Ok(FeedDownload::NotModified) if guard.state.held.is_some() => Ok("not_modified"),
             Ok(FeedDownload::NotPublished) => Ok("not_published"),
             Ok(FeedDownload::NotModified) => Err("cacheless_not_modified".into()),
@@ -384,24 +355,24 @@ impl ModelFeedService {
     fn apply(
         &self,
         guard: &mut MutableFeed,
-        verified: VerifiedFeed,
+        validated: ValidatedFeed,
         bytes: &[u8],
         etag: Option<String>,
         install: impl FnOnce(u64, u64) -> Result<(), String>,
     ) -> Result<&'static str, String> {
-        if verified.payload.sequence <= guard.state.sequence_floor
+        if validated.payload.sequence <= guard.state.sequence_floor
             && !guard.state.highest_accepted.as_ref().is_some_and(|h| {
-                h.sequence >= guard.state.sequence_floor && h.sequence == verified.payload.sequence
+                h.sequence >= guard.state.sequence_floor && h.sequence == validated.payload.sequence
             })
         {
             return Err("older_sequence".into());
         }
         if let Some(high) = &guard.state.highest_accepted {
-            if verified.payload.sequence < high.sequence {
+            if validated.payload.sequence < high.sequence {
                 return Err("older_sequence".into());
             }
-            if verified.payload.sequence == high.sequence {
-                if verified.payload_digest != high.payload_digest {
+            if validated.payload.sequence == high.sequence {
+                if validated.payload_digest != high.payload_digest {
                     return Err("same_sequence_conflicting_digest".into());
                 }
                 if guard.state.held.is_some() {
@@ -409,7 +380,7 @@ impl ModelFeedService {
                 }
             }
         }
-        let admission = admit(&self.embedded, &verified.payload, &self.client_version)
+        let admission = admit(&self.embedded, &validated.payload, &self.client_version)
             .map_err(|e| e.to_string())?;
         let catalog = self
             .embedded
@@ -421,19 +392,18 @@ impl ModelFeedService {
             .checked_add(1)
             .ok_or("feed_generation_overflow")?;
         next.highest_accepted = Some(HighestAccepted {
-            sequence: verified.payload.sequence,
-            payload_digest: verified.payload_digest.clone(),
+            sequence: validated.payload.sequence,
+            payload_digest: validated.payload_digest.clone(),
         });
         next.held = Some(HeldPublication {
-            sequence: verified.payload.sequence,
-            payload_digest: verified.payload_digest,
-            envelope_digest: verified.envelope_digest.clone(),
+            sequence: validated.payload.sequence,
+            payload_digest: validated.payload_digest.clone(),
             retrieved_at_ms: now_ms(),
-            issued_at: verified.payload.issued_at,
+            issued_at: validated.payload.issued_at,
         });
         next.etag = etag;
         next.last_success_at_ms = Some(now_ms());
-        self.store.persist_blob(bytes, &verified.envelope_digest)?;
+        self.store.persist_blob(bytes, &validated.payload_digest)?;
         self.store.commit(&next)?;
         guard.state = next;
         guard.counts = admission.counts;
@@ -494,7 +464,6 @@ fn failure_code(kind: hiroute_integrations::model_feed::FeedFailureKind) -> &'st
     match kind {
         Network => "network",
         Size => "size",
-        Signature => "signature",
         Schema => "schema",
         Validation => "validation",
         OlderSequence => "older_sequence",
@@ -504,7 +473,6 @@ fn attempt_failure_code(reason: &str) -> &'static str {
     match reason {
         "network" => "network",
         "size" => "size",
-        "signature" => "signature",
         "schema" => "schema",
         "older_sequence" => "older_sequence",
         _ => "validation",

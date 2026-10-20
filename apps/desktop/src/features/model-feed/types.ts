@@ -4,7 +4,7 @@ export type ModelFeedStatus = {
   held: { sequence: number; issued_at: string; retrieved_at: number } | null;
   highest_accepted_sequence: number | null;
   last_attempt: { at: number; result: string; reason: string | null } | null;
-  verification: { kind: 'verified' | 'none' } | { kind: 'discarded'; reason: string };
+  verification: { kind: 'validated' | 'none' } | { kind: 'discarded'; reason: string };
   counts: { applied: number; ignored_embedded: number; newer_client: number; unresolved: number };
   next_automatic_attempt_at: number | null;
   disclosure: string;

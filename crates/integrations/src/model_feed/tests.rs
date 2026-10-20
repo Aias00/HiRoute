@@ -1,5 +1,3 @@
-use base64::{Engine, engine::general_purpose::STANDARD};
-use ring::signature::{Ed25519KeyPair, KeyPair};
 use serde_json::json;
 
 use super::*;
@@ -91,60 +89,60 @@ fn new_model() -> FeedPayload {
     payload
 }
 
-fn signed(payload: &[u8]) -> (Vec<u8>, Vec<u8>) {
-    let key = Ed25519KeyPair::from_seed_unchecked(&[7; 32]).unwrap();
-    let envelope = json!({"schema":MODEL_FEED_ENVELOPE_SCHEMA,"payload":STANDARD.encode(payload),
-        "signatures":[{"key_id":"test-only","ed25519":STANDARD.encode(key.sign(payload).as_ref())}]});
-    let keys = json!({"keys":[{"key_id":"test-only","ed25519":STANDARD.encode(key.public_key().as_ref())}]});
-    (
-        serde_json::to_vec(&envelope).unwrap(),
-        serde_json::to_vec(&keys).unwrap(),
-    )
-}
-
 #[test]
-fn model_feed_authenticates_exact_bytes_before_parsing() {
+fn model_feed_direct_payload_validation_and_exact_byte_identity() {
     let bytes = serde_json::to_vec(&empty()).unwrap();
-    let (envelope, keys) = signed(&bytes);
+    let parsed = parse_feed(&bytes).unwrap();
+    assert_eq!(parsed.payload, empty());
     assert_eq!(
-        verify_envelope_with_keys(&envelope, &keys).unwrap().payload,
-        empty()
+        parsed.payload_digest,
+        hiroute_domain::CanonicalDigest::of_bytes(&bytes)
     );
-    assert_eq!(
-        verify_envelope(&envelope).unwrap_err().kind,
-        FeedFailureKind::Signature
+    let mut reformatted = bytes.clone();
+    reformatted.push(b'\n');
+    assert_eq!(parse_feed(&reformatted).unwrap().payload, parsed.payload);
+    assert_ne!(
+        parse_feed(&reformatted).unwrap().payload_digest,
+        parsed.payload_digest
     );
-    let mut value: serde_json::Value = serde_json::from_slice(&envelope).unwrap();
-    value["payload"] = json!(STANDARD.encode(b"not JSON"));
-    assert_eq!(
-        verify_envelope_with_keys(&serde_json::to_vec(&value).unwrap(), &keys)
-            .unwrap_err()
-            .kind,
-        FeedFailureKind::Signature
-    );
-    let (bad_json, keys) = signed(b"not JSON");
-    assert_eq!(
-        verify_envelope_with_keys(&bad_json, &keys)
-            .unwrap_err()
-            .kind,
-        FeedFailureKind::Schema
-    );
+    for invalid in [
+        b"not JSON".as_slice(),
+        b"null",
+        b"{}",
+        br#"{"schema":"hiroute.model-feed.envelope/v1","payload":"e30=","signatures":[]}"#,
+    ] {
+        assert_eq!(
+            parse_feed(invalid).unwrap_err().kind,
+            FeedFailureKind::Schema
+        );
+    }
 }
 
 #[test]
-fn model_feed_signature_rotation_and_size_bound() {
-    let (bytes, keys) = signed(&serde_json::to_vec(&empty()).unwrap());
-    let mut value: serde_json::Value = serde_json::from_slice(&bytes).unwrap();
-    value["signatures"].as_array_mut().unwrap().insert(
-        0,
-        json!({"key_id":"unknown","ed25519":STANDARD.encode([0;64])}),
-    );
-    assert!(verify_envelope_with_keys(&serde_json::to_vec(&value).unwrap(), &keys).is_ok());
+fn model_feed_size_schema_and_duplicate_fields_are_checked() {
     assert_eq!(
-        verify_envelope_with_keys(&vec![0; MAX_MODEL_FEED_BYTES + 1], &keys)
+        parse_feed(&vec![0; MAX_MODEL_FEED_BYTES + 1])
             .unwrap_err()
             .kind,
         FeedFailureKind::Size
+    );
+    let mut boundary = serde_json::to_vec(&empty()).unwrap();
+    boundary.resize(MAX_MODEL_FEED_BYTES, b' ');
+    assert!(parse_feed(&boundary).is_ok());
+    let duplicate = String::from_utf8(serde_json::to_vec(&empty()).unwrap())
+        .unwrap()
+        .replace("\"sequence\":43", "\"sequence\":42,\"sequence\":43");
+    assert_eq!(
+        parse_feed(duplicate.as_bytes()).unwrap_err().kind,
+        FeedFailureKind::Schema
+    );
+    let mut unknown = serde_json::to_value(empty()).unwrap();
+    unknown["unknown"] = json!(true);
+    assert_eq!(
+        parse_feed(&serde_json::to_vec(&unknown).unwrap())
+            .unwrap_err()
+            .kind,
+        FeedFailureKind::Schema
     );
 }
 
@@ -159,9 +157,10 @@ fn model_feed_forbidden_or_unknown_payload_content_rejected() {
     ] {
         let mut value = serde_json::to_value(empty()).unwrap();
         value["records"] = json!([{"kind":kind,"min_client_version":"0.3.2","included_on":"2026-10-18","record":{}}]);
-        let (bytes, keys) = signed(&serde_json::to_vec(&value).unwrap());
         assert_eq!(
-            verify_envelope_with_keys(&bytes, &keys).unwrap_err().kind,
+            parse_feed(&serde_json::to_vec(&value).unwrap())
+                .unwrap_err()
+                .kind,
             FeedFailureKind::Schema
         );
     }

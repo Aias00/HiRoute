@@ -1,34 +1,15 @@
 //! Test-binary-only external provider/transport fixtures for the installed product journey.
-//! Normal daemon builds have no runtime trust-root, URL or inventory override.
-use base64::{Engine, engine::general_purpose::STANDARD};
+//! Normal daemon builds have no runtime URL or inventory override.
 use hiroute_integrations::{TrustedReleaseCatalog, model_feed::*};
-use ring::signature::{Ed25519KeyPair, KeyPair};
 use std::{path::PathBuf, sync::Arc};
 
 pub(crate) fn root() -> Option<PathBuf> {
     std::env::var_os("HIROUTE_TEST_MODEL_FEED_ROOT").map(PathBuf::from)
 }
-fn key() -> Ed25519KeyPair {
-    Ed25519KeyPair::from_seed_unchecked(&[19; 32]).expect("fixture key")
-}
-pub(crate) fn verify(bytes: &[u8]) -> Result<VerifiedFeed, FeedError> {
-    let keys = serde_json::to_vec(&serde_json::json!({"keys":[{
-        "key_id":"installed-product-test", "ed25519":STANDARD.encode(key().public_key().as_ref())
-    }]}))
-    .expect("fixture keys");
-    verify_envelope_with_keys(bytes, &keys)
-}
 pub(crate) fn download(root: &std::path::Path) -> Result<FeedDownload, FeedError> {
     let bytes = std::fs::read(root.join("publication.json"))
         .map_err(|_| FeedError::new(FeedFailureKind::Network, "fixture publication unavailable"))?;
-    let envelope = serde_json::to_vec(&serde_json::json!({
-        "schema":MODEL_FEED_ENVELOPE_SCHEMA, "payload":STANDARD.encode(&bytes),
-        "signatures":[{"key_id":"installed-product-test", "ed25519":STANDARD.encode(key().sign(&bytes).as_ref())}]
-    })).expect("fixture envelope");
-    Ok(FeedDownload::Content {
-        bytes: envelope,
-        etag: None,
-    })
+    Ok(FeedDownload::Content { bytes, etag: None })
 }
 pub(crate) fn catalog(catalog: TrustedReleaseCatalog) -> Result<TrustedReleaseCatalog, String> {
     // A later client embedding exactly these model facts is a separate restart case.

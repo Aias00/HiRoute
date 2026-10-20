@@ -27,7 +27,7 @@ export function ModelFeedPanel({ language, mutable = true, onChanged }: { langua
       if (live.current) { setStatus(result); setPreview(null); window.dispatchEvent(new Event('model-feed-changed')); onChanged?.(); }
     } catch (failure) {
       if (live.current) {
-        setError(safeDiagnosticCode(failure, 'MODEL_FEED_UNAVAILABLE').toLowerCase().includes('stale') ? (zh ? '影响范围已变化，请重新查看后再移除。' : 'The affected sources changed. Review the impact again.') : (zh ? '操作未完成，请重试。当前已验证的信息会保留。' : 'The action did not complete. Retry; verified information is retained.'));
+        setError(safeDiagnosticCode(failure, 'MODEL_FEED_UNAVAILABLE').toLowerCase().includes('stale') ? (zh ? '影响范围已变化，请重新查看后再移除。' : 'The affected sources changed. Review the impact again.') : (zh ? '操作未完成，请重试。当前已验证的信息会保留。' : 'The action did not complete. Retry; validated information is retained.'));
         setPreview(null);
       }
     } finally { active.current = false; if (live.current) setBusy(false); }
@@ -46,13 +46,13 @@ export function ModelFeedPanel({ language, mutable = true, onChanged }: { langua
     : refusal ? (zh ? '无法安全修改保存的更新状态。请保留现有文件并检查本地存储。' : 'Saved feed state cannot be safely changed. Preserve the files and check local storage.') : '';
   const [open, setOpen] = useState(false);
   const day = (value: number | string | undefined) => value === undefined ? '' : new Date(value).toLocaleString(language === 'zh' ? 'zh-CN' : 'en-US', { month: zh ? 'numeric' : 'short', day: 'numeric', hour: '2-digit', minute: '2-digit', hour12: false });
-  const resultLabel: Record<string, string> = zh ? { ok: '已更新', not_modified: '没有新内容', already_current: '已是最新', not_published: '暂无发布', network: '获取失败', size: '内容超出限制', signature: '签名验证失败', schema: '格式不支持', validation: '内容校验失败', older_sequence: '已拒绝旧目录' } : { ok: 'Updated', not_modified: 'Nothing new', already_current: 'Already current', not_published: 'Nothing published yet', network: 'Retrieval failed', size: 'Content exceeds limit', signature: 'Signature verification failed', schema: 'Unsupported format', validation: 'Content validation failed', older_sequence: 'Older directory rejected' };
+  const resultLabel: Record<string, string> = zh ? { ok: '已更新', not_modified: '没有新内容', already_current: '已是最新', not_published: '暂无发布', network: '获取失败', size: '内容超出限制', schema: '格式不支持', validation: '内容校验失败', older_sequence: '已拒绝旧目录' } : { ok: 'Updated', not_modified: 'Nothing new', already_current: 'Already current', not_published: 'Nothing published yet', network: 'Retrieval failed', size: 'Content exceeds limit', schema: 'Unsupported format', validation: 'Content validation failed', older_sequence: 'Older directory rejected' };
   const failedCheck = status?.last_attempt && !['ok', 'not_modified', 'already_current', 'not_published'].includes(status.last_attempt.result);
   const summary = !status ? (error ? '' : zh ? '正在读取…' : 'Loading…')
     : [
       'hiroute.ai',
       status.held ? (zh ? `更新于 ${day(status.held.issued_at)}` : `Updated ${day(status.held.issued_at)}`) : (zh ? '还没有获取到目录' : 'No directory retrieved yet'),
-      status.verification.kind === 'verified' ? (zh ? '签名已校验' : 'Signature verified') : status.verification.kind === 'discarded' ? (zh ? '目录未被采用' : 'Directory not used') : '',
+      status.verification.kind === 'validated' ? (zh ? '内容已校验' : 'Content validated') : status.verification.kind === 'discarded' ? (zh ? '目录未被采用' : 'Directory not used') : '',
       status.held ? (zh ? '离线时使用本机缓存' : 'Cached for offline use') : '',
       failedCheck ? (zh ? '上次检查失败' : 'Last check failed') : '',
     ].filter(Boolean).join(' · ');
