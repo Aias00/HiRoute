@@ -33,7 +33,7 @@ pub(super) fn prepare(value: &Pending, incoming: &Package, daemon: &Path) -> io:
             Some(&report),
         );
     };
-    let marker = read_standalone_install_record(&layout.marker_path)?;
+    let marker = read_standalone_install_record(&layout.marker_path).map_err(io::Error::other)?;
     if marker.install_root != *previous {
         return Err(invalid());
     }

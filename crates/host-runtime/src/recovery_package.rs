@@ -31,11 +31,15 @@ impl WindowsDesktopRestore {
                 .as_ref()
                 .is_some_and(|path| !path.is_absolute())
             || self.files.is_empty()
-            || !self.task_name.starts_with("HiRoute-")
-            || self.task_name.len() != 71
-            || !self.task_name[7..]
-                .bytes()
-                .all(|byte| byte.is_ascii_hexdigit() && !byte.is_ascii_uppercase())
+            || self
+                .task_name
+                .strip_prefix("HiRoute-")
+                .is_none_or(|suffix| {
+                    suffix.len() != 64
+                        || !suffix
+                            .bytes()
+                            .all(|byte| byte.is_ascii_hexdigit() && !byte.is_ascii_uppercase())
+                })
             || self.files.len() > 6000
             || !self.files.contains_key("installation/standalone.json")
             || !self
