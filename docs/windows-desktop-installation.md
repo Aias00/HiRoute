@@ -115,7 +115,7 @@ file or service conflict stays on the bundled failure page with a diagnostics pa
 Before NSIS replaces installed files, its verified candidate daemon checks the
 stopped-source requirements. Preparation retains both the complete previous
 Desktop (including shell, uninstaller and inventory) and standalone version root,
-the native transaction's CLI/daemon/Skill/documentation file map, Task definition,
+the native transaction's CLI/daemon/Skill/documentation file map, owned native Task XML and definition,
 login choices and the fixed current-user HiRoute Apps registration. The protected
 handoff binds this material to the storage root and new daemon image. Space checks
 combine simultaneous allocations on the same native volume and check separate

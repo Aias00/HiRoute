@@ -105,6 +105,23 @@ pub(super) fn prepare(value: &Pending, incoming: &Package, daemon: &Path) -> io:
         backup_file(&source, &bundle.join(&relative), &expected)?;
         files.insert(relative, source);
     }
+    let definition =
+        hiroute_platform::windows::background::read_definition(&marker.service_definition)?;
+    let task_xml = hiroute_platform::windows::task::recovery_xml(&definition).map_err(|error| {
+        if error.kind() == io::ErrorKind::PermissionDenied {
+            error
+        } else {
+            io::Error::other("UPGRADE_TASK_REGISTRATION_UNAVAILABLE")
+        }
+    })?;
+    let task_path = bundle.join("installation/task.xml");
+    if present(&task_path)? {
+        if hash(&task_path)? != format!("{:x}", Sha256::digest(&task_xml)) {
+            return Err(invalid());
+        }
+    } else {
+        hiroute_platform::durable::write_private_new(&task_path, &task_xml)?;
+    }
     let registration = bundle.join("installation/uninstall.reg");
     if !value.old.is_empty() && !present(&registration)? {
         hiroute_platform::windows::shell_registration::export(&registration)?;
@@ -117,10 +134,7 @@ pub(super) fn prepare(value: &Pending, incoming: &Package, daemon: &Path) -> io:
         } else {
             Some(root()?)
         },
-        task_name: hiroute_platform::windows::background::read_definition(
-            &marker.service_definition,
-        )?
-        .name,
+        task_name: definition.name,
         task_autostart: value.previous_autostart,
         shell_login: value.shell_login,
         files,
@@ -144,6 +158,7 @@ pub(super) fn prepare(value: &Pending, incoming: &Package, daemon: &Path) -> io:
         .collect();
     expected.insert("program/package-manifest.json".into());
     expected.insert("restore-locations.json".into());
+    expected.insert("installation/task.xml".into());
     expected.extend(value.old.keys().map(|name| format!("desktop/{name}")));
     expected.extend(locations.files.keys().cloned());
     if !value.old.is_empty() {

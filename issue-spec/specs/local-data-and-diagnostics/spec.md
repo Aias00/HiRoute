@@ -275,7 +275,7 @@ Recovery presentation SHALL distinguish correcting prerequisites, current-batch 
 #### Scenario: Complete Windows Desktop recovery material
 
 - **WHEN** NSIS admits a replacement over an existing Desktop
-- **THEN** preflight precedes installed-file replacement and retains both program namespaces, shell/uninstaller/inventory, the installation owner's complete native file map, Task definition/login choices and fixed current-user Apps registration. Space budgets combine allocations sharing a volume and keep separate volumes independent. Whole-group recovery restores those matching materials under the same ordinary account, with a batch-specific bilingual guide and actual readiness/request verification. A same-payload repair preserves the accepted original handoff instead of replacing it with the current program.
+- **THEN** preflight precedes installed-file replacement and retains both program namespaces, shell/uninstaller/inventory, the installation owner's complete native file map, verified native Task XML/definition/login choices and fixed current-user Apps registration. Space budgets combine allocations sharing a volume and keep separate volumes independent. Whole-group recovery restores those matching materials under the same ordinary account, with a batch-specific bilingual guide, import of the exact original Task and actual readiness/request verification. Instructions use published lifecycle commands and Task Scheduler rather than unpublished CLI installation verbs. A same-payload repair preserves the accepted original handoff instead of replacing it with the current program.
 
 #### Scenario: Prerequisite refusal and cancellation
 

@@ -97,6 +97,9 @@ fn preflight() -> Result<(), String> {
     Ok(())
 }
 fn prepare_failure(error: &std::io::Error) -> String {
+    if error.to_string() == "UPGRADE_TASK_REGISTRATION_UNAVAILABLE" {
+        return "UPGRADE_TASK_REGISTRATION_UNAVAILABLE: The previous HiRoute Task could not be verified or retained. No installed program was replaced. Keep all data and the exact previous installer. If its Task is missing, repair it with that matching installer under the same account; if ownership is unclear, preserve the registration and contact support. / 无法验证或保留旧版 HiRoute 任务，本次尚未替换已安装程序。请保留全部数据与配套旧安装器；若原任务缺失，用该安装器在同一账户修复，无法确认任务归属时保留注册并联系支持。".into();
+    }
     if let Some(failure) = error
         .get_ref()
         .and_then(|error| error.downcast_ref::<hiroute_host_runtime::UpgradePreflightFailure>())
