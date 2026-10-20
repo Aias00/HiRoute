@@ -2,6 +2,11 @@ name: windows-headless-compile
 
 on:
   workflow_dispatch:
+    inputs:
+      registration_probe:
+        description: Build only the bounded installed-account registration diagnostic
+        type: boolean
+        default: false
   pull_request:
     paths:
       - 'crates/**'
@@ -25,6 +30,7 @@ concurrency:
 
 jobs:
   check:
+    if: github.event_name != 'workflow_dispatch' || !inputs.registration_probe
     runs-on: windows-2025
     timeout-minutes: 30
     env:
@@ -76,3 +82,37 @@ jobs:
           if ($LASTEXITCODE -ne 0) { throw 'Shell frontend build failed' }
           cargo check --locked --target x86_64-pc-windows-msvc -p hiroute-shell --features shell-runtime --all-targets
           if ($LASTEXITCODE -ne 0) { throw 'Windows console shell compilation failed' }
+  registration-probe:
+    if: github.event_name == 'workflow_dispatch' && inputs.registration_probe
+    runs-on: windows-2025
+    timeout-minutes: 20
+    env:
+      CARGO_INCREMENTAL: '0'
+      RUSTC_WRAPPER: sccache
+      RUSTFLAGS: '-C target-feature=+crt-static'
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ github.sha }}
+          persist-credentials: false
+      - uses: mozilla-actions/sccache-action@v0.0.11
+      - name: Build exact platform diagnostic
+        shell: pwsh
+        run: |
+          if ((git rev-parse HEAD) -ne $env:GITHUB_SHA) { throw 'Exact diagnostic SHA required' }
+          New-Item artifacts/registration-probe -ItemType Directory -Force | Out-Null
+          cargo test --locked --target x86_64-pc-windows-msvc -p hiroute-platform --lib --no-run --message-format=json 2>&1 | Tee-Object artifacts/registration-probe/compiler.jsonl
+          if ($LASTEXITCODE -ne 0) { throw 'Native platform probe compilation failed' }
+          $images = @(Get-Content artifacts/registration-probe/compiler.jsonl | ForEach-Object { try { $_ | ConvertFrom-Json } catch {} } | Where-Object { $_.reason -eq 'compiler-artifact' -and $_.executable -and $_.profile.test -and $_.target.name -eq 'hiroute_platform' })
+          if ($images.Count -ne 1) { throw 'Exactly one platform test image is required' }
+          Copy-Item $images[0].executable artifacts/registration-probe/registry_probe.exe
+          $image = Get-Item artifacts/registration-probe/registry_probe.exe
+          @{source_revision=$env:GITHUB_SHA;target='x86_64-pc-windows-msvc';native_ci_assessment='diagnostic_build_only';files=@{'registry_probe.exe'=@{sha256=(Get-FileHash $image.FullName -Algorithm SHA256).Hash.ToLower();bytes=$image.Length}}} | ConvertTo-Json -Depth 5 | Set-Content artifacts/registration-probe/manifest.json -Encoding utf8
+          Compress-Archive -Path artifacts/registration-probe/registry_probe.exe,artifacts/registration-probe/manifest.json -DestinationPath artifacts/registration-probe/development-bundle.zip
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: windows-registration-probe-${{ github.sha }}
+          path: artifacts/registration-probe
+          if-no-files-found: error
+          retention-days: 14

@@ -144,6 +144,55 @@ mod tests {
     }
 
     #[test]
+    #[ignore = "explicit read-only installed-account diagnosis; no installation acceptance"]
+    fn installed_account_registration_export_probe() {
+        let root = tempfile::tempdir().unwrap();
+        let private = root.path().join("private");
+        super::super::security::ensure_private_directory(&private)
+            .expect("create private probe directory");
+        let key = r"HKCU\Software\Microsoft\Windows\CurrentVersion\Uninstall\HiRoute";
+        let output = private.join("observed.reg");
+        export_to(key, &output).expect("controlled system export in installed ordinary account");
+        let parent = super::super::security::open_owner_only(&private, true)
+            .expect("hold private export parent");
+        let bytes = read_child(&parent, std::ffi::OsStr::new("observed.reg"))
+            .expect("admit complete controlled-child export");
+        println!("controlled_export_bytes={}", bytes.len());
+        let retained = super::super::background::local_app_data()
+            .unwrap()
+            .join("HiRoute/shell/recovery-packages");
+        if retained.exists() {
+            let entries: Vec<_> = std::fs::read_dir(retained).unwrap().take(33).collect();
+            assert!(
+                entries.len() <= 32,
+                "bounded retained preparation diagnosis"
+            );
+            for entry in entries {
+                let entry = entry.unwrap();
+                let name = entry.file_name();
+                let name = name.to_string_lossy();
+                if name.len() != 64 || !name.bytes().all(|b| b.is_ascii_hexdigit()) {
+                    continue;
+                }
+                let installation = entry.path().join("installation");
+                if !installation.join("uninstall.reg").is_file() {
+                    continue;
+                }
+                let parent = super::super::security::open_owner_only(&installation, true)
+                    .expect("hold retained preparation parent");
+                let previous = read_child(&parent, std::ffi::OsStr::new("uninstall.reg"))
+                    .expect("read interrupted retained export without changing it");
+                assert_eq!(
+                    previous, bytes,
+                    "retained registration differs from a fresh controlled export"
+                );
+            }
+        }
+        export_key(&private.join("published.reg"), key).expect("publish fresh protected export");
+        println!("registration_probe=passed; installed registration and files were not changed");
+    }
+
+    #[test]
     fn inherited_export_is_published_privately_and_changed_material_is_not_overwritten() {
         let registry = Registry(format!(
             r"HKCU\Software\HiRouteRecoveryTest-{}",

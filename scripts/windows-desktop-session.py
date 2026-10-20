@@ -1186,8 +1186,24 @@ def execute(request, run, product, pm, helper, activity, manifest, root):
     if activity.get('administrator_groups') is not False:
         raise ValueError('Native Desktop evidence requires a standard account, not a filtered administrator')
     action = request['desktop_action']
-    if action not in ('install', 'installer-prepare', 'installer-resume', 'installer-quarantine', 'launch', 'snapshot', 'invoke', 'text', 'click', 'scroll', 'close', 'quit', 'tray-observe', 'desktop-state', 'cli', 'native-files', 'codex-call', 'codex-inference', 'network-probe', 'recovery-preview', 'recovery-restore-original', 'recovery-lock-ui', 'recovery-file-use-ui', 'recovery-format-ui'):
+    if action not in ('install', 'registration-probe', 'installer-prepare', 'installer-resume', 'installer-quarantine', 'launch', 'snapshot', 'invoke', 'text', 'click', 'scroll', 'close', 'quit', 'tray-observe', 'desktop-state', 'cli', 'native-files', 'codex-call', 'codex-inference', 'network-probe', 'recovery-preview', 'recovery-restore-original', 'recovery-lock-ui', 'recovery-file-use-ui', 'recovery-format-ui'):
         raise ValueError('Unknown native Desktop action')
+    if action=='registration-probe':
+        installed(helper,product,pm)
+        identifier=request.get('probe_product')
+        if not re.fullmatch(r'[a-f0-9]{12}-[a-f0-9]{12}',identifier or ''):
+            raise ValueError('Registration diagnosis requires its exact native probe bundle')
+        probe=root/'bundles'/identifier;measured=manifest(probe)
+        if (measured.get('target')!='x86_64-pc-windows-msvc' or set(measured.get('files',{}))!={'registry_probe.exe'}):
+            raise ValueError('The native probe bundle is not the bounded platform test')
+        case='windows::shell_registration::tests::installed_account_registration_export_probe'
+        done=subprocess.run([str(probe/'registry_probe.exe'),case,'--exact','--ignored','--nocapture','--test-threads=1'],
+            capture_output=True,timeout=90,creationflags=0x08000000)
+        (run/'registration-probe.stdout').write_bytes(done.stdout);(run/'registration-probe.stderr').write_bytes(done.stderr)
+        if done.returncode or b'test result: ok. 1 passed; 0 failed; 0 ignored;' not in done.stdout:
+            raise ValueError('The native registration probe failed; inspect its exact phase before retrying')
+        return dict(native_entry='bounded read-only installed-account registration probe',exit_code=done.returncode,
+                    probe_revision=measured['source_revision'],assessment='diagnostic_only_not_installation_acceptance')
     if action=='installer-prepare':
         return installer_prepare(request,run,product,pm,helper,activity,manifest,root)
     if action == 'recovery-restore-original':

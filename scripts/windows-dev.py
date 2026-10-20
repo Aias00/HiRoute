@@ -338,7 +338,7 @@ def main():
     desktop = commands.add_parser('desktop-session', help='Measured installed Desktop and native UI acceptance')
     desktop.add_argument('--product', required=True)
     desktop.add_argument('--action', dest='desktop_action', required=True,
-                         choices=('install', 'installer-prepare', 'installer-resume', 'installer-quarantine', 'launch', 'snapshot', 'invoke', 'text', 'click', 'scroll', 'close', 'quit', 'tray-observe', 'desktop-state', 'cli', 'native-files', 'codex-call', 'codex-inference', 'network-probe', 'recovery-preview', 'recovery-restore-original', 'recovery-lock-ui', 'recovery-file-use-ui', 'recovery-format-ui'))
+                         choices=('install', 'registration-probe', 'installer-prepare', 'installer-resume', 'installer-quarantine', 'launch', 'snapshot', 'invoke', 'text', 'click', 'scroll', 'close', 'quit', 'tray-observe', 'desktop-state', 'cli', 'native-files', 'codex-call', 'codex-inference', 'network-probe', 'recovery-preview', 'recovery-restore-original', 'recovery-lock-ui', 'recovery-file-use-ui', 'recovery-format-ui'))
     desktop.add_argument('--from-product', help='Exact installed bundle admitted before a cross-build upgrade')
     desktop.add_argument('--recover-product', help='Exact interrupted bundle, with a recent inspection, before normal NSIS recovery')
     desktop.add_argument('--observation-run')
@@ -354,6 +354,7 @@ def main():
     desktop.add_argument('--cli-args', type=Path, help='Private JSON array of public CLI arguments')
     desktop.add_argument('--prepare-manifest', type=Path, help='Manifest independently extracted from the verified failed NSIS, for its actual preparation adapter only')
     desktop.add_argument('--prepare-shell', type=Path, help='Actual shell independently extracted from the same verified NSIS; its measured shell digest is mandatory')
+    desktop.add_argument('--probe-product', help='Exact native platform diagnostic bundle; never an installed product replacement')
     run = commands.add_parser('run')
     run.add_argument('--harness', required=True)
     run.add_argument('--product', required=True)
@@ -401,6 +402,8 @@ def main():
                           operation='inspect', ignored=False, timeout=120)
             args.action = 'run'
         elif args.action == 'desktop-session':
+            if args.desktop_action == 'registration-probe' and not re.fullmatch(r'[a-f0-9]{12}-[a-f0-9]{12}',args.probe_product or ''):
+                raise ValueError('Registration diagnosis requires its exact native probe bundle')
             if args.from_product:
                 identifier = r'[a-f0-9]{12}-[a-f0-9]{12}'
                 if not re.fullmatch(identifier, args.from_product):

@@ -249,6 +249,14 @@ and is never a successful full-installer verdict.
 Read-only installation inspection also compares bounded retained Apps-registration
 values with the fixed current-user product key. It reports only differing value
 names; this diagnostic neither imports registration nor admits a recovery source.
+For a remaining ordinary-account-only failure, the manual `windows-headless-compile`
+workflow's `registration_probe` input builds only the platform diagnostic test.
+Stage its verified bundle, then use `desktop-session --action registration-probe
+--product INSTALLED_BUNDLE --probe-product PROBE_BUNDLE` under the existing account.
+It exports only the fixed current-user Apps key into disposable private files,
+reads bounded retained preparation exports and records the failing native phase.
+It changes neither installed registration nor installed programs and is diagnostic
+evidence, never full installer or recovery acceptance.
 If that failed unreleased producer never registered its generated uninstaller,
 manual `installer-quarantine` can preserve that one file in the run's evidence.
 It requires the same inspection/prior-product admission and an independently

@@ -25,6 +25,10 @@ uses a unique disposable registry key to reproduce inherited system-file permiss
 verify private publication and refuse changed retained bytes or a failed export.
 The focused Windows candidate workflow runs it before packaging; it does not
 establish the ordinary-user installed restoration journey.
+Its ignored installed-account probe reads only the fixed Apps key and bounded
+preparation exports. The manual compile workflow can export that test alone for
+the existing ordinary-user runner; its exact failing phase is diagnostic evidence,
+without replacing the installed product or granting a recovery disposition.
 
 Choose a user promise, then the layer that can observe its failure. Keep tests
 beside that owner and preserve independent assertions. A focused filesystem
