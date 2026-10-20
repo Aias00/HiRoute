@@ -331,38 +331,6 @@ fn checked_path(path: &Path) -> Result<(), QoderNativeError> {
     Ok(())
 }
 
-#[cfg(test)]
-mod tests {
-    use super::*;
-    #[test]
-    fn context_selectors_are_additive_and_database_is_data_relative() {
-        let home = super::super::test_absolute_path("/native");
-        let extra = home.join("extra");
-        let context = OpenCodeNativeContext::from_lookup(&home, |key| match key {
-            "OPENCODE_CONFIG_DIR" => Some(extra.clone().into_os_string()),
-            "OPENCODE_DB" => Some("worker.db".into()),
-            _ => None,
-        })
-        .unwrap();
-        assert_eq!(context.config_root, home.join(".config/opencode"));
-        assert_eq!(
-            context.database,
-            home.join(".local/share/opencode/worker.db")
-        );
-        assert_eq!(
-            context.skill_target(),
-            extra.join("skills/hiroute-collaboration/SKILL.md")
-        );
-        assert!(
-            context
-                .config_paths(None)
-                .unwrap()
-                .contains(&home.join(".config/opencode/config.json"))
-        );
-        assert!(OpenCodeNativeContext::from_lookup(&home, |_| Some("relative".into())).is_err());
-    }
-}
-
 /// Shared native SDK declaration. Ordinary grants use their independent fixed header.
 pub fn opencode_provider(
     endpoint: &str,
@@ -515,4 +483,36 @@ pub fn validate_opencode_composition(
         }
     }
     Ok(())
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    #[test]
+    fn context_selectors_are_additive_and_database_is_data_relative() {
+        let home = super::super::test_absolute_path("/native");
+        let extra = home.join("extra");
+        let context = OpenCodeNativeContext::from_lookup(&home, |key| match key {
+            "OPENCODE_CONFIG_DIR" => Some(extra.clone().into_os_string()),
+            "OPENCODE_DB" => Some("worker.db".into()),
+            _ => None,
+        })
+        .unwrap();
+        assert_eq!(context.config_root, home.join(".config/opencode"));
+        assert_eq!(
+            context.database,
+            home.join(".local/share/opencode/worker.db")
+        );
+        assert_eq!(
+            context.skill_target(),
+            extra.join("skills/hiroute-collaboration/SKILL.md")
+        );
+        assert!(
+            context
+                .config_paths(None)
+                .unwrap()
+                .contains(&home.join(".config/opencode/config.json"))
+        );
+        assert!(OpenCodeNativeContext::from_lookup(&home, |_| Some("relative".into())).is_err());
+    }
 }
