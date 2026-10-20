@@ -835,7 +835,10 @@ class Runner(unittest.TestCase):
             if len(controller.powershell(script)) > 6000:
                 self.assertEqual(base64.b64decode(payload).decode('utf-8'), script)
                 bridge = base64.b64decode(command.split()[-1]).decode('utf-16le')
-                self.assertIn('[Console]::In.ReadToEnd()', bridge)
+                self.assertIn('[Console]::In.ReadLine()', bridge)
+                self.assertNotIn('ReadToEnd', bridge)
+                self.assertTrue(payload.endswith('\n'))
+                self.assertIn('$line.Length -ne ' + str(len(payload) - 1), bridge)
             else:
                 self.assertIsNone(payload)
                 self.assertEqual(base64.b64decode(command.split()[-1]).decode('utf-16le'), script)

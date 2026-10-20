@@ -140,12 +140,16 @@ class Remote:
         payload = None
         if len(command) > 6000:
             # Windows OpenSSH may enter through cmd.exe's 8191-character limit.
-            # Keep argv bounded; the encoded bridge reads source data to EOF.
-            payload = base64.b64encode(script.encode('utf-8')).decode()
+            # A length-checked line avoids waiting for SSH/PowerShell to forward
+            # EOF before the remote command can run. Never replay a timeout.
+            encoded = base64.b64encode(script.encode('utf-8')).decode()
+            payload = encoded + '\n'
             command = powershell(
                 "$ErrorActionPreference='Stop';"
+                "$line=[Console]::In.ReadLine();"
+                "if($null -eq $line -or $line.Length -ne " + str(len(encoded)) + "){throw 'Incomplete source frame'};"
                 "$source=[Text.Encoding]::UTF8.GetString("
-                "[Convert]::FromBase64String([Console]::In.ReadToEnd()));"
+                "[Convert]::FromBase64String($line));"
                 "& ([ScriptBlock]::Create($source))")
         result = subprocess.run(['ssh', *self.options, self.config['host'], command],
                                 input=payload, capture_output=True, text=True,
