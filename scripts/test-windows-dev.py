@@ -233,6 +233,12 @@ class Runner(unittest.TestCase):
         task_file=material('installation/task.xml',xml.encode('utf-16'))
         source=dict(source=package.parent,program=program)
         self.assertEqual(profiles.original_desktop_locations(source,baseline,paths),value)
+        task_file.write_bytes(xml.replace(sid,r'LOCAL\standard-user').encode('utf-16'))
+        with patch.object(profiles,'native_account_sid',return_value=sid) as resolve:
+            self.assertEqual(profiles.original_desktop_locations(source,baseline,paths),value)
+            self.assertEqual(resolve.call_count,2)
+        with patch.object(profiles,'native_account_sid',return_value='S-1-5-21-9999'),self.assertRaisesRegex(ValueError,'foreign account'):
+            profiles.original_desktop_locations(source,baseline,paths)
         task_file.write_bytes(xml.replace('LeastPrivilege','HighestAvailable').encode('utf-16'))
         with self.assertRaisesRegex(ValueError,'privilege'):
             profiles.original_desktop_locations(source,baseline,paths)

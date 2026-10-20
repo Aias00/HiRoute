@@ -360,6 +360,32 @@ def original_recovery_source(native_home, local_app_data, baseline):
                 locator_sha256=digest(locator_path), program=matching[0])
 
 
+def native_account_sid(account):
+    """Resolve Scheduler's account-name spelling to its SID; never authorize by a display name."""
+    import ctypes
+    from ctypes import wintypes
+    if os.name != 'nt' or not isinstance(account,str) or not account or len(account)>1024:
+        raise ValueError('Native Windows account resolution is required')
+    advapi=ctypes.WinDLL('advapi32',use_last_error=True)
+    kernel=ctypes.WinDLL('kernel32',use_last_error=True)
+    advapi.LookupAccountNameW.argtypes=[wintypes.LPCWSTR,wintypes.LPCWSTR,ctypes.c_void_p,
+        ctypes.POINTER(wintypes.DWORD),wintypes.LPWSTR,ctypes.POINTER(wintypes.DWORD),ctypes.POINTER(wintypes.DWORD)]
+    advapi.ConvertSidToStringSidW.argtypes=[ctypes.c_void_p,ctypes.POINTER(wintypes.LPWSTR)]
+    kernel.LocalFree.argtypes=[ctypes.c_void_p]
+    size,domain_size,kind=wintypes.DWORD(),wintypes.DWORD(),wintypes.DWORD()
+    advapi.LookupAccountNameW(None,account,None,ctypes.byref(size),None,ctypes.byref(domain_size),ctypes.byref(kind))
+    if not 1<=size.value<=256 or not 1<=domain_size.value<=1024:
+        raise ValueError('The native account could not be resolved within its bounds')
+    sid=ctypes.create_string_buffer(size.value);domain=ctypes.create_unicode_buffer(domain_size.value)
+    if not advapi.LookupAccountNameW(None,account,sid,ctypes.byref(size),domain,ctypes.byref(domain_size),ctypes.byref(kind)):
+        raise ctypes.WinError(ctypes.get_last_error())
+    result=wintypes.LPWSTR()
+    if not advapi.ConvertSidToStringSidW(sid,ctypes.byref(result)):
+        raise ctypes.WinError(ctypes.get_last_error())
+    try:return result.value
+    finally:kernel.LocalFree(result)
+
+
 def original_desktop_locations(source, baseline, paths):
     """Admit only the installer-owned old destinations and actual limited-user Task."""
     import re
@@ -421,15 +447,19 @@ def original_desktop_locations(source, baseline, paths):
     xml = ET.fromstring(xml_path.read_bytes())
     ns = {'t':'http://schemas.microsoft.com/windows/2004/02/mit/task'}
     text = lambda name: xml.findtext(name, namespaces=ns)
+    def owner(account):
+        if account==definition['owner_sid']:return True
+        try:return native_account_sid(account)==definition['owner_sid']
+        except (ValueError,OSError):return False
     actions, triggers = xml.find('t:Actions',ns), xml.find('t:Triggers',ns)
     if (xml.tag != '{'+ns['t']+'}Task' or actions is None or len(actions) != 1 or triggers is None or len(triggers) != 1
-            or text('t:Principals/t:Principal/t:UserId') != definition['owner_sid']
+            or not owner(text('t:Principals/t:Principal/t:UserId'))
             or text('t:Principals/t:Principal/t:RunLevel') != 'LeastPrivilege'
             or text('t:Principals/t:Principal/t:LogonType') != 'InteractiveToken'
             or Path(text('t:Actions/t:Exec/t:Command') or '') != program/'hirouted.exe'
             or Path(text('t:Actions/t:Exec/t:WorkingDirectory') or '') != program
             or text('t:Actions/t:Exec/t:Arguments') != '--role all --standalone'
-            or text('t:Triggers/t:LogonTrigger/t:UserId') != definition['owner_sid']
-            or (text('t:Triggers/t:LogonTrigger/t:Enabled') != 'false') != value['task_autostart']):
+            or not owner(text('t:Triggers/t:LogonTrigger/t:UserId'))
+            or {None:True,'true':True,'1':True,'false':False,'0':False}.get(text('t:Triggers/t:LogonTrigger/t:Enabled')) != value['task_autostart']):
         raise ValueError('Original native Task XML has a foreign account, action, privilege or login policy')
     return value
