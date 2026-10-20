@@ -420,6 +420,12 @@ pub(super) fn commit() -> io::Result<()> {
     record_generated()?;
     let mut value = pending()?;
     let root = root()?;
+    let actual_inventory = if present(&root.join(INVENTORY))? {
+        Some(hash(&root.join(INVENTORY))?)
+    } else {
+        None
+    };
+    prepare_inventory(&value.old, &mut value.new, actual_inventory.as_deref())?;
     for (name, expected) in &value.new {
         if hash(&root.join(name))? != *expected {
             return Err(invalid());
@@ -448,6 +454,24 @@ pub(super) fn commit() -> io::Result<()> {
     write(&data()?.join(PENDING), &value)?;
     complete_commit(&data()?, &value.old)?;
     cleanup_committed();
+    Ok(())
+}
+
+fn prepare_inventory(
+    old: &BTreeMap<String, String>,
+    new: &mut BTreeMap<String, String>,
+    actual: Option<&str>,
+) -> io::Result<()> {
+    if actual.is_some_and(|hash| {
+        old.get(INVENTORY).map(String::as_str) != Some(hash)
+            && new.get(INVENTORY).map(String::as_str) != Some(hash)
+    }) {
+        return Err(invalid());
+    }
+    // A failed publication can leave this generated digest in the prepared
+    // journal while the old inventory is still present. It is metadata about
+    // the inventory, never a member of that inventory's own closed file set.
+    new.remove(INVENTORY);
     Ok(())
 }
 
@@ -652,6 +676,38 @@ mod tests {
         request.insert("standalone/hirouted.exe".into(), "daemon-old".into());
         assert!(!same_repair_payload(&pending, &request));
         assert!(!same_repair_payload(&pending, &BTreeMap::new()));
+    }
+
+    #[test]
+    fn retrying_inventory_publication_accepts_only_old_or_admitted_new_metadata_without_self_hashing()
+     {
+        let old = BTreeMap::from([(INVENTORY.into(), "a".repeat(64))]);
+        let payload = BTreeMap::from([("hiroute-shell.exe".into(), "b".repeat(64))]);
+        let bytes = serde_json::to_vec(&Inventory {
+            schema: "hiroute.windows-shell-package/v1".into(),
+            files: payload.clone(),
+        })
+        .unwrap();
+        let published = format!("{:x}", Sha256::digest(&bytes));
+        for actual in [old[INVENTORY].as_str(), published.as_str()] {
+            let mut new = payload.clone();
+            new.insert(INVENTORY.into(), published.clone());
+            prepare_inventory(&old, &mut new, Some(actual)).unwrap();
+            assert_eq!(new, payload);
+            assert_eq!(
+                serde_json::to_vec(&Inventory {
+                    schema: "hiroute.windows-shell-package/v1".into(),
+                    files: new
+                })
+                .unwrap(),
+                bytes
+            );
+        }
+        let mut changed = payload.clone();
+        changed.insert(INVENTORY.into(), published);
+        let before = changed.clone();
+        assert!(prepare_inventory(&old, &mut changed, Some(&"c".repeat(64))).is_err());
+        assert_eq!(changed, before);
     }
     #[test]
     fn committed_manual_repair_replaces_stale_failure_before_retiring_journal() {
