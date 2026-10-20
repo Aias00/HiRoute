@@ -58,12 +58,27 @@ fn export_to(key: &str, destination: &Path) -> io::Result<()> {
         cwd: destination.parent(),
         stdin: Stream::Null,
         stdout: Stream::Null,
-        stderr: Stream::Null,
+        stderr: if cfg!(test) {
+            Stream::Piped
+        } else {
+            Stream::Null
+        },
     })?;
+    #[cfg(test)]
+    let mut child = child;
     let deadline = Instant::now() + Duration::from_secs(10);
     loop {
         if let Some(code) = child.exit_code()? {
             if code != 0 {
+                #[cfg(test)]
+                if let Some(stderr) = child.stderr.as_mut() {
+                    let mut bytes = Vec::new();
+                    let _ = stderr.take(4096).read_to_end(&mut bytes);
+                    eprintln!(
+                        "registry system child exit={code}, bounded stderr={:?}",
+                        String::from_utf8_lossy(&bytes)
+                    );
+                }
                 return Err(io::Error::other("SHELL_REGISTRATION_UNAVAILABLE"));
             }
             if child.empty()? {
@@ -152,7 +167,25 @@ mod tests {
             .expect("create private probe directory");
         let key = r"HKCU\Software\Microsoft\Windows\CurrentVersion\Uninstall\HiRoute";
         let output = private.join("observed.reg");
-        export_to(key, &output).expect("controlled system export in installed ordinary account");
+        if let Err(error) = export_to(key, &output) {
+            let reg = system_reg().unwrap();
+            let windows = reg.parent().unwrap().parent().unwrap();
+            let plain = Command::new(&reg)
+                .args(["export", key])
+                .arg(private.join("ordinary.reg"))
+                .arg("/y")
+                .env_clear()
+                .env("SystemRoot", windows)
+                .current_dir(&private)
+                .output()
+                .unwrap();
+            eprintln!(
+                "ordinary minimal-environment export exit={:?}, bounded stderr={:?}",
+                plain.status.code(),
+                String::from_utf8_lossy(&plain.stderr[..plain.stderr.len().min(4096)])
+            );
+            panic!("controlled system export in installed ordinary account: {error:?}");
+        }
         let parent = super::super::security::open_owner_only(&private, true)
             .expect("hold private export parent");
         let bytes = read_child(&parent, std::ffi::OsStr::new("observed.reg"))
