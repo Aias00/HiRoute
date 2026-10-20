@@ -51,6 +51,80 @@ mod tests {
     use super::*;
 
     #[test]
+    fn current_cause_survives_the_ready_channel_after_action_selection() {
+        let directory = tempfile::tempdir().unwrap();
+        StorageRecovery::new(
+            StorageRecoveryCause::MissingPackage,
+            StorageRecoveryAction::PreserveAndDiagnose,
+        )
+        .store(directory.path())
+        .unwrap();
+        for (cause, action, expected) in [
+            (
+                StorageRecoveryCause::Locked,
+                StorageRecoveryAction::RetryCurrent,
+                StartupFailureCode::StorageLocked,
+            ),
+            (
+                StorageRecoveryCause::AccessDenied,
+                StorageRecoveryAction::RetryCurrent,
+                StartupFailureCode::StorageAccessDenied,
+            ),
+            (
+                StorageRecoveryCause::MissingKey,
+                StorageRecoveryAction::RestoreCompleteGroup,
+                StartupFailureCode::StorageKeyUnavailable,
+            ),
+            (
+                StorageRecoveryCause::UnsupportedFormat,
+                StorageRecoveryAction::RestoreCompleteGroup,
+                StartupFailureCode::UpgradeSourceUnsupported,
+            ),
+        ] {
+            let current = StorageRecovery::new(cause, action);
+            let error = role_failure(hiroute_daemon::RoleAllError::StorageRecovery(Box::new(
+                current.clone(),
+            )));
+            assert_eq!(
+                error.code, expected,
+                "the ready/startup producer must retain cause independently of action"
+            );
+            assert_eq!(
+                failure_report(
+                    error.code,
+                    Some(directory.path()),
+                    error.recovery.as_deref()
+                )
+                .unwrap(),
+                current
+            );
+            let offline = failure_report(error.code, Some(directory.path()), None).unwrap();
+            assert_eq!(
+                offline.cause, cause,
+                "a consumer must not borrow the older missing-package record"
+            );
+            assert_eq!(
+                offline.action,
+                if matches!(
+                    cause,
+                    StorageRecoveryCause::Locked | StorageRecoveryCause::AccessDenied
+                ) {
+                    StorageRecoveryAction::RetryCurrent
+                } else {
+                    StorageRecoveryAction::PreserveAndDiagnose
+                }
+            );
+        }
+        assert_eq!(
+            StorageRecovery::read(directory.path())
+                .unwrap()
+                .unwrap()
+                .cause,
+            StorageRecoveryCause::MissingPackage
+        );
+    }
+
+    #[test]
     fn current_admission_failure_never_borrows_an_old_package_instruction() {
         let directory = tempfile::tempdir().unwrap();
         StorageRecovery::new(
