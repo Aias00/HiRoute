@@ -125,9 +125,14 @@ fn validate_selection_for(
         .map(|path| normalize_required(Path::new(path), request.node_path.is_none()))
         .transpose()?;
     let cli = if request.harness == WorkerHarnessV1::OpenCode {
-        hiroute_integrations::opencode_native_executable(Path::new(&request.cli_path))
+        let native = hiroute_integrations::opencode_native_executable(Path::new(&request.cli_path))
             .map_err(|_| DelegationErrorV1::DependenciesInvalid)?
-            .ok_or(DelegationErrorV1::DependenciesMissing)?
+            .ok_or(DelegationErrorV1::DependenciesMissing)?;
+        // Native launch uses an ordinary Windows drive path; selection binds the
+        // same canonical tuple as discovery and every other Worker harness.
+        #[cfg(windows)]
+        let native = normalize_required(&native, true)?;
+        native
     } else {
         normalize_required(Path::new(&request.cli_path), true)?
     };
