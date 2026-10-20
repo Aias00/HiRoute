@@ -971,7 +971,7 @@ def run(repository):
         stage = 'worker-selection-submit-wait-result-replay'
         discovered = product.cli('worker', 'dependencies', 'discover')['data']
         assert {item['harness'] for item in discovered['selection_revisions']} == {
-            'codex_cli', 'claude_code', 'qoder_cli', 'pi', 'deepseek_harness'}, discovered
+            'codex_cli', 'claude_code', 'qoder_cli', 'pi', 'deepseek_harness', 'opencode'}, discovered
         revision = next(item['revision'] for item in discovered['selection_revisions']
                         if item['harness'] == 'codex_cli')
         selected = product.cli(
