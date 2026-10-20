@@ -262,6 +262,11 @@ Recovery presentation SHALL distinguish correcting prerequisites, current-batch 
 - **WHEN** core migration/cutover has begun, an original authority changes, a phase is corrupt/unknown or a prior batch prevents proving compatibility
 - **THEN** no consumer offers unverified program-only downgrade and no installer automatically starts an older daemon; all generations and journals remain available for current-version recovery or the corresponding complete-group guide.
 
+#### Scenario: A retained source does not authorize blind resume
+
+- **WHEN** an original complete batch is verified but the current generation is damaged or its phase cannot be admitted
+- **THEN** its existence authorizes only the matching complete-group restoration target; it does not grant current-version resume. Resume after fresh Observation initialization failure requires successfully admitted core stores and an unpublished live Observation root, with the same verified original batch still available.
+
 #### Scenario: Managed standalone upgrade
 
 - **WHEN** Linux systemd or a Windows ordinary-user Task starts the installed candidate after an upgrade

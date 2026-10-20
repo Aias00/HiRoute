@@ -61,7 +61,14 @@ impl LocalStorageSet {
             storage,
             LocalStorageError::InvalidData.with_recovery(
                 cause,
-                hiroute_host_runtime::StorageRecoveryAction::PreserveAndDiagnose,
+                if cause == hiroute_host_runtime::StorageRecoveryCause::MigrationFailed
+                    && matches!(std::fs::symlink_metadata(storage.join("observation")),
+                        Err(error) if error.kind() == std::io::ErrorKind::NotFound)
+                {
+                    hiroute_host_runtime::StorageRecoveryAction::ResumeCurrent
+                } else {
+                    hiroute_host_runtime::StorageRecoveryAction::PreserveAndDiagnose
+                },
             ),
         );
     }

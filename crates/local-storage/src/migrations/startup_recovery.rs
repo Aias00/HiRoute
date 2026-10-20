@@ -8,25 +8,41 @@ pub(crate) fn publish_failure(root: &Path, error: LocalStorageError) -> LocalSto
     // original group is readable by the exact old program. In particular,
     // current Gateway payloads can be incompatible without a SQL version change.
     // No unproven program-only downgrade is authorized here.
-    if recovery.action == Action::PreserveAndDiagnose {
-        if let Ok((name, id, phase)) = verified_original_source(root) {
-            recovery.backup_name = Some(name);
-            recovery.backup_batch = Some(id);
-            recovery.action =
-                if matches!(phase, BackupSetPhase::Restored | BackupSetPhase::Restoring) {
-                    Action::RestoreCompleteGroup
-                } else {
+    if matches!(
+        recovery.action,
+        Action::PreserveAndDiagnose | Action::ResumeCurrent
+    ) {
+        let resume = recovery.action == Action::ResumeCurrent;
+        // A verified original group proves a complete restoration target. It
+        // does not prove that arbitrary current corruption can resume. Only a
+        // caller holding the successfully opened core stores may request resume
+        // while the fresh Observation root has not yet been published.
+        match verified_original_source(root) {
+            Ok((name, id, phase)) => {
+                recovery.backup_name = Some(name);
+                recovery.backup_batch = Some(id);
+                recovery.action = if resume
+                    && !matches!(phase, BackupSetPhase::Restored | BackupSetPhase::Restoring)
+                {
                     Action::ResumeCurrent
+                } else {
+                    Action::RestoreCompleteGroup
                 };
+            }
+            Err(_) => {
+                recovery.action = Action::PreserveAndDiagnose;
+                recovery.backup_name = None;
+                recovery.backup_batch = None;
+            }
         }
     }
     let _ = recovery.store(root);
-    match error {
-        LocalStorageError::Recovery { source, .. } => LocalStorageError::Recovery {
-            recovery: Box::new(recovery),
-            source,
-        },
-        error => error,
+    LocalStorageError::Recovery {
+        recovery: Box::new(recovery),
+        source: Box::new(match error {
+            LocalStorageError::Recovery { source, .. } => *source,
+            error => error,
+        }),
     }
 }
 
@@ -79,6 +95,64 @@ fn verified_original_source(
 mod tests {
     use super::*;
     use hiroute_host_runtime::{StorageRecovery, StorageRecoveryCause as Cause};
+    #[test]
+    fn a_verified_old_source_does_not_make_current_corruption_resumable() {
+        let directory = crate::test_tempdir().unwrap();
+        let root = directory.path().join("storage");
+        drop(crate::LocalStorageSet::open_for_daemon_startup(&root).unwrap());
+        hiroute_platform::durable::write_private_new(&root.join("observation-hmac-key"), &[7; 32])
+            .unwrap();
+        crate::prepare_owner_directory(&root.join("observation")).unwrap();
+        let db = Connection::open(root.join("observation/activity.db")).unwrap();
+        db.execute_batch("CREATE TABLE observation_meta(key TEXT PRIMARY KEY,value TEXT); INSERT INTO observation_meta VALUES('schema_version','4');").unwrap();
+        drop(db);
+        let package = directory.path().join("old-program");
+        crate::prepare_owner_directory(&package).unwrap();
+        hiroute_platform::durable::write_private_new(
+            &package.join("hirouted"),
+            b"original program fixture",
+        )
+        .unwrap();
+        let stores = crate::LocalStorageSet::open_for_daemon_startup_with_options(
+            &root,
+            &crate::StorageStartupOptions {
+                preserve_observation_source: true,
+                recovery_package: Some(package),
+                ..Default::default()
+            },
+        )
+        .unwrap();
+        // Successfully opened core + unpublished fresh Observation is a known
+        // initialization boundary. It may continue with the accepted program.
+        stores.record_observation_startup_failure(&root, Cause::MigrationFailed);
+        assert_eq!(
+            StorageRecovery::read(&root).unwrap().unwrap().action,
+            Action::ResumeCurrent
+        );
+        drop(stores);
+        // The retained source still exists after a later generation is present.
+        // Arbitrary damage to that current generation cannot inherit resume.
+        crate::prepare_owner_directory(&root.join("observation")).unwrap();
+        hiroute_platform::durable::write_private_new(
+            &root.join("observation/activity.db"),
+            b"new generation must remain",
+        )
+        .unwrap();
+        fs::write(root.join("live/control.db"), b"damaged current control").unwrap();
+        assert!(crate::LocalStorageSet::open_for_daemon_startup(&root).is_err());
+        let report = StorageRecovery::read(&root).unwrap().unwrap();
+        assert_eq!(report.action, Action::RestoreCompleteGroup);
+        assert!(report.backup_batch.is_some());
+        assert_eq!(
+            fs::read(root.join("live/control.db")).unwrap(),
+            b"damaged current control"
+        );
+        assert_eq!(
+            fs::read(root.join("observation/activity.db")).unwrap(),
+            b"new generation must remain"
+        );
+    }
+
     #[test]
     fn missing_package_never_infers_original_program_compatibility_from_sql_markers() {
         for prior_upgrade in [false, true] {
