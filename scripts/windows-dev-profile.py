@@ -334,7 +334,7 @@ def original_recovery_source(native_home, local_app_data, baseline):
             raise ValueError('Invalid original material inventory')
         path = plain(source / name)
         if not path.is_file() or digest(path) != expected[7:]:
-            raise ValueError('Original recovery material changed or is unavailable')
+            raise ValueError('Original recovery material changed or is unavailable: ' + name)
     candidates = [source / 'recovery-package', source / 'recovery-package/program']
     matching = []
     for candidate in candidates:
