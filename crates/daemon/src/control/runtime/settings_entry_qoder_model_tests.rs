@@ -641,9 +641,16 @@ fn qoder_pending_file_tail_keeps_collaboration_preview_independent_and_retries_e
     ) {
         return;
     }
-    let fixture = QoderFixture::with_models(true);
+    pending_file_tail_retries_exact_operation(AgentKindV1::Qoder);
+}
+
+pub(super) fn pending_file_tail_retries_exact_operation(kind: AgentKindV1) {
+    let fixture = QoderFixture::with_kind(true, kind);
     let before = fs::read(&fixture.native_config).unwrap();
-    let spec = model_spec(&fixture);
+    let mut spec = model_spec(&fixture);
+    if kind == AgentKindV1::OpenCode {
+        spec["model"]["settings"]["mode"] = json!("opencode_additional");
+    }
     let mut ports = fixture
         .runtime
         .application_ports()

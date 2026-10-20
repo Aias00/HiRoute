@@ -9,6 +9,16 @@ fn configure_models(fixture: &QoderFixture) {
 }
 
 #[test]
+fn opencode_pending_file_tail_retries_the_original_context_bound_operation() {
+    if crate::test_support::isolated_agent_home(
+        "control::runtime::native_model::tests::settings_entry_tests::qoder::opencode::opencode_pending_file_tail_retries_the_original_context_bound_operation",
+    ) {
+        return;
+    }
+    super::models::pending_file_tail_retries_exact_operation(AgentKindV1::OpenCode);
+}
+
+#[test]
 fn opencode_review_new_jsonc_keeps_managed_json_binding_after_restart_and_restore() {
     if crate::test_support::isolated_agent_home(
         "control::runtime::native_model::tests::settings_entry_tests::qoder::opencode::opencode_review_new_jsonc_keeps_managed_json_binding_after_restart_and_restore",
