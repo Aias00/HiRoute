@@ -121,6 +121,9 @@ impl ModelFeedService {
                         reason: Some("discarded_invalid_cache".into()),
                     });
                     store.commit(&state)?;
+                    // Only after the held pointer is durably cleared may an invalid
+                    // blob be retired, allowing the same accepted bytes to be fetched again.
+                    store.retire_unreferenced(None);
                 }
             }
         }
