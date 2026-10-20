@@ -228,6 +228,7 @@ pub struct FilesystemAgentScannerV1 {
         std::sync::Arc<std::sync::Mutex<Option<(PathBuf, hiroute_domain::CanonicalDigest)>>>,
     dsh_collaboration_cli: std::sync::Arc<std::sync::Mutex<Option<(PathBuf, CanonicalDigest)>>>,
     pub(super) layout: AgentFilesystemLayoutV1,
+    opencode_model_target: PathBuf,
     registry: ClaudeRegistrationIndexV1,
     legacy_recovery_version: Option<String>,
     legacy_process_format: bool,
@@ -285,8 +286,14 @@ impl FilesystemAgentScannerV1 {
 
     pub fn new(mut layout: AgentFilesystemLayoutV1, registry: ClaudeRegistrationIndexV1) -> Self {
         layout.codex_user_config = super::canonical_codex_config_path(&layout.codex_user_config);
+        let opencode_model_target = layout
+            .opencode_context
+            .as_ref()
+            .map(|context| context.model_target())
+            .unwrap_or_default();
         Self {
             layout,
+            opencode_model_target,
             registry,
             legacy_recovery_version: None,
             legacy_process_format: false,

@@ -15,7 +15,7 @@ a prerequisite, not a model call, installed Skill invocation or resumable task.
 | Configure, edit and restore models | [Settings transaction](../../crates/application/src/agent_connection/settings), [typed facts](../../crates/daemon/src/control/runtime/settings_facts), [Desktop Agent feature](../../apps/desktop/src/features/agents/README.md) | [Additional native provider guide](../../crates/integrations/src/agents/additional_native/README.md), [saved-model journey](../../crates/daemon/tests/support/additional_model_product.py), [Windows ordinary Pi/DSH clients](../../crates/daemon/tests/support/windows_user_models.rs), [Windows Qoder official-account journey](../../crates/daemon/tests/support/windows_qoder_user_models.rs) |
 | Enable, edit or disable task collaboration independently | [CLI intent workflow](../../crates/cli/src/collaboration.rs), [Skill effects](../../crates/application/src/agent_connection), [local checks](../../apps/desktop/src-tauri/src/agent_check_session.rs) | [CLI workflow regressions](../../crates/cli/src/collaboration/tests.rs), [real main-Agent → public CLI → Worker journey](../../crates/daemon/tests/support/collaboration_product.py) |
 
-Qoder/Pi/DSH saved models use one owned provider per Plan with an explicit
+Qoder/Pi/DSH/OpenCode saved models use one owned provider per Plan with an explicit
 Responses/Messages choice. [Route grants](../../crates/domain/src/agents/model_grant.rs)
 and [Gateway trust](../../crates/gateway/src/publication/trust.rs) preserve alias,
 protocol and receipt authority across publication/restart. `work.protocol` is the
@@ -24,6 +24,10 @@ report the actual installed consumers; [safe conflict facts](../../crates/domain
 retain rejection identity through compensation and client observation.
 Native defaults and collaboration stay independent;
 restoration must verify ownership rather than infer it from a provider name.
+OpenCode's [startup target binding](../../crates/daemon/src/control/runtime.rs) keeps
+the physical JSON/JSONC file verified by existing recovery markers;
+[effective model facts](../../crates/integrations/src/agents/opencode_scanner.rs)
+also feed the shared configured/drift status.
 
 ## Follow a task through its owners
 

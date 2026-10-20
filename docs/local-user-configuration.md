@@ -91,11 +91,18 @@ default/small-model choices and other providers remain independent. A model or
 agent setting that still references an owned route must be changed before that
 route can be removed; rotating its token can retain the same selector.
 
+Once configured, model edits and recovery retain the original native file. Adding
+an `opencode.jsonc` beside a managed `opencode.json` does not move that binding.
+An effective user layer that overrides or disables an owned provider is reported
+as configuration drift; unrelated settings can change independently.
+
 Dynamic configuration keys are unavailable for managed model settings, static API
 import and Workers. A model choice expressed through an environment/file
 substitution must become an explicit native selector before removing a route it
 could reference. Keeping all current selectors can still rotate their token.
 These limits do not prevent independent Skill installation.
+Static import also leaves unresolved model-ID substitutions unavailable rather
+than importing the substitution text as an upstream model name.
 
 Task collaboration installs the shared `hiroute-collaboration` Skill independently
 of model routing. It can be enabled with no published route or model connection.
@@ -113,6 +120,9 @@ The daemon uses the selected native HOME/XDG context, optional absolute
 Set context selectors on the process that starts HiRoute. Continue retains the
 original workspace, context, native session and route with fresh run credentials;
 changing today's environment does not select another conversation.
+Worker XDG roots must still map to the native `opencode` directory after canonical
+resolution. A directory link to a differently named leaf is unavailable for
+Worker launch and Continue; it does not disable ordinary settings or Skill installation.
 
 OpenCode Go uses ordinary API-source setup or a supported static import. Its API
 key does not create a HiRoute subscription/CPA login or quota-management entry.

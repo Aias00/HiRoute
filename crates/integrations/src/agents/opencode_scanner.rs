@@ -12,11 +12,35 @@ impl FilesystemAgentScannerV1 {
             .ok_or(AgentFilesystemScanError::InvalidConfig)
     }
     pub fn opencode_user_models_target(&self) -> PathBuf {
-        self.layout
-            .opencode_context
-            .as_ref()
-            .map(|c| c.model_target())
-            .unwrap_or_default()
+        self.opencode_model_target.clone()
+    }
+    /// Recovery may retain the registered JSON/JSONC sibling, never another root or explicit file.
+    pub fn opencode_model_target_candidates(&self) -> Vec<PathBuf> {
+        let Ok(native) = self.opencode_native_context() else {
+            return Vec::new();
+        };
+        let selected = self.opencode_user_models_target();
+        let mut candidates = vec![selected.clone()];
+        if native.config_file.is_none() {
+            candidates.push(native.resource_root().join(
+                if selected.extension().is_some_and(|x| x == "json") {
+                    "opencode.jsonc"
+                } else {
+                    "opencode.json"
+                },
+            ));
+        }
+        candidates
+    }
+    pub fn bind_opencode_model_target(
+        &mut self,
+        path: PathBuf,
+    ) -> Result<(), AgentFilesystemScanError> {
+        if !self.opencode_model_target_candidates().contains(&path) {
+            return Err(AgentFilesystemScanError::InvalidConfig);
+        }
+        self.opencode_model_target = path;
+        Ok(())
     }
     pub fn opencode_user_skill_target(&self) -> PathBuf {
         self.layout
@@ -104,7 +128,7 @@ impl FilesystemAgentScannerV1 {
         if super::super::opencode::dynamic_keys(&config.value) {
             return Err(AgentFilesystemScanError::InvalidConfig);
         }
-        let target = native.model_target();
+        let target = self.opencode_user_models_target();
         let owned = |id: &str| {
             id == namespace
                 || id

@@ -251,6 +251,27 @@ impl LocalControlAdapter {
                         )
                         .map_err(super::map_port)?
                 };
+                let file_applied = file_applied
+                    && (class != SettingsAgentClass::OpenCode || {
+                        use hiroute_application::agent_connection::{
+                            AdditionalModelFileAction, decode_settings_additional_model_file,
+                        };
+                        let payload = decode_settings_additional_model_file(intent)
+                            .map_err(super::map_port)?;
+                        let AdditionalModelFileAction::Configure {
+                            provider_id,
+                            models,
+                            ..
+                        } = payload.change
+                        else {
+                            return Err(ControlReadError::Corrupt);
+                        };
+                        // Recheck effective ownership/allowlists, without treating unrelated
+                        // document changes as drift or rejecting a retained default selector.
+                        self.scanner
+                            .opencode_model_facts(&provider_id, &models)
+                            .is_ok()
+                    });
                 let [mutation] = operation.plan.agent_access_grants() else {
                     return Err(ControlReadError::Corrupt);
                 };

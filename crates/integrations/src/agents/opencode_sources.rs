@@ -74,7 +74,7 @@ impl FilesystemAgentScannerV1 {
             if !bounded(provider_id) {
                 continue;
             }
-            let mut origin = native.model_target();
+            let mut origin = self.opencode_user_models_target();
             for (path, _) in &config.documents {
                 if let Some((bytes, _)) = super::filesystem_config::read_system_config_bytes(path)?
                 {
@@ -168,6 +168,7 @@ impl FilesystemAgentScannerV1 {
                 let supported = representable
                     && !native_id.is_empty()
                     && !id.is_empty()
+                    && !id.contains(['{', '}'])
                     && endpoint.is_some()
                     && protocol.is_some()
                     && clean(&model["headers"])

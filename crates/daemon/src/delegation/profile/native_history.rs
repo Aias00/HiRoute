@@ -507,6 +507,28 @@ fn validate_opencode_paths(
 ) -> Result<(), DelegationErrorV1> {
     let invalid = || DelegationErrorV1::ResumeUnavailable;
     native.validate().map_err(|_| invalid())?;
+    // The child appends `opencode` to each XDG selector. A canonical leaf with another name
+    // cannot be reconstructed by taking its parent; reject it on New and persisted Continue.
+    for path in [
+        &native.config_root,
+        &native.data_root,
+        &native.cache_root,
+        &native.state_root,
+    ] {
+        if path
+            .file_name()
+            .and_then(|name| name.to_str())
+            .is_none_or(|name| {
+                if cfg!(windows) {
+                    !name.eq_ignore_ascii_case("opencode")
+                } else {
+                    name != "opencode"
+                }
+            })
+        {
+            return Err(invalid());
+        }
+    }
     for path in [
         &native.home,
         &native.config_root,

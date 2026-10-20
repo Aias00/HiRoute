@@ -147,6 +147,33 @@ fn opencode_review_substituted_model_ids_cannot_be_imported_as_literals() {
     assert!(sources[0].supported_auth);
     assert!(scanner.read_opencode_api_source(&sources[0]).is_ok());
 }
+
+#[test]
+fn opencode_model_target_stays_bound_and_explicit_selectors_have_no_alternative() {
+    let root = tempfile::tempdir().unwrap();
+    let native = crate::agents::OpenCodeNativeContext::from_lookup(root.path(), |_| None).unwrap();
+    let json = native.config_root.join("opencode.json");
+    write_secret_settings(&json, declaration());
+    let scanner = scanner(root.path());
+    write_secret_settings(&json.with_extension("jsonc"), json!({}));
+    assert_eq!(scanner.opencode_user_models_target(), json);
+    assert_eq!(
+        scanner.opencode_model_target_candidates(),
+        vec![json.clone(), json.with_extension("jsonc")]
+    );
+
+    let mut layout = layout(root.path());
+    let selected = root.path().join("explicit.json");
+    layout.opencode_context = Some(
+        crate::agents::OpenCodeNativeContext::from_lookup(root.path(), |key| {
+            (key == "OPENCODE_CONFIG").then(|| selected.clone().into_os_string())
+        })
+        .unwrap(),
+    );
+    let mut explicit = FilesystemAgentScannerV1::new(layout, registry());
+    assert_eq!(explicit.opencode_model_target_candidates(), vec![selected]);
+    assert!(explicit.bind_opencode_model_target(json).is_err());
+}
 #[test]
 fn opencode_settings_dependencies_detect_layer_changes_and_owned_provider_shadowing() {
     let root = tempfile::tempdir().unwrap();

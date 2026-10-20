@@ -157,7 +157,11 @@ there is no separately managed server. No Node runtime or ACP adapter is selecte
 
 The context descriptor additionally freezes OpenCode's XDG config/data/cache/state
 roots, optional absolute config file, additive config directory and exact database
-path. Existing borrowed history is checked read-only against the audited native
+path. Canonical XDG roots must retain the `opencode` leaf used by the child's XDG
+projection. A link resolving to another leaf name is refused on New and Continue,
+so admission and the child cannot address different directories. Extra config
+directories use their explicit selector and are not subject to this leaf rule.
+Existing borrowed history is checked read-only against the audited native
 migration-ID set before launch. Initial format admission uses adjacent official
 npm platform-package metadata for 1.19.3; it does not run a shim, fingerprint a
 binary, decode sessions or migrate history. A new absent database may be initialized
