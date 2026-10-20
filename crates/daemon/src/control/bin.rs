@@ -304,6 +304,9 @@ fn classify_role_all_error(error: &RoleAllError) -> StartupFailureCode {
             hiroute_host_runtime::StorageRecoveryCause::UnsupportedFormat => {
                 StartupFailureCode::UpgradeSourceUnsupported
             }
+            hiroute_host_runtime::StorageRecoveryCause::UnknownState => {
+                StartupFailureCode::StorageUnavailable
+            }
             _ => StartupFailureCode::UpgradeStorageFailed,
         },
         RoleAllError::InvalidConfiguration => StartupFailureCode::InvalidConfiguration,

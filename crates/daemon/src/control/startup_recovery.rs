@@ -61,6 +61,11 @@ mod tests {
         .unwrap();
         for (cause, action, expected) in [
             (
+                StorageRecoveryCause::UnknownState,
+                StorageRecoveryAction::PreserveAndDiagnose,
+                StartupFailureCode::StorageUnavailable,
+            ),
+            (
                 StorageRecoveryCause::Locked,
                 StorageRecoveryAction::RetryCurrent,
                 StartupFailureCode::StorageLocked,

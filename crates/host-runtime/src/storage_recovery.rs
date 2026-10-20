@@ -9,6 +9,7 @@ use std::{
 pub const STORAGE_RECOVERY_SCHEMA: &str = "hiroute.storage-startup-recovery/v1";
 pub const STORAGE_RECOVERY_FILE: &str = "startup-recovery.json";
 mod admission;
+pub use admission::startup_failure_host_code;
 mod batch;
 
 #[derive(Clone, Debug, Deserialize, Serialize, Eq, PartialEq)]

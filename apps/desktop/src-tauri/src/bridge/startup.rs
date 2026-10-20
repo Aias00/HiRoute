@@ -102,6 +102,7 @@ fn recovery_for_failure(
     use hiroute_host_runtime::StorageRecovery;
     let storage = root.map(|root| root.join("storage"));
     let admission = match code {
+        "DAEMON_STORAGE_UNREADABLE" => Some(Failure::StorageUnavailable),
         "DAEMON_UPGRADE_SOURCE_UNSUPPORTED" => Some(Failure::UpgradeSourceUnsupported),
         "DAEMON_STORAGE_ACCESS_DENIED" => Some(Failure::StorageAccessDenied),
         "DAEMON_STORAGE_KEY_UNAVAILABLE" => Some(Failure::StorageKeyUnavailable),
@@ -111,10 +112,7 @@ fn recovery_for_failure(
     if let Some(code) = admission {
         return StorageRecovery::read_for_admission_failure(code, storage.as_deref());
     }
-    if matches!(
-        code,
-        "DAEMON_STORAGE_UNREADABLE" | "DAEMON_UPGRADE_STORAGE_FAILED"
-    ) {
+    if code == "DAEMON_UPGRADE_STORAGE_FAILED" {
         return storage.and_then(|root| StorageRecovery::read(&root).ok().flatten());
     }
     None
@@ -295,6 +293,7 @@ mod tests {
         recovery.store(&storage).unwrap();
         assert_eq!(complete_upgrade_backup(root), Some(source.clone()));
         for code in [
+            "DAEMON_STORAGE_UNREADABLE",
             "DAEMON_STORAGE_LOCKED",
             "DAEMON_STORAGE_ACCESS_DENIED",
             "DAEMON_GATEWAY_UNAVAILABLE",

@@ -16,7 +16,9 @@ language/theme/size matrix. Native origin ACLs, NSIS, Task/login effects and rea
 upgrades keep their [installed gates](../../../docs/windows-desktop-installation.md#evidence-and-release-claims).
 It also distinguishes an unavailable Windows update catalog from installation
 recovery, and checks the bundled local-listener recovery instructions and usable
-Recheck action at both supported window sizes.
+Recheck action at both supported window sizes. Incomplete installation has a
+neutral heading and exact version/build installer repair, without storage retry
+or an unrelated recovery location.
 
 Start with the user capability, then choose the smallest layer that can observe its
 contract. Node state tests explain decision rules; browser scenarios exercise the

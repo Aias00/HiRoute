@@ -127,7 +127,12 @@ assume that a PowerShell variable is inherited by the logged-on Task.
 The bundled failure page displays the storage-owned reason and recovery action
 even when the daemon and console cannot start. It distinguishes missing/invalid
 packages, low space, unavailable keys and unknown state. Fix a stated prerequisite
-before retrying. A verified resumable/restorable source shows its original batch
+before retrying. After a completed readiness wait, it uses the latest typed daemon
+startup failure; a dependency or Gateway failure cannot borrow an old storage
+report. Installer, manager-command and console failures have their own guidance.
+An incomplete installation is identified independently of service readiness and
+offers the exact installer repair path, without an unproven storage retry or old
+batch location. A verified resumable/restorable source shows its original batch
 ID and relative source directory, including long names without clipping. From the
 parent of the displayed local log directory, open that source directory and read
 `RECOVERY.md` or `恢复说明.md`, then `PROGRAM-LOCATIONS.md` where present. Missing,

@@ -1,4 +1,4 @@
-use crate::ConsoleOrigin;
+use crate::{ConsoleOrigin, startup_failure};
 use serde::Serialize;
 use std::sync::{
     Arc, Mutex,
@@ -48,18 +48,18 @@ impl ShellState {
         if let Ok(mut status) = self.status.lock() {
             status.phase = phase;
             status.code = code;
-            status.storage_recovery = if phase == "failed" {
-                hiroute_host_runtime::StandaloneLayout::from_environment()
-                    .ok()
-                    .and_then(|layout| {
-                        hiroute_host_runtime::StorageRecovery::read_for_failed_startup(
-                            &layout.storage_root(),
-                            &layout.diagnostics_root(),
-                        )
-                    })
-            } else {
-                None
-            };
+            status.storage_recovery = None;
+            if phase == "failed"
+                && let Ok(layout) = hiroute_host_runtime::StandaloneLayout::from_environment()
+            {
+                let (current, recovery) = startup_failure::resolve(
+                    code,
+                    &layout.storage_root(),
+                    &layout.diagnostics_root(),
+                );
+                status.code = current;
+                status.storage_recovery = recovery;
+            }
         }
     }
 }

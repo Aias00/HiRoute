@@ -8,8 +8,12 @@ use hiroute_diagnostics::{
 };
 
 impl StorageRecovery {
+    pub fn read_failed_startup_code(diagnostics: &Path) -> Option<&'static str> {
+        failed_startup_code(diagnostics).map(startup_failure_host_code)
+    }
     pub fn from_admission_code(code: StartupFailureCode) -> Option<Self> {
         let cause = match code {
+            StartupFailureCode::StorageUnavailable => StorageRecoveryCause::UnknownState,
             StartupFailureCode::StorageAccessDenied => StorageRecoveryCause::AccessDenied,
             StartupFailureCode::StorageLocked => StorageRecoveryCause::Locked,
             StartupFailureCode::StorageKeyUnavailable => StorageRecoveryCause::MissingKey,
@@ -40,7 +44,9 @@ impl StorageRecovery {
         // original batch. Never borrow program-only reinstall or resume advice.
         if matches!(
             self.cause,
-            StorageRecoveryCause::MissingKey | StorageRecoveryCause::UnsupportedFormat
+            StorageRecoveryCause::MissingKey
+                | StorageRecoveryCause::UnsupportedFormat
+                | StorageRecoveryCause::UnknownState
         ) && let Some(storage) = storage
             && let Ok(Some(record)) = Self::read(storage)
             && record.cause == self.cause
@@ -55,8 +61,13 @@ impl StorageRecovery {
     /// diagnostic admission failure over a report left by an earlier writer.
     /// A log record never grants reinstall, resume or restore authority.
     pub fn read_for_failed_startup(storage: &Path, diagnostics: &Path) -> Option<Self> {
-        if let Some(report) = admission_failure(diagnostics) {
-            return Some(report.with_verified_restore(Some(storage)));
+        if let Some(code) = failed_startup_code(diagnostics) {
+            if let Some(report) = Self::from_admission_code(code) {
+                return Some(report.with_verified_restore(Some(storage)));
+            }
+            if code != StartupFailureCode::UpgradeStorageFailed {
+                return None;
+            }
         }
         match Self::read(storage) {
             Ok(report) => report,
@@ -72,7 +83,7 @@ impl StorageRecovery {
     }
 }
 
-fn admission_failure(root: &Path) -> Option<StorageRecovery> {
+fn failed_startup_code(root: &Path) -> Option<StartupFailureCode> {
     let root = PrivateDir::open_existing(root).ok()?;
     root.recheck_identity().ok()?;
     let role =
@@ -102,7 +113,7 @@ fn admission_failure(root: &Path) -> Option<StorageRecovery> {
             if let DiagnosticEvent::StartupEnd(end) = record.event
                 && let StartupOutcome::Failure { code } = end.outcome
             {
-                return StorageRecovery::from_admission_code(code);
+                return Some(code);
             }
             return None;
         }
@@ -110,10 +121,126 @@ fn admission_failure(root: &Path) -> Option<StorageRecovery> {
     None
 }
 
+pub fn startup_failure_host_code(code: StartupFailureCode) -> &'static str {
+    match code {
+        StartupFailureCode::StorageUnavailable => "DAEMON_STORAGE_UNREADABLE",
+        StartupFailureCode::StorageAccessDenied => "DAEMON_STORAGE_ACCESS_DENIED",
+        StartupFailureCode::StorageLocked => "DAEMON_STORAGE_LOCKED",
+        StartupFailureCode::StorageKeyUnavailable => "DAEMON_STORAGE_KEY_UNAVAILABLE",
+        StartupFailureCode::UpgradeSourceUnsupported => "DAEMON_UPGRADE_SOURCE_UNSUPPORTED",
+        StartupFailureCode::UpgradeStorageFailed => "DAEMON_UPGRADE_STORAGE_FAILED",
+        StartupFailureCode::ReleaseFactsInvalid => "DAEMON_RELEASE_INVALID",
+        StartupFailureCode::DependencyUnavailable => "DAEMON_DEPENDENCY_UNAVAILABLE",
+        StartupFailureCode::GatewayUnavailable => "DAEMON_GATEWAY_UNAVAILABLE",
+        StartupFailureCode::ControlUnavailable => "DAEMON_CONTROL_UNAVAILABLE",
+        StartupFailureCode::Cancelled => "DAEMON_START_CANCELLED",
+        StartupFailureCode::InvalidConfiguration
+        | StartupFailureCode::WorkerRejected
+        | StartupFailureCode::ReadyChannelFailed
+        | StartupFailureCode::Internal => "DAEMON_START_FAILED",
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
     use hiroute_diagnostics::{Component, DiagnosticRuntime, RuntimeConfig, event::StartupEnd};
+    #[test]
+    fn current_non_storage_and_unknown_failures_cannot_borrow_an_old_storage_report() {
+        for code in [
+            StartupFailureCode::DependencyUnavailable,
+            StartupFailureCode::GatewayUnavailable,
+            StartupFailureCode::InvalidConfiguration,
+            StartupFailureCode::StorageUnavailable,
+            StartupFailureCode::StorageLocked,
+        ] {
+            let directory = tempfile::tempdir().unwrap();
+            let storage = directory.path();
+            let previous = StorageRecovery::new(
+                StorageRecoveryCause::MissingPackage,
+                StorageRecoveryAction::PreserveAndDiagnose,
+            );
+            previous.store(storage).unwrap();
+            assert_eq!(
+                StorageRecovery::read(storage).unwrap(),
+                Some(previous.clone())
+            );
+            let diagnostics = storage.join("diagnostics");
+            let runtime = DiagnosticRuntime::start(RuntimeConfig {
+                root: diagnostics.clone(),
+                role: ProcessRole::Daemon,
+                component: Component::Daemon,
+                parent_session_id: None,
+                level_override: None,
+            });
+            runtime.emit(DiagnosticEvent::StartupEnd(StartupEnd {
+                outcome: StartupOutcome::Failure { code },
+                elapsed_ms: 1,
+            }));
+            runtime.shutdown();
+            let report = StorageRecovery::read_for_failed_startup(storage, &diagnostics);
+            match code {
+                StartupFailureCode::StorageUnavailable => assert_eq!(
+                    report,
+                    Some(StorageRecovery::new(
+                        StorageRecoveryCause::UnknownState,
+                        StorageRecoveryAction::PreserveAndDiagnose,
+                    ))
+                ),
+                StartupFailureCode::StorageLocked => assert_eq!(
+                    report,
+                    Some(StorageRecovery::new(
+                        StorageRecoveryCause::Locked,
+                        StorageRecoveryAction::RetryCurrent,
+                    ))
+                ),
+                _ => assert!(report.is_none()),
+            }
+            assert_eq!(StorageRecovery::read(storage).unwrap(), Some(previous));
+        }
+    }
+
+    #[test]
+    fn latest_failed_startup_code_preserves_non_storage_causes_and_stops_at_a_healthy_boot() {
+        for (code, expected) in [
+            (
+                StartupFailureCode::DependencyUnavailable,
+                "DAEMON_DEPENDENCY_UNAVAILABLE",
+            ),
+            (
+                StartupFailureCode::GatewayUnavailable,
+                "DAEMON_GATEWAY_UNAVAILABLE",
+            ),
+            (StartupFailureCode::StorageLocked, "DAEMON_STORAGE_LOCKED"),
+        ] {
+            let directory = tempfile::tempdir().unwrap();
+            let root = directory.path().join("diagnostics");
+            let config = || RuntimeConfig {
+                root: root.clone(),
+                role: ProcessRole::Daemon,
+                component: Component::Daemon,
+                parent_session_id: None,
+                level_override: None,
+            };
+            let runtime = DiagnosticRuntime::start(config());
+            runtime.emit(DiagnosticEvent::StartupEnd(StartupEnd {
+                outcome: StartupOutcome::Failure { code },
+                elapsed_ms: 1,
+            }));
+            runtime.shutdown();
+            assert_eq!(
+                StorageRecovery::read_failed_startup_code(&root),
+                Some(expected)
+            );
+            let runtime = DiagnosticRuntime::start(config());
+            runtime.emit(DiagnosticEvent::StartupEnd(StartupEnd {
+                outcome: StartupOutcome::Success,
+                elapsed_ms: 1,
+            }));
+            runtime.shutdown();
+            assert_eq!(StorageRecovery::read_failed_startup_code(&root), None);
+        }
+    }
     #[test]
     fn early_admission_remains_actionable_without_writing_or_trusting_storage() {
         for (code, cause) in [
