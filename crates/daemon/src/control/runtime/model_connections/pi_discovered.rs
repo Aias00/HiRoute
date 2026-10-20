@@ -188,10 +188,11 @@ impl LocalControlAdapter {
             .map_err(|_| ComputeManagementControlError::Unavailable)?
             .insert(input_slot.clone(), credential.clone());
         let candidate_digest = hiroute_domain::CanonicalDigest::of(&(
-            match ecosystem {
-                NativeApiEcosystem::Pi => "pi-discovered-candidate/v1",
-                NativeApiEcosystem::Dsh => "dsh-discovered-candidate/v1",
-                NativeApiEcosystem::OpenCode => "opencode-discovered-candidate/v1",
+            match NativeApiEcosystem::from_source(&source) {
+                Some(NativeApiEcosystem::Dsh) => "dsh-discovered-candidate/v1",
+                Some(NativeApiEcosystem::OpenCode) => "opencode-discovered-candidate/v1",
+                // Hermes/Claude retain the shared candidate identity used on main.
+                _ => "pi-discovered-candidate/v1",
             },
             &evidence,
             prepare_id,
