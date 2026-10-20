@@ -43,6 +43,10 @@ WORKER_FIXTURE_TOOLING = {"scripts/test-agent-product-support.py",
 WORKER_BOOTSTRAP_TEST = "crates/daemon/src/delegation/profile/claude_adapter_bootstrap.test.mjs"
 PI_WORKER_BRIDGE_TEST = "crates/daemon/src/delegation/profile/pi_worker_bridge.test.mjs"
 PI_SDK_CONTRACT_TEST = "crates/integrations/src/agents/pi_sdk_contract.test.mjs"
+OMARCHY_PLUGIN_TEST = "crates/cli/src/host_commands/omarchy/summary_plugin.test.mjs"
+# The Omarchy indicator reader shares this fixture with the summary producer.
+OMARCHY_PLUGIN_INPUTS = ("assets/integrations/omarchy/", OMARCHY_PLUGIN_TEST,
+                         "crates/cli/src/host_commands/omarchy/summary.fixture.json")
 INTEGRATION_SKILL = ".agents/skills/hiroute-integrate/SKILL.md"
 # Repository agent policy is not shipped as the product's installed collaboration Skill.
 # Keep unknown skill code conservative; the known execution tools have their own consumers.
@@ -529,6 +533,8 @@ def select(paths, full=False):
         commands.append(["python3", "scripts/test-qoder-product.py"])
     if full or any(path.startswith("crates/daemon/src/delegation/profile/") for path in paths):
         commands.append(["node", "--test", WORKER_BOOTSTRAP_TEST])
+    if full or any(path.startswith(OMARCHY_PLUGIN_INPUTS) for path in paths):
+        commands.append(["node", "--test", OMARCHY_PLUGIN_TEST])
     if full or any(path.startswith(("crates/integrations/src/agents/pi_",
                                    "crates/daemon/src/delegation/profile/pi")) for path in paths):
         commands.append(["node", "--test", PI_SDK_CONTRACT_TEST])

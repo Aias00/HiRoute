@@ -470,3 +470,51 @@ fn omarchy_plan_labels_are_bounded_without_dropping_the_start() {
     assert!(label.ends_with('…'));
     assert_eq!(reads::label("Difficulty routing"), "Difficulty routing");
 }
+
+/// The indicator's reader is tested against this same file, so producer and consumer agree.
+#[test]
+fn omarchy_summary_matches_the_shared_indicator_fixture() {
+    let mut facts = facts(vec![
+        (
+            "codex",
+            codex(
+                AgentModelDefaultSelectionV2::Plan {
+                    plan_id: id("plan-a"),
+                },
+                &["plan-a", "plan-extra"],
+            ),
+        ),
+        (
+            "claude-code",
+            claude(Some("plan-a"), Some("plan-b"), Some("plan-c")),
+        ),
+    ]);
+    facts.agents[1].check = reads::Check {
+        agent: "claude-code".into(),
+        launchable: false,
+        check_reason_code: Some("native_login_required".into()),
+    };
+    facts.suggestions = reads::SuggestionRead {
+        ids: [("s-extra", "plan-extra"), ("s-shared", "plan-a")]
+            .map(|(id, plan)| (id.to_owned(), plan.to_owned()))
+            .into(),
+        unavailable: BTreeSet::from(["plan-c".to_owned()]),
+    };
+    facts.latest = Some(LatestSession {
+        session_id: "codex-session".into(),
+        agent: "codex".into(),
+        plan_id: "plan-a".into(),
+        last_activity_ms: NOW - 1000,
+    });
+    facts.token_share_today = ObservationTokenShareHeadlineV1::Share {
+        outside_subscription_ratio_millis: 425,
+        known_classified_tokens: 12000,
+        unknown_usage_requests: 1,
+    };
+    let mut summary = compose(facts, NOW).unwrap();
+    summary.notifications = true;
+    let fixture: serde_json::Value =
+        serde_json::from_str(include_str!("summary.fixture.json")).unwrap();
+    assert_eq!(serde_json::to_value(&summary).unwrap(), fixture);
+    assert!(accepts(fixture));
+}

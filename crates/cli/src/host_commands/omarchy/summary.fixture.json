@@ -1,0 +1,69 @@
+{
+  "schema": "hiroute.omarchy-summary/v1",
+  "generated_at_ms": 1800000000000,
+  "service": { "state": "ready", "reason_code": null },
+  "agents": [
+    {
+      "agent": "codex",
+      "launchable": true,
+      "check_reason_code": null,
+      "slot_plans": [
+        {
+          "plan_id": "plan-a",
+          "plan_name": "Difficulty routing",
+          "trust_state": "uniform",
+          "trust_level": "trusted",
+          "threshold_millis": 650,
+          "slots": ["default"]
+        }
+      ],
+      "other_mapped_plans": 1
+    },
+    {
+      "agent": "claude-code",
+      "launchable": false,
+      "check_reason_code": "native_login_required",
+      "slot_plans": [
+        {
+          "plan_id": "plan-a",
+          "plan_name": "Difficulty routing",
+          "trust_state": "uniform",
+          "trust_level": "trusted",
+          "threshold_millis": 650,
+          "slots": ["opus"]
+        },
+        {
+          "plan_id": "plan-b",
+          "plan_name": "Fast drafts",
+          "trust_state": "not_applicable",
+          "trust_level": null,
+          "threshold_millis": null,
+          "slots": ["sonnet"]
+        },
+        {
+          "plan_id": "plan-c",
+          "plan_name": "Per branch",
+          "trust_state": "branch_specific",
+          "trust_level": null,
+          "threshold_millis": null,
+          "slots": ["haiku"]
+        }
+      ],
+      "other_mapped_plans": 0
+    }
+  ],
+  "suggestions": { "count": 2, "ids": ["s-extra", "s-shared"], "unavailable_plans": 1 },
+  "latest_routed_session": {
+    "session_id": "codex-session",
+    "agent": "codex",
+    "plan_id": "plan-a",
+    "last_activity_ms": 1799999999000
+  },
+  "token_share_today": {
+    "kind": "share",
+    "outside_subscription_ratio_millis": 425,
+    "known_classified_tokens": 12000,
+    "unknown_usage_requests": 1
+  },
+  "notifications": true
+}

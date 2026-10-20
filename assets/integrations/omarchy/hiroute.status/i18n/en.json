@@ -1,0 +1,51 @@
+{
+  "bar.unavailable": "HiRoute is unavailable",
+  "bar.share": "%1% of today's tokens are outside your subscription",
+  "bar.someUnknown": "Some usage is unknown",
+  "bar.agentWarning": "A routed agent cannot launch",
+  "headline.share": "Outside your subscription today",
+  "headline.no_routed_requests": "No routed requests today",
+  "headline.no_subscription_in_period": "No subscription source used today",
+  "headline.subscription_usage_unknown": "Subscription usage is unknown today",
+  "headline.no_comparable_usage": "No comparable usage today",
+  "panel.unavailable": "HiRoute is unavailable",
+  "reason.service_unavailable": "The local HiRoute service is not ready.",
+  "reason.summary_read_unavailable": "Current figures could not be read.",
+  "reason.other": "Current figures are unavailable.",
+  "agent.codex": "Codex",
+  "agent.claude-code": "Claude Code",
+  "agent.ready": "Ready to launch",
+  "agent.notLaunchable": "Launch check failed (%1)",
+  "agent.noSlotPlans": "No start slot uses a Plan",
+  "agent.morePlans": {
+    "one": "%1 more Plan",
+    "other": "%1 more Plans"
+  },
+  "slot.default": "Default",
+  "slot.opus": "Opus",
+  "slot.sonnet": "Sonnet",
+  "slot.haiku": "Haiku",
+  "trust.level.trial": "Trial",
+  "trust.level.familiar": "Familiar",
+  "trust.level.trusted": "Trusted",
+  "trust.level.hands_off": "Hands-off",
+  "trust.level.custom": "Custom",
+  "trust.withThreshold": "%1 · threshold %2",
+  "trust.not_applicable": "No trust level",
+  "trust.branch_specific": "Configured per branch",
+  "suggestions.none": "No trust suggestions",
+  "suggestions.count": {
+    "one": "%1 trust suggestion",
+    "other": "%1 trust suggestions"
+  },
+  "suggestions.unavailable": {
+    "one": "Suggestions for %1 Plan are temporarily unavailable",
+    "other": "Suggestions for %1 Plans are temporarily unavailable"
+  },
+  "account.boundary": "Routed sessions use the subscription connection configured in HiRoute. They do not follow Omarchy's active account.",
+  "action.open": "Open HiRoute",
+  "action.timeline": "Routing timeline",
+  "action.noSession": "No routed session yet",
+  "action.notificationsOff": "Turn notifications off",
+  "action.notificationsOn": "Turn notifications on"
+}

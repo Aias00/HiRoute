@@ -278,6 +278,15 @@ class SelectionTests(unittest.TestCase):
         selected = plan.select(['crates/daemon/src/delegation/profile/mod.rs'])
         self.assertIn(command, plan.integration_preflight(selected)['commands'])
 
+    def test_omarchy_indicator_reader_runs_with_its_assets_and_fixture(self):
+        command = ['node', '--test', plan.OMARCHY_PLUGIN_TEST]
+        for path in ('assets/integrations/omarchy/hiroute.status/Summary.js',
+                     'crates/cli/src/host_commands/omarchy/summary.fixture.json',
+                     plan.OMARCHY_PLUGIN_TEST):
+            self.assertIn(command, plan.select([path])['commands'])
+        self.assertIn(command, plan.select([], full=True)['commands'])
+        self.assertNotIn(command, plan.select(['crates/cli/src/lib.rs'])['commands'])
+
     def test_worker_fixture_oracle_has_a_tooling_only_entry(self):
         result = plan.select(sorted(plan.WORKER_FIXTURE_TOOLING))
         self.assertFalse(result['rust'])

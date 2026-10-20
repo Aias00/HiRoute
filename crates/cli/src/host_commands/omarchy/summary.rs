@@ -23,6 +23,8 @@ pub(super) struct Summary {
     pub suggestions: Option<Suggestions>,
     pub latest_routed_session: Option<LatestSession>,
     pub token_share_today: Option<ObservationTokenShareHeadlineV1>,
+    /// The local notification preference, which the panel toggles. It needs no service.
+    pub notifications: bool,
 }
 #[derive(Clone, Debug, Deserialize, PartialEq, Serialize)]
 #[serde(deny_unknown_fields)]
@@ -100,6 +102,7 @@ pub(super) fn unavailable(generated_at_ms: i64, reason: &str) -> Summary {
         suggestions: None,
         latest_routed_session: None,
         token_share_today: None,
+        notifications: false,
     }
 }
 
@@ -224,6 +227,7 @@ pub(super) fn compose(facts: Facts, generated_at_ms: i64) -> Option<Summary> {
         }),
         latest_routed_session: facts.latest,
         token_share_today: Some(facts.token_share_today),
+        notifications: false,
     };
     summary.validate().then_some(summary)
 }
@@ -365,8 +369,17 @@ fn valid_headline(headline: &ObservationTokenShareHeadlineV1) -> bool {
     }
 }
 
-/// Read every fact under one deadline. Launch checks run beside the service reads.
 pub(super) fn read(context: &Context, globals: &Globals) -> Summary {
+    let mut summary = read_service(context, globals);
+    summary.notifications = context
+        .load()
+        .ok()
+        .flatten()
+        .is_some_and(|manifest| manifest.notifications);
+    summary
+}
+/// Read every service fact under one deadline. Launch checks run beside the service reads.
+fn read_service(context: &Context, globals: &Globals) -> Summary {
     let generated_at_ms = now_ms();
     let Ok(query) = reads::Query::new(globals.timeout.unwrap_or(Duration::from_secs(5))) else {
         return unavailable(generated_at_ms, "summary_read_unavailable");

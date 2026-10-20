@@ -1,0 +1,20 @@
+{
+  "schemaVersion": 1,
+  "id": "hiroute.status",
+  "name": "HiRoute",
+  "version": "1.0.0",
+  "author": "HiRoute",
+  "license": "Apache-2.0",
+  "description": "Routed agent readiness, Plan trust levels and today's token share from the local HiRoute service.",
+  "kinds": ["bar-widget"],
+  "entryPoints": {
+    "barWidget": "Panel.qml"
+  },
+  "barWidget": {
+    "displayName": "HiRoute",
+    "description": "Today's share of tokens outside your subscription, routed agent readiness and pending trust suggestions.",
+    "category": "AI",
+    "allowMultiple": false,
+    "defaultSection": "right"
+  }
+}

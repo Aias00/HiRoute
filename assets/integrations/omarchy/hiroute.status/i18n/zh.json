@@ -1,0 +1,48 @@
+{
+  "bar.unavailable": "HiRoute 暂不可用",
+  "bar.share": "今日 %1% 的 token 不在订阅内",
+  "bar.someUnknown": "部分用量未知",
+  "bar.agentWarning": "有路由 Agent 无法启动",
+  "headline.share": "今日不在订阅内",
+  "headline.no_routed_requests": "今日没有路由请求",
+  "headline.no_subscription_in_period": "今日未使用订阅来源",
+  "headline.subscription_usage_unknown": "今日订阅来源的用量未知",
+  "headline.no_comparable_usage": "今日没有可比较的用量",
+  "panel.unavailable": "HiRoute 暂不可用",
+  "reason.service_unavailable": "本机 HiRoute 服务尚未就绪。",
+  "reason.summary_read_unavailable": "无法读取当前数据。",
+  "reason.other": "当前数据不可用。",
+  "agent.codex": "Codex",
+  "agent.claude-code": "Claude Code",
+  "agent.ready": "可以启动",
+  "agent.notLaunchable": "启动检查未通过（%1）",
+  "agent.noSlotPlans": "没有启动槽位使用 Plan",
+  "agent.morePlans": {
+    "other": "另外 %1 个 Plan"
+  },
+  "slot.default": "默认",
+  "slot.opus": "Opus",
+  "slot.sonnet": "Sonnet",
+  "slot.haiku": "Haiku",
+  "trust.level.trial": "试用",
+  "trust.level.familiar": "熟悉",
+  "trust.level.trusted": "信任",
+  "trust.level.hands_off": "放手",
+  "trust.level.custom": "自定义",
+  "trust.withThreshold": "%1 · 阈值 %2",
+  "trust.not_applicable": "无信任档位",
+  "trust.branch_specific": "按分支设置",
+  "suggestions.none": "没有信任建议",
+  "suggestions.count": {
+    "other": "%1 条信任建议"
+  },
+  "suggestions.unavailable": {
+    "other": "%1 个 Plan 的建议暂不可用"
+  },
+  "account.boundary": "路由会话使用在 HiRoute 中配置的订阅连接，不跟随 Omarchy 当前账户。",
+  "action.open": "打开 HiRoute",
+  "action.timeline": "路由时间线",
+  "action.noSession": "还没有路由会话",
+  "action.notificationsOff": "关闭通知",
+  "action.notificationsOn": "开启通知"
+}
