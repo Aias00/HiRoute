@@ -201,11 +201,11 @@ impl Oracle {
                     json!({"path":artifact,"content":format!("{receipt}\n")}),
                 );
             }
-            if let Some(declaration) = tool(body, "skill") {
+            if tool(body, "skill").is_some() {
+                // OpenCode 1.19.3 advertises Skills in model context while the
+                // tool's description stays static. Match the shared native oracle.
                 assert!(
-                    declaration
-                        .to_string()
-                        .contains(&format!("skill-discovery-{nonce}")),
+                    text.contains(&format!("skill-discovery-{nonce}")),
                     "native OpenCode Skill discovery receipt is absent"
                 );
                 function_reply(
