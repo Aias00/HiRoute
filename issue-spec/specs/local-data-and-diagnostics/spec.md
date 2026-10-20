@@ -262,6 +262,11 @@ Recovery presentation SHALL distinguish correcting prerequisites, current-batch 
 - **WHEN** core migration/cutover has begun, an original authority changes, a phase is corrupt/unknown or a prior batch prevents proving compatibility
 - **THEN** no consumer offers unverified program-only downgrade and no installer automatically starts an older daemon; all generations and journals remain available for current-version recovery or the corresponding complete-group guide.
 
+#### Scenario: Prepared native installation after possible storage writes
+
+- **WHEN** Windows installation recovery observes storage cutover facts while a native install journal is still prepared
+- **THEN** generic rollback refuses before manager or file effects. Only an independently matched complete accepted current package and its owned native definition may reapply that journal forward; changed native entries or mismatched packages remain preserved and refused. The existing original source is not resealed or replaced, and a successful current repair does not imply that an older program can read the current group.
+
 #### Scenario: A retained source does not authorize blind resume
 
 - **WHEN** an original complete batch is verified but the current generation is damaged or its phase cannot be admitted

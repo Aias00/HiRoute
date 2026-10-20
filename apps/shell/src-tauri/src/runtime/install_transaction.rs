@@ -190,11 +190,31 @@ fn same_repair_payload(
                 )
         })
 }
+pub(super) fn recover_for_candidate(manifest: &Path, daemon: &Path, allow: bool) -> io::Result<()> {
+    let layout =
+        hiroute_host_runtime::StandaloneLayout::from_environment().map_err(|_| invalid())?;
+    if has_pending()?
+        && pending()?.phase == Phase::Prepared
+        && hiroute_host_runtime::storage_upgrade_started(&layout.storage_root())?
+    {
+        return prepare(manifest, daemon);
+    }
+    windows::recover_pending()?;
+    rollback(allow)
+}
 pub(super) fn prepare(manifest: &Path, daemon: &Path) -> io::Result<()> {
     windows::preflight()?;
     let package: Package = read(manifest, false)?;
     package.validate()?;
     if package.target != "x86_64-pc-windows-msvc" {
+        return Err(invalid());
+    }
+    let daemon_digest = &package
+        .files
+        .get("bin/hirouted.exe")
+        .ok_or_else(invalid)?
+        .sha256;
+    if hash(daemon)? != *daemon_digest {
         return Err(invalid());
     }
     if has_pending()? {

@@ -137,6 +137,16 @@ an old program against newer/mixed data. Shell rollback checks storage cutover
 facts before reinstalling or starting an old service. An uncommitted shell journal
 is not proof that business data is unchanged.
 
+If an upgrade starts the new service but cannot finish installation, keep both
+complete program versions, all data and the installation journals. Close files
+reported as in use and check access and free space, then rerun the **same complete
+current installer**. Its early recovery verifies the accepted payload before a
+forward repair; it does not replace the original recovery batch or launch the old
+daemon over current data. A changed package or native file is refused. If repair
+still cannot be verified, preserve the material and use the verified batch's
+whole-group guide or obtain support. Check actual service/Gateway readiness and a
+request after repair; do not infer recovery from installer or Task exit alone.
+
 For complete restoration, stop the owned Task/daemon and automatic starts, keep
 newer storage with its matching program separately, and follow the exact verified
 batch's Chinese/English generated guide. Restore all stores, keys, Observation and
@@ -151,6 +161,22 @@ resume/restore guidance includes the exact batch and absolute source directory,
 derived from the actual storage root. Windows Server
 and Windows 11, ordinary-user and administrator sessions, and released versus
 development packages retain separate evidence boundaries.
+
+### Chinese recovery quick guide
+
+升级或启动失败时，先保留两版完整程序、全部数据、密钥、安装记录与恢复包。
+文件占用、权限或空间问题应按当前提示处理后再试；不要清空历史、批量修改权限或删除安装记录。
+如果新服务已启动但安装尚未完成，解除占用并核对权限、空间后，重新运行**同一当前版的完整安装器**。
+安装器会核对原先接受的程序包与任务注册，再继续完成安装；程序或记录不符时会拒绝，不能换任意旧安装器覆盖。
+修复之后检查 `hiroute system status --output json` 中的服务与 Gateway 实际就绪状态，并完成一次真实请求。
+
+服务与控制台无法启动时，使用安装包自带的故障页面，或离线运行 `hiroute service recovery --output json`。
+已验证的恢复材料会给出原批次 ID、源目录与说明文件名；从页面所示日志目录的上级目录定位该源目录，
+先读该批次的 `恢复说明.md` 或 `RECOVERY.md`，再读 `PROGRAM-LOCATIONS.md`。
+整组恢复前停止当前账户的 Task、守护进程、CPA 与自动启动，将新版完整数据和配套程序另存，
+再按记录的位置与权限还原旧数据、全部密钥、历史、完整程序和原 Task 注册，并核对原登录启动选择。
+不要逐库覆盖、混用不同批次，或让旧程序读取新版数据。恢复后仍需检查旧配置、路由、历史与一次真实请求。
+缺少密钥、完整原版程序、有效批次，或无法核对文件归属时，保留现场与诊断并联系支持；反复重试或任意降级不能补齐这些材料。
 
 ## Uninstall boundaries
 

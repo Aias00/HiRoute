@@ -30,7 +30,12 @@ host IPC, startup/reconnect, tray/login preference and NSIS hooks. The
 [Rust standalone transaction](../../crates/host-runtime/src/standalone_install)
 owns architecture-matched Task installation and current-schema journal recovery; the shell's separate
 inventory/finisher owns its program files and update outcome. Neither owns business
-transactions or exposes Local Control to WebView. The
+transactions or exposes Local Control to WebView.
+The native [current-package repair](../../crates/host-runtime/src/standalone_install/windows/repair.rs)
+matches the complete accepted package and owned Task before reapplying a prepared
+core journal forward. Generic rollback refuses possible storage writes before any
+manager effect. NSIS supplies the candidate to early shell recovery, preserving
+the original batch instead of forcing an older-program rollback. The
 [release catalog](../../apps/website/src/lib/releases.mjs) emits V3 and the registered
 Windows-free V2 projection for supported macOS readers. Public Windows artifacts
 are x64 NSIS installers only; headless x64/ARM64 archives stay internal. The

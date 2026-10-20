@@ -15,6 +15,7 @@ use std::{
     path::PathBuf,
     time::Duration,
 };
+mod repair;
 mod space;
 pub use space::{ReplacementSpaceFailure, preflight_desktop_space};
 
@@ -409,6 +410,13 @@ pub fn install(request: InstallRequest) -> io::Result<Value> {
         allow_unavailable_stop: false,
     };
     if let Some(journal) = Journal::read(&layout)? {
+        if journal.operation == journal::Operation::Install
+            && journal.phase == journal::Phase::Prepared
+            && crate::storage_upgrade_started(&layout.storage_root())?
+        {
+            repair::resume(journal, &package, &layout, &mut host, request.autostart)?;
+            return repair::finish(&layout, &package, &request);
+        }
         journal.recover(&layout, &mut host)?;
     }
     let old = current(&layout)?;
@@ -515,19 +523,7 @@ pub fn install(request: InstallRequest) -> io::Result<Value> {
         }
         return Err(error);
     }
-    if request.console_loopback {
-        ConsoleListenerStore::new(layout.gateway_config_root())
-            .configure(ConsoleListenerDesiredV1::loopback())
-            .map_err(|_| invalid())?;
-    }
-    let cleanup = if request.defer_package_cleanup {
-        None
-    } else {
-        Some(PackageCleanup::best_effort(cleanup_locked(&layout)))
-    };
-    Ok(
-        json!({"schema":"hiroute.windows-install-result/v1","installed":true,"version":package.version,"manager":"task","cli":layout.home.join(".local/bin/hiroute.exe"),"started":false,"package_cleanup":cleanup}),
-    )
+    repair::finish(&layout, &package, &request)
 }
 pub fn uninstall(
     request: UninstallRequest,

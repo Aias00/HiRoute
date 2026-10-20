@@ -532,19 +532,19 @@ Function .onInit
   ${IfNot} ${Silent}
     !insertmacro CheckIfAppIsRunning "${MAINBINARYNAME}.exe" "${PRODUCTNAME}"
   ${EndIf}
-  nsExec::ExecToStack '"$PLUGINSDIR\hiroute-preflight.exe" --installer-recover'
+  nsExec::ExecToStack '"$PLUGINSDIR\hiroute-preflight.exe" --installer-recover "$PLUGINSDIR\hiroute-package.json" "$PLUGINSDIR\hirouted-preflight.exe"'
   Pop $0
   Pop $1
   ${If} $0 = 23
     Call HiRouteConfirmUnavailableRestore
     ${If} $HiRouteRestoreConsent = 1
-      nsExec::ExecToStack '"$PLUGINSDIR\hiroute-preflight.exe" --installer-recover --allow-unavailable-agent-restore'
+      nsExec::ExecToStack '"$PLUGINSDIR\hiroute-preflight.exe" --installer-recover "$PLUGINSDIR\hiroute-package.json" "$PLUGINSDIR\hirouted-preflight.exe" --allow-unavailable-agent-restore'
       Pop $0
       Pop $1
     ${EndIf}
   ${EndIf}
   ${If} $0 != 0
-    MessageBox MB_ICONSTOP "HiRoute needs installation recovery. Existing data and changed files are preserved." /SD IDOK
+    MessageBox MB_ICONSTOP "HiRoute needs installation recovery. Existing data and changed files are preserved. $1" /SD IDOK
     Abort
   ${EndIf}
   ${If} ${Silent}
@@ -859,6 +859,9 @@ Function .onInstFailed
     ${EndIf}
   ${EndIf}
   hiroute_rollback_registration_done:
+  ${If} $0 != 0
+    MessageBox MB_ICONSTOP "HiRoute could not safely restore the previous installation. Existing programs and data are preserved. $1" /SD IDOK
+  ${EndIf}
   SetErrorLevel 1
 FunctionEnd
 

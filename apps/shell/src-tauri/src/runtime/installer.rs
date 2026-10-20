@@ -122,6 +122,9 @@ fn prepare_failure(error: &std::io::Error) -> String {
         _ => "UPGRADE_RECOVERY_MATERIAL_UNAVAILABLE: The complete previous installation or its registration could not be verified. Keep both programs, all data and diagnostics. Obtain the matching material or support before retrying; an arbitrary older installer cannot repair it. / 无法验证完整旧安装或其注册信息，请保留两版程序、全部数据与诊断。补齐配套材料或寻求支持后再试，不要使用任意旧安装器覆盖。",
     }.into()
 }
+fn interrupted_installation_hint() -> &'static str {
+    "INSTALL_CURRENT_REPAIR_REQUIRED: Keep all data and both complete program versions. Close files in use; check access and free space. Rerun the same complete current installer. Do not install an older version over these data. If it still fails, use the verified batch's whole-group guide or contact support. Verify actual service/Gateway readiness afterward. / 请保留全部数据与两版完整程序。解除文件占用，检查访问权限和空间，再运行同一当前版完整安装器，不要用旧版覆盖这组数据；仍失败时按已验证批次说明整组恢复或联系支持，之后核对服务和 Gateway 实际就绪。"
+}
 fn request(cli: &std::path::Path, verb: &str, value: Value) -> Result<Value, String> {
     let bytes = serde_json::to_vec(&value).map_err(|_| "INSTALL_REQUEST_INVALID")?;
     let (success, value) = service::execute_reply(
@@ -283,18 +286,34 @@ pub fn run_if_requested() -> Option<i32> {
         "--installer-rollback" | "--installer-recover"
     ) {
         let allow = args
-            .get(1)
+            .last()
             .is_some_and(|arg| arg == "--allow-unavailable-agent-restore");
-        if args.len() > 2 || (args.len() == 2 && !allow) {
+        let candidate =
+            verb == "--installer-recover" && (args.len() == 3 || args.len() == 4 && allow);
+        if !candidate && (args.len() > 2 || (args.len() == 2 && !allow)) {
             return Some(1);
         }
-        let result =
-            windows::recover_pending().and_then(|()| super::install_transaction::rollback(allow));
+        let result = if candidate {
+            super::install_transaction::recover_for_candidate(
+                std::path::Path::new(&args[1]),
+                std::path::Path::new(&args[2]),
+                allow,
+            )
+        } else {
+            windows::recover_pending().and_then(|()| super::install_transaction::rollback(allow))
+        };
         let _ = super::updater::resume_admission();
         return Some(match result {
             Ok(()) => 0,
             Err(error) if error.to_string() == "AGENT_CONTROL_UNAVAILABLE" => 23,
-            Err(_) => 1,
+            Err(_) => {
+                let _ = writeln!(
+                    std::io::stdout().lock(),
+                    "{}",
+                    interrupted_installation_hint()
+                );
+                1
+            }
         });
     }
     let result = if args.iter().skip(1).any(|a| {
@@ -332,7 +351,7 @@ pub fn run_if_requested() -> Option<i32> {
             } else {
                 1
             },
-            error,
+            format!("{error}\n{}", interrupted_installation_hint()),
         ),
     };
     let _ = writeln!(std::io::stdout().lock(), "{text}");

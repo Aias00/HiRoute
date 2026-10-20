@@ -6,15 +6,6 @@ use hiroute_host_runtime::{
 };
 
 pub(super) fn prepare(value: &Pending, incoming: &Package, daemon: &Path) -> io::Result<()> {
-    if hash(daemon)?
-        != incoming
-            .files
-            .get("bin/hirouted.exe")
-            .ok_or_else(invalid)?
-            .sha256
-    {
-        return Err(invalid());
-    }
     let layout = StandaloneLayout::from_environment().map_err(|_| invalid())?;
     let Some(previous) = &value.previous_package else {
         // An uninstalled old data group still needs its matching package. The

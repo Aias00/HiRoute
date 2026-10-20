@@ -29,6 +29,10 @@ Its ignored installed-account probe reads only the fixed Apps key and bounded
 preparation exports. The manual compile workflow can export that test alone for
 the existing ordinary-user runner; its exact failing phase is diagnostic evidence,
 without replacing the installed product or granting a recovery disposition.
+The [standalone journal cases](../../crates/host-runtime/src/standalone_install/journal/tests.rs)
+also prove that cutover facts stop rollback before manager effects, forward
+reapplication registers only the current definition and preserves the original
+backups, and changed native entries are refused before any manager call.
 
 Choose a user promise, then the layer that can observe its failure. Keep tests
 beside that owner and preserve independent assertions. A focused filesystem
