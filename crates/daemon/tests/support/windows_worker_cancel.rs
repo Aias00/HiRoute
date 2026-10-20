@@ -19,6 +19,26 @@ use windows_sys::Win32::System::Threading::{
     OpenProcess, PROCESS_QUERY_LIMITED_INFORMATION, PROCESS_SYNCHRONIZE, WaitForSingleObject,
 };
 
+pub(super) fn opencode_command(workspace: &Path, nonce: &str) -> String {
+    use base64::Engine;
+    let literal = |text: &str| {
+        format!(
+            "Buffer.from('{}','base64').toString('utf8')",
+            base64::engine::general_purpose::STANDARD.encode(text)
+        )
+    };
+    // OpenCode exposes its Windows shell as bash even when it selects PowerShell
+    // or cmd. Reuse the runner's pinned Node in PATH; encode user paths so this
+    // one native command crosses all three shells without interpreting them.
+    format!(
+        "node.exe -e \"const fs=require('fs');fs.writeFileSync({},{});setTimeout(()=>fs.writeFileSync({},{}),60000)\"",
+        literal(workspace.join("cancel-started.txt").to_str().unwrap()),
+        literal(&format!("started-{nonce}")),
+        literal(workspace.join("cancel-late.txt").to_str().unwrap()),
+        literal(&format!("late-{nonce}")),
+    )
+}
+
 pub(super) struct CancellationReceipts {
     pub late: Vec<PathBuf>,
     pub residual_task: String,

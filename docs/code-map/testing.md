@@ -312,6 +312,9 @@ they retain neither arbitrary result text nor a guessed per-run failure cause.
 The [cancel publication fixture](../../crates/daemon/tests/support/windows_worker_cancel.rs)
 waits for the complete nonce receipt within the original deadline; file existence
 alone does not prove that the native writer has published its contents.
+The shared model oracle follows the declared shell timeout units. OpenCode's
+Windows shell receipt uses the runner's pinned Node with encoded paths, so the
+same cancellation check works with PowerShell, cmd and Git Bash.
 Its residual binding reader distinguishes incomplete publication from fatal native
 identity errors. The [residual oracle](../../crates/daemon/tests/support/windows_worker_residual_oracle.rs)
 keeps correlated tool errors observable, with fixed stage/error facts and no native
