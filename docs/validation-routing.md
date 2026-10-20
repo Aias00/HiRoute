@@ -295,7 +295,8 @@ retry advice rather than borrowing a retained source as a reason to restore old 
 fault/recovery journey, not ordinary smoke. It requires a healthy current installation,
 recent inspection and independently verified complete original source. After stopping
 owned processes, it preserves the entire clean current storage, both program namespaces
-and installation metadata, then changes only the current Control's format-29 header
+and installation metadata, rechecks the clean copy under the existing startup writer
+barrier, then changes only the current Control's format-29 header
 to a future marker. The actual bundled page and offline CLI must name the verified
 original batch, source and guide in both languages. Success leaves the service offline
 for the immediately following `recovery-preview` / `recovery-restore-original` operator

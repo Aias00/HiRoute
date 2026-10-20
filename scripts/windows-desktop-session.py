@@ -863,7 +863,7 @@ def restore_original(request, run, product, pm, helper, activity, manifest, root
         command(roots['stable_cli'],['service','start','--output','json'],'start-original-task')
         command(roots['stable_cli'],['service','autostart','enable' if locations['task_autostart'] else 'disable','--output','json'],'restore-original-task-login')
         state=command(roots['stable_cli'],['service','status','--output','json'],'restored-login-status')
-        task_login=json.loads(state.stdout).get('data',{}).get('autostart')
+        task_login=json.loads(state.stdout).get('data',{}).get('autostart_enabled')
         with winreg.OpenKey(winreg.HKEY_CURRENT_USER,run_key,0,winreg.KEY_QUERY_VALUE) as key:
             try:value,kind=winreg.QueryValueEx(key,'HiRoute')
             except FileNotFoundError:value,kind=None,None
@@ -932,6 +932,13 @@ def startup_ui_context(request, product, pm, helper, activity, root):
     roots,facts,shell = installed(helper,product,pm)
     if any(Path(p.get('ExecutablePath') or '') == shell for p in activity.get('processes', [])):
         raise ValueError('Quit the installed Desktop before the bounded native UI case')
+    install=Path(facts['marker']['record']['install_root'])
+    allowed={install/'hirouted.exe',install/'libexec/cliproxyapi.exe'}
+    task=json.loads(facts['definition']['text']).get('name','')
+    if (not re.fullmatch(r'HiRoute-[a-f0-9]{64}',task)
+            or any(Path(p.get('ExecutablePath') or '') not in allowed for p in activity.get('processes',[]))
+            or any(t.get('TaskName')!=task for t in activity.get('tasks',[]))):
+        raise ValueError('Preserve unrelated product activity before the bounded native UI fixture')
     if not desktop_state().get('interactive'):
         raise ValueError('The existing input desktop is unavailable; no lock fixture was created')
     return roots,facts,shell
@@ -1053,15 +1060,24 @@ def format_startup_ui(request, run, product, pm, helper, activity, root, baselin
         if stopped.returncode or stopped.stdout.strip()!='0':raise ValueError('Owned processes remain; no format fixture was written')
         for name,path in [('storage',storage),('program',install),('desktop',roots['programs']),('installation',roots['data'])]:
             copy_recovery_tree(helper,path,saved/name,run/(name+'-preservation.log'))
-        before=helper.inventory(storage)
+        before=helper.inventory(saved/'storage',exclude_startup_lock=True)
         control=helper.plain(storage/'live/control.db')
         wal=helper.plain(storage/'live/control.db-wal')
         if wal.exists() and wal.stat().st_size:raise ValueError('A nonempty Control WAL must be preserved and diagnosed before this fixture')
-        with control.open('r+b') as file:
-            original_header=file.read(100)
-            if original_header[:16]!=b'SQLite format 3\0' or int.from_bytes(original_header[60:64],'big')!=29:
-                raise ValueError('The current Control schema is not the admitted format-29 fixture source')
-            file.seek(60);file.write((2147483647).to_bytes(4,'big'));file.flush();os.fsync(file.fileno());changed=True
+        import msvcrt
+        with helper.plain(storage/'startup.lock').open('r+b') as barrier:
+            msvcrt.locking(barrier.fileno(),msvcrt.LK_NBLCK,1)
+            try:
+                if helper.inventory(storage,exclude_startup_lock=True)!=before:
+                    raise ValueError('Current data changed after preservation; no format fixture was written')
+                with control.open('r+b') as file:
+                    original_header=file.read(100)
+                    if original_header[:16]!=b'SQLite format 3\0' or int.from_bytes(original_header[60:64],'big')!=29:
+                        raise ValueError('The current Control schema is not the admitted format-29 fixture source')
+                    changed=True
+                    file.seek(60);file.write((2147483647).to_bytes(4,'big'));file.flush();os.fsync(file.fileno())
+            finally:
+                barrier.seek(0);msvcrt.locking(barrier.fileno(),msvcrt.LK_UNLCK,1)
         child=subprocess.Popen([str(shell)],stdin=subprocess.DEVNULL,stdout=subprocess.DEVNULL,stderr=subprocess.DEVNULL)
         time.sleep(15)
         languages=failure_page_languages(run,shell,child.pid,'unsupported_format',source)

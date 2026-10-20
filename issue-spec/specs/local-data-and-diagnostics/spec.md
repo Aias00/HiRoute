@@ -290,7 +290,7 @@ Recovery presentation SHALL distinguish correcting prerequisites, current-batch 
 #### Scenario: Locate the exact admitted recovery material offline
 
 - **WHEN** a failure admits current-batch resume or complete-group restoration
-- **THEN** the failure surface displays the verified original batch ID, source directory and guide filenames. Windows explains the folder route from its displayed log directory; macOS provides the preserved-material action. Long portable names wrap without hiding content in Chinese and English. The offline CLI names the absolute source directory derived from its actual storage root. Missing/unsafe locations and unknown causes cannot grant located recovery or resume.
+- **THEN** the failure surface displays the verified original batch ID, source directory and guide filenames. Windows explains the folder route from its displayed log directory; macOS provides the preserved-material action. Long portable names wrap without hiding content in Chinese and English. The offline CLI names the absolute source directory derived from its actual storage root. Missing/unsafe locations and unrecognized causes cannot grant located recovery or resume.
 
 #### Scenario: Correct a file prerequisite before considering restoration
 

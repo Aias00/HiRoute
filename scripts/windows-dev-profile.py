@@ -148,7 +148,7 @@ def inspect_installation(native_home, local_app_data):
     return facts
 
 
-def inventory(root):
+def inventory(root, exclude_startup_lock=False):
     """Reject links/special entries before walking or hashing any child."""
     if os.name == 'nt':
         root = Path(extended_windows_path(os.path.abspath(root)))
@@ -160,6 +160,10 @@ def inventory(root):
             plain(path)
             info = path.lstat()
             key = str(path.relative_to(root))
+            if exclude_startup_lock and key == 'startup.lock':
+                if not stat.S_ISREG(info.st_mode) or info.st_size != 0:
+                    raise ValueError('Only the empty non-data startup lock may be excluded')
+                continue
             if stat.S_ISDIR(info.st_mode):
                 rows[key] = {'kind': 'directory'}
             elif stat.S_ISREG(info.st_mode):

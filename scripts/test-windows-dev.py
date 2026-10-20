@@ -208,6 +208,23 @@ class Runner(unittest.TestCase):
                                     {'administrator_groups':False},host.manifest,self.root)
             run.assert_not_called();admit.assert_not_called()
 
+    def test_startup_fixture_refuses_foreign_activity_before_desktop_or_service_mutation(self):
+        observed='a'*32;folder=self.root/'runs'/observed;folder.mkdir(parents=True)
+        config=dict(user='owner',session_id=3)
+        request=dict(product='current',observation_run=observed,config=config)
+        (folder/'request.json').write_text(json.dumps(dict(operation='inspect',product='current',config=config)))
+        (folder/'result.json').write_text(json.dumps(dict(passed=True,administrator=False)))
+        install=self.root/'version';shell=self.root/'desktop/hiroute-shell.exe'
+        facts=dict(marker=dict(record=dict(install_root=str(install))),
+                   definition=dict(text=json.dumps(dict(name='HiRoute-'+'b'*64))))
+        for activity in [dict(processes=[dict(ExecutablePath=str(self.root/'foreign/hirouted.exe'))]),
+                         dict(tasks=[dict(TaskName='unrelated-task')])]:
+            with patch.object(desktop,'installed',return_value=({},facts,shell)), \
+                    patch.object(desktop,'desktop_state') as state,patch.object(desktop.subprocess,'run') as run:
+                with self.assertRaisesRegex(ValueError,'unrelated product activity'):
+                    desktop.startup_ui_context(request,self.root,{},profiles,activity,self.root)
+            state.assert_not_called();run.assert_not_called()
+
     def test_control_fixture_cleanup_refuses_unexpected_business_changes(self):
         import sqlite3
         storage=self.root/'storage';(storage/'live').mkdir(parents=True)
@@ -232,6 +249,19 @@ class Runner(unittest.TestCase):
         with self.assertRaisesRegex(ValueError,'Unexpected business changes'):
             desktop.restore_control_fixture(profiles,storage,before,header)
         self.assertEqual(control.read_bytes(),changed)
+
+    def test_fault_inventory_can_exclude_only_the_empty_non_data_startup_lock(self):
+        storage=self.root/'storage';storage.mkdir()
+        (storage/'startup.lock').write_bytes(b'')
+        (storage/'master-key').write_bytes(b'original key')
+        strict=profiles.inventory(storage)
+        self.assertIn('startup.lock',strict)
+        current=profiles.inventory(storage,exclude_startup_lock=True)
+        self.assertNotIn('startup.lock',current)
+        self.assertEqual(current['master-key'],strict['master-key'])
+        (storage/'startup.lock').write_bytes(b'unknown state')
+        with self.assertRaisesRegex(ValueError,'empty non-data startup lock'):
+            profiles.inventory(storage,exclude_startup_lock=True)
 
     def test_preparation_inspection_is_bounded_metadata_and_not_recovery_admission(self):
         home, local = self.root/'home', self.root/'local'
