@@ -173,6 +173,7 @@ impl LocalControlAdapter {
             .unwrap_or_default()
             .into_iter()
             .chain(self.scanner.dsh_api_sources().unwrap_or_default())
+            .chain(self.scanner.opencode_api_sources().unwrap_or_default())
         {
             if let Some(descriptor) = source.credential {
                 let slot = protected_input_slot(&descriptor)?;

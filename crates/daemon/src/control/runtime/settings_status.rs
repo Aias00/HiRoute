@@ -203,7 +203,10 @@ impl LocalControlAdapter {
             ModelAction::Configure => {
                 let file_applied = if matches!(
                     class,
-                    SettingsAgentClass::Qoder | SettingsAgentClass::Pi | SettingsAgentClass::Dsh
+                    SettingsAgentClass::Qoder
+                        | SettingsAgentClass::Pi
+                        | SettingsAgentClass::Dsh
+                        | SettingsAgentClass::OpenCode
                 ) {
                     hiroute_integrations::additional_native_configuration_is_applied(
                         &self.artifacts,
@@ -344,6 +347,10 @@ impl LocalControlAdapter {
                             SettingsAgentClass::Pi,
                         ) => [hiroute_domain::AgentModelSurfaceV2::PiCli].into(),
                         (
+                            hiroute_domain::AgentModelSelectionV2::OpenCodeAdditional { .. },
+                            SettingsAgentClass::OpenCode,
+                        ) => [hiroute_domain::AgentModelSurfaceV2::OpenCodeCli].into(),
+                        (
                             hiroute_domain::AgentModelSelectionV2::DshAdditional { .. },
                             SettingsAgentClass::Dsh,
                         ) => [hiroute_domain::AgentModelSurfaceV2::DshCli].into(),
@@ -482,7 +489,8 @@ fn model_intent(
             }
             super::settings_facts::SettingsAgentClass::Qoder
             | super::settings_facts::SettingsAgentClass::Pi
-            | super::settings_facts::SettingsAgentClass::Dsh => {
+            | super::settings_facts::SettingsAgentClass::Dsh
+            | super::settings_facts::SettingsAgentClass::OpenCode => {
                 super::native_additional_model::is_settings_additional_model(intent)
             }
         })
@@ -494,7 +502,7 @@ fn model_action(
     intent: &hiroute_domain::ExternalEffectIntentV1,
 ) -> hiroute_domain::PortResult<ModelAction> {
     match class {
-        super::settings_facts::SettingsAgentClass::Qoder | super::settings_facts::SettingsAgentClass::Pi | super::settings_facts::SettingsAgentClass::Dsh => {
+        super::settings_facts::SettingsAgentClass::Qoder | super::settings_facts::SettingsAgentClass::Pi | super::settings_facts::SettingsAgentClass::Dsh | super::settings_facts::SettingsAgentClass::OpenCode => {
             match hiroute_application::agent_connection::settings_additional_model_file_for_operation(
                 operation, intent,
             )?
@@ -546,7 +554,10 @@ fn model_endpoint_matches_runtime(
             ClaudeModelFileAction::Configure { gateway_base_url: endpoint, .. }
                 if endpoint == gateway_base_url
         )),
-        SettingsAgentClass::Qoder | SettingsAgentClass::Pi | SettingsAgentClass::Dsh => {
+        SettingsAgentClass::Qoder
+        | SettingsAgentClass::Pi
+        | SettingsAgentClass::Dsh
+        | SettingsAgentClass::OpenCode => {
             let endpoint = super::native_additional_model::additional_model_endpoint(
                 additional_model_kind(intent)?,
                 gateway_base_url,

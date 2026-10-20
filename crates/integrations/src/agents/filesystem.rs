@@ -35,6 +35,8 @@ mod claude_settings;
 mod dsh_native;
 #[path = "claude_observation.rs"]
 mod main_observation;
+#[path = "opencode_scanner.rs"]
+mod opencode_scanner;
 #[path = "pi_native.rs"]
 mod pi_native;
 #[path = "qoder_discovery.rs"]
@@ -130,6 +132,8 @@ pub struct AgentFilesystemLayoutV1 {
     pub qoder_executable: PathBuf,
     pub pi_executable: PathBuf,
     pub pi_config_root: PathBuf,
+    pub opencode_executable: PathBuf,
+    pub opencode_context: Option<super::OpenCodeNativeContext>,
     pub dsh_executable: PathBuf,
     pub dsh_config_root: PathBuf,
     pub qoder_home: PathBuf,
@@ -179,6 +183,8 @@ impl AgentFilesystemLayoutV1 {
             qoder_executable: PathBuf::from("qoder"),
             pi_executable: PathBuf::from("pi"),
             dsh_executable: PathBuf::from("dsh"),
+            opencode_executable: PathBuf::from("opencode"),
+            opencode_context: super::OpenCodeNativeContext::from_environment(home).ok(),
             dsh_config_root: std::env::var_os("DSH_HOME")
                 .filter(|v| !v.is_empty())
                 .map(PathBuf::from)
@@ -229,6 +235,8 @@ pub struct FilesystemAgentScannerV1 {
     codex_ingress: std::sync::Arc<std::sync::Mutex<Option<super::CodexIngressEvidence>>>,
     #[cfg(any(unix, windows))]
     claude_ingress: std::sync::Arc<std::sync::Mutex<Option<super::ClaudeIngressEvidence>>>,
+    #[cfg(any(unix, windows))]
+    opencode_collaboration: std::sync::Arc<std::sync::Mutex<super::opencode_probe::ProofCache>>,
     #[cfg(any(unix, windows))]
     qoder_collaboration: std::sync::Arc<std::sync::Mutex<super::qoder_probe::QoderProofCache>>,
 }
@@ -288,6 +296,8 @@ impl FilesystemAgentScannerV1 {
             claude_ingress: Default::default(),
             #[cfg(any(unix, windows))]
             qoder_collaboration: Default::default(),
+            #[cfg(any(unix, windows))]
+            opencode_collaboration: Default::default(),
             pi_collaboration_cli: Default::default(),
             dsh_collaboration_cli: Default::default(),
         }
@@ -398,6 +408,7 @@ impl FilesystemAgentScannerV1 {
             self.qoder_settings_discovery(false),
             self.pi_settings_discovery(),
             self.dsh_settings_discovery(),
+            self.opencode_settings_discovery(),
         ];
         match executable_probe(&self.layout.claude_executable) {
             ExecutableProbe::Installed(executable) => {
@@ -432,7 +443,10 @@ impl FilesystemAgentScannerV1 {
                         );
                         self.layout.claude_executable.clone()
                     }
-                    AgentKindV1::Qoder | AgentKindV1::Pi | AgentKindV1::DeepseekHarness => continue,
+                    AgentKindV1::Qoder
+                    | AgentKindV1::Pi
+                    | AgentKindV1::DeepseekHarness
+                    | AgentKindV1::OpenCode => continue,
                 };
                 #[cfg(any(unix, windows))]
                 if installation.profile.kind == AgentKindV1::Codex
@@ -500,6 +514,9 @@ impl FilesystemAgentScannerV1 {
         &self,
         descriptor: &DiscoveredCredentialRefV1,
     ) -> Result<ProtectedSecret, AgentFilesystemScanError> {
+        if descriptor.field_selector == "opencode.api-key" {
+            return self.read_opencode_secret(descriptor);
+        }
         if descriptor.field_selector == "pi.api-key" {
             return self.read_pi_secret(descriptor);
         }
@@ -571,7 +588,8 @@ impl FilesystemAgentScannerV1 {
             hiroute_domain::AgentModelSurfaceV2::ClaudeCli
             | hiroute_domain::AgentModelSurfaceV2::QoderCli
             | hiroute_domain::AgentModelSurfaceV2::PiCli
-            | hiroute_domain::AgentModelSurfaceV2::DshCli => None,
+            | hiroute_domain::AgentModelSurfaceV2::DshCli
+            | hiroute_domain::AgentModelSurfaceV2::OpenCodeCli => None,
         }
     }
 
@@ -602,6 +620,9 @@ impl FilesystemAgentScannerV1 {
                 [hiroute_domain::AgentModelSurfaceV2::ClaudeCli]
                     .into_iter()
                     .collect()
+            }
+            "agent_opencode_default" if self.opencode_executable_target().is_some() => {
+                [hiroute_domain::AgentModelSurfaceV2::OpenCodeCli].into()
             }
             "agent_dsh_default" if self.dsh_executable_target().is_some() => {
                 [hiroute_domain::AgentModelSurfaceV2::DshCli].into()

@@ -2509,6 +2509,7 @@ dependencies = [
  "http",
  "nix",
  "reqwest",
+ "rusqlite",
  "rustix",
  "serde",
  "serde_json",

@@ -36,7 +36,7 @@ export type CollaborationStatus = {
   restore_point_ref: string | null;
   current_selection?: { trigger_mode: AgentCollaborationTriggerMode } | null;
 };
-export type AgentModelSurface = 'codex_cli' | 'codex_desktop' | 'claude_cli' | 'qoder_cli' | 'pi_cli' | 'dsh_cli';
+export type AgentModelSurface = 'codex_cli' | 'codex_desktop' | 'claude_cli' | 'qoder_cli' | 'pi_cli' | 'dsh_cli' | 'opencode_cli';
 export type AgentReasoningSelection =
   | { kind: 'profile'; profile: string }
   | { kind: 'toggle'; enabled: boolean }
@@ -88,7 +88,8 @@ export type QoderModelSelection = {
 };
 export type PiModelSelection = { mode: 'pi_additional'; plan_protocols?: Record<string, 'responses' | 'messages'>; allowed_plan_ids: string[] };
 export type DshModelSelection = { mode: 'dsh_additional'; plan_protocols?: Record<string, 'responses' | 'messages'>; allowed_plan_ids: string[] };
-export type AgentModelSelection = CodexModelSelection | ClaudeModelSelection | QoderModelSelection | PiModelSelection | DshModelSelection;
+export type OpenCodeModelSelection = { mode: 'opencode_additional'; plan_protocols?: Record<string, 'responses' | 'messages'>; allowed_plan_ids: string[] };
+export type AgentModelSelection = CodexModelSelection | ClaudeModelSelection | QoderModelSelection | PiModelSelection | DshModelSelection | OpenCodeModelSelection;
 export type AgentSurfaceResult = {
   surface: AgentModelSurface;
   applied_revision: number;

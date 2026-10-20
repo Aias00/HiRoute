@@ -41,6 +41,8 @@
 .hr-brand-icon.agent-avatar[data-size='large'] {width:48px;height:48px;}
 .hr-brand-icon img,.hr-brand-icon svg {display:block;width:100%;height:100%;}
 .hr-brand-icon[data-brand='codex'] img {position:absolute;inset:0;}
+.hr-brand-icon[data-brand='opencode'] {color:var(--text);}
+.hr-brand-icon[data-brand='opencode'] svg {width:70%;height:70%;}
 .hr-brand-icon__dark {display:none!important;}
 .occami-root[data-theme='dark'] .hr-brand-icon__dark {display:block!important;}
 .occami-root[data-theme='dark'] .hr-brand-icon__light {display:none!important;}

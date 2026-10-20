@@ -54,7 +54,10 @@ def use_imported_route(product, binary, source, saved):
     source.reply = oracle.reply
     try:
         namespace = configured['model_effect']['provider_id']
-        if HARNESS=='dsh':
+        if HARNESS=='opencode':
+            providers=json.loads((Path(product.env['XDG_CONFIG_HOME'])/'opencode/opencode.json').read_text())['provider']
+            providers={name:dict(p,models=[dict(m,id=k) for k,m in p['models'].items()]) for name,p in providers.items()}
+        elif HARNESS=='dsh':
             from dsh_native_context import read_patch
             providers = next(r['config']['providers'] for r in read_patch(
                 Path(product.env['DSH_HOME'])/'profiles/web/cordis.patch.yml') if r['id']=='llm-pi-ai')
@@ -88,7 +91,7 @@ def scan(product):
 def run(repository, candidate):
     global HARNESS
     HARNESS = os.environ.get('HIROUTE_PRODUCT_WORKER_HARNESS','pi')
-    assert HARNESS in ('pi','dsh')
+    assert HARNESS in ('pi','dsh','opencode')
     repo = Path(repository).resolve()
     assert subprocess.check_output(['git', 'rev-parse', 'HEAD'], cwd=repo, text=True).strip() == candidate
     product = Product(repo)
@@ -101,15 +104,28 @@ def run(repository, candidate):
         product.enable_debug_diagnostics()
         binary, _, node = selected_installation(HARNESS)
         expose_native_installation(product, HARNESS, binary, node)
-        config = Path(product.env['HOME']) / ('selected-'+HARNESS+'-config')
-        config.mkdir(mode=0o700)
-        product.env['DSH_HOME' if HARNESS=='dsh' else 'PI_CODING_AGENT_DIR'] = str(config)
+        if HARNESS=='opencode':
+            from opencode_native_context import select_context
+            config=select_context(product)
+        else:
+            config = Path(product.env['HOME']) / ('selected-'+HARNESS+'-config')
+            config.mkdir(mode=0o700)
+        if HARNESS!='opencode':
+            product.env['DSH_HOME' if HARNESS=='dsh' else 'PI_CODING_AGENT_DIR'] = str(config)
         controls = product.root / 'source'
         controls.mkdir(mode=0o700)
         write_new(controls / 'native-context.json', '{}')
         source = NativeContextUpstream(controls)
         credential_context_paths = ()
-        if HARNESS=='dsh':
+        if HARNESS=='opencode':
+            models_path=config/'opencode.json'
+            auth_path=Path(product.env['XDG_DATA_HOME'])/'opencode/auth.json'
+            # This journey counts one ordinary model call. Worker auxiliary routing
+            # is exercised independently with the native title/compaction agents enabled.
+            write_new(models_path,json.dumps({'$schema':'https://opencode.ai/config.json','agent':{'title':{'disable':True},'summary':{'disable':True}},'provider':{'native-source':{'npm':'@ai-sdk/openai','options':{'baseURL':source.base_url},'models':{source.model:{'limit':{'context':16384,'output':4096}}}}}}))
+            write_new(auth_path,json.dumps({'native-source':{'type':'api','key':source.token}}))
+            changed_auth=json.dumps({'native-source':{'type':'api','key':'changed-native-key'}})
+        elif HARNESS=='dsh':
             from dsh_native_context import encode_patch, source_credentials
             models_path = config/'profiles/web/cordis.patch.yml'
             provider = {'api':'openai-responses','baseURL':source.base_url,'apiKeyEnv':'IMPORT_KEY',

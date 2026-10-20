@@ -139,7 +139,7 @@ fn machine_envelope_v2_schema() -> Value {
                 "type": "object", "additionalProperties": false,
                 "required": ["agent_kind", "context_id", "plan_id", "model_alias", "reason", "declared", "proposed"],
                 "properties": {
-                    "agent_kind": { "enum": ["qoder", "pi", "deepseek_harness"] },
+                    "agent_kind": { "enum": ["qoder", "pi", "deepseek_harness", "opencode"] },
                     "context_id": { "type": "string", "pattern": "^agent-context/[A-Za-z0-9/_:-]{1,242}$" },
                     "plan_id": { "type": "string", "minLength": 1, "maxLength": 256 },
                     "model_alias": { "type": "string", "pattern": "^(hiroute/[0-9a-f]{16}|[a-z0-9][a-z0-9._-]{0,63})$" },
@@ -555,6 +555,38 @@ pub fn generated_contract_files() -> Vec<GeneratedContractFile> {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn budget_schema_accepts_exactly_the_typed_installed_consumers() {
+        let schema = machine_envelope_v2_schema();
+        let kinds = schema["$defs"]["model_budget_blocker"]["properties"]["agent_kind"]["enum"]
+            .as_array()
+            .unwrap();
+        for kind in [
+            "codex",
+            "claude_code",
+            "qoder",
+            "pi",
+            "deepseek_harness",
+            "opencode",
+        ] {
+            let wire = json!({
+                "schema": "hiroute.agent-model-budget-conflict/v1",
+                "blockers": [{
+                    "agent_kind": kind,
+                    "context_id": "agent-context/native/sha256:abc",
+                    "plan_id": "plan/free",
+                    "model_alias": "free.plan",
+                    "reason": "capacity_reduced",
+                    "declared": {"context_window_tokens": 262144, "max_output_tokens": 235929},
+                    "proposed": {"context_window_tokens": 262144, "max_output_tokens": 131072}
+                }]
+            });
+            let conflict: hiroute_domain::AgentModelBudgetConflictV1 =
+                serde_json::from_value(wire).unwrap();
+            assert_eq!(kinds.contains(&json!(kind)), conflict.is_valid(), "{kind}");
+        }
+    }
 
     #[test]
     fn generated_contract_set_is_complete_and_stably_ordered() {

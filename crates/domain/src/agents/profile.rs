@@ -16,6 +16,8 @@ pub enum AgentKindV1 {
     Qoder,
     Pi,
     DeepseekHarness,
+    #[serde(rename = "opencode")]
+    OpenCode,
 }
 
 impl AgentKindV1 {
@@ -35,6 +37,14 @@ impl AgentKindV1 {
                 ConfigLayerV1::Process,
                 ConfigLayerV1::Launch,
                 ConfigLayerV1::Project,
+                ConfigLayerV1::User,
+            ],
+            Self::OpenCode => &[
+                ConfigLayerV1::Managed,
+                ConfigLayerV1::Process,
+                ConfigLayerV1::Local,
+                ConfigLayerV1::Project,
+                ConfigLayerV1::Launch,
                 ConfigLayerV1::User,
             ],
             Self::Pi | Self::DeepseekHarness => &[
@@ -59,6 +69,7 @@ impl AgentKindV1 {
             Self::Qoder => "qoder",
             Self::Pi => "pi",
             Self::DeepseekHarness => "deepseek_harness",
+            Self::OpenCode => "opencode",
         }
     }
 }
@@ -217,7 +228,10 @@ impl AgentProfileV1 {
         }
         if matches!(
             self.kind,
-            AgentKindV1::Qoder | AgentKindV1::Pi | AgentKindV1::DeepseekHarness
+            AgentKindV1::Qoder
+                | AgentKindV1::Pi
+                | AgentKindV1::DeepseekHarness
+                | AgentKindV1::OpenCode
         ) && (self.dynamic_catalog
             || self.static_catalog_fallback
             || self.native_subagent_routing
@@ -262,7 +276,8 @@ impl AgentProfileV1 {
                 AgentKindV1::Codex
                 | AgentKindV1::Qoder
                 | AgentKindV1::Pi
-                | AgentKindV1::DeepseekHarness,
+                | AgentKindV1::DeepseekHarness
+                | AgentKindV1::OpenCode,
                 Some(AgentIngressProtocolV1::Responses),
             )
             | (AgentKindV1::ClaudeCode, Some(AgentIngressProtocolV1::Messages)) => Ok(()),

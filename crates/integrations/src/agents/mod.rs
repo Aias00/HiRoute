@@ -42,9 +42,19 @@ mod dsh_sources;
 #[cfg(test)]
 mod dsh_tests;
 mod observed_capabilities;
+mod opencode;
+mod opencode_installation;
+mod opencode_migrations;
+mod opencode_sources;
+#[cfg(test)]
+mod opencode_tests;
+pub use opencode::{
+    OpenCodeConfig, OpenCodeNativeContext, opencode_provider, validate_opencode_composition,
+};
+pub use opencode_installation::{opencode_native_executable, opencode_native_format};
 mod pi_runtime;
 mod pi_sources;
-pub use pi_sources::{NativeApiSource, PiApiSource};
+pub use pi_sources::{NativeApiEcosystem, NativeApiSource, PiApiSource};
 mod qoder;
 pub use pi_runtime::*;
 mod additional_native;
@@ -52,7 +62,13 @@ mod additional_native_effects;
 mod qoder_provider;
 pub use additional_native_effects::*;
 #[cfg(any(unix, windows))]
+mod native_responses_probe;
+#[cfg(any(unix, windows))]
+mod opencode_probe;
+#[cfg(any(unix, windows))]
 mod qoder_probe;
+#[cfg(any(unix, windows))]
+pub use opencode_probe::OpenCodeCollaborationProbe;
 mod registration;
 mod registry;
 mod source_candidates;

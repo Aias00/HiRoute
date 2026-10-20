@@ -70,7 +70,10 @@ impl AgentModelBudgetConflictV1 {
             && self.blockers.iter().all(|blocker| {
                 matches!(
                     blocker.agent_kind,
-                    AgentKindV1::Qoder | AgentKindV1::Pi | AgentKindV1::DeepseekHarness
+                    AgentKindV1::Qoder
+                        | AgentKindV1::Pi
+                        | AgentKindV1::DeepseekHarness
+                        | AgentKindV1::OpenCode
                 ) && blocker.context_id.starts_with("agent-context/")
                     && blocker.context_id.len() <= 256
                     && blocker

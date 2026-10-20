@@ -334,6 +334,20 @@ impl AgentConnectionControlPort for LocalControlAdapter {
                 } else {
                     "hiroute"
                 });
+            if agent_id == "agent_opencode_default" {
+                return self
+                    .scanner
+                    .check_opencode_collaboration(
+                        &cli,
+                        self.additional_collaboration_probe_target(
+                            super::settings_facts::SettingsAgentClass::OpenCode,
+                        )?,
+                    )
+                    .map_err(|error| {
+                        eprintln!("native OpenCode collaboration check: {}", error.stage);
+                        collaboration_check::qoder_failure(error)
+                    });
+            }
             if agent_id == "agent_dsh_default" {
                 return self
                     .scanner

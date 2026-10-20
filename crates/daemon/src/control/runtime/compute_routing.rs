@@ -62,23 +62,20 @@ impl LocalControlAdapter {
             .get(input_slot)
             .cloned()
             .ok_or(ControlReadError::NotFound)?;
-        if matches!(
-            descriptor.field_selector.as_str(),
-            "pi.api-key" | "dsh.api-key"
-        ) {
-            return (if descriptor.field_selector == "dsh.api-key" {
-                self.scanner.dsh_api_sources()
-            } else {
-                self.scanner.pi_api_sources()
-            })
-            .map_err(|_| ControlReadError::SnapshotChanged)?
-            .iter()
-            .any(|source| {
-                source.credential.as_ref() == Some(&descriptor)
-                    && &source.evidence_digest == expected_evidence
-            })
-            .then_some(())
-            .ok_or(ControlReadError::SnapshotChanged);
+        if let Some(ecosystem) =
+            hiroute_integrations::NativeApiEcosystem::from_selector(&descriptor.field_selector)
+        {
+            return self
+                .scanner
+                .native_api_sources(ecosystem)
+                .map_err(|_| ControlReadError::SnapshotChanged)?
+                .iter()
+                .any(|source| {
+                    source.credential.as_ref() == Some(&descriptor)
+                        && &source.evidence_digest == expected_evidence
+                })
+                .then_some(())
+                .ok_or(ControlReadError::SnapshotChanged);
         }
         let catalog = self
             .release_catalog
@@ -287,8 +284,9 @@ impl ComputeFactsPort for LocalControlAdapter {
             .iter()
             .map(|discovery| scan_item(catalog, discovery))
             .collect::<Result<Vec<_>, _>>()?;
-        items.extend(self.native_compute_scan_items(false)?);
-        items.extend(self.native_compute_scan_items(true)?);
+        for ecosystem in hiroute_integrations::NativeApiEcosystem::ALL {
+            items.extend(self.native_compute_scan_items(ecosystem)?);
+        }
         // Subscription discovery has its own metadata-only API. Generic ScanCompute must not
         // start CPA or materialize OAuth state merely because a screen was opened.
         items.sort_by(|left, right| left.agent_id.cmp(&right.agent_id));

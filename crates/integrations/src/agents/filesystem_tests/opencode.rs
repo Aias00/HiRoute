@@ -1,0 +1,202 @@
+use super::*;
+fn scanner(root: &Path) -> FilesystemAgentScannerV1 {
+    let mut layout = layout(root);
+    layout.opencode_context =
+        Some(crate::agents::OpenCodeNativeContext::from_lookup(root, |_| None).unwrap());
+    FilesystemAgentScannerV1::new(layout, registry())
+}
+fn declaration() -> serde_json::Value {
+    json!({"$schema":"https://opencode.ai/config.json","provider":{"ordinary":{"npm":"@ai-sdk/openai","options":{"baseURL":"http://127.0.0.1:4222/v1","apiKey":"static-only"},"models":{"explicit":{"limit":{"context":16384,"output":4096}}}}}})
+}
+
+#[test]
+fn opencode_discovers_the_official_home_entry_without_executing_or_replacing_a_selection() {
+    let root = tempfile::tempdir().unwrap();
+    let mut scanner = scanner(root.path());
+    let entry = root.path().join(".opencode/bin/opencode");
+    std::fs::create_dir_all(entry.parent().unwrap()).unwrap();
+    // Invalid process bytes are intentional: passive discovery must not execute them.
+    std::fs::write(&entry, b"metadata-only discovery fixture").unwrap();
+    #[cfg(unix)]
+    {
+        use std::os::unix::fs::PermissionsExt;
+        std::fs::set_permissions(&entry, std::fs::Permissions::from_mode(0o700)).unwrap();
+    }
+    scanner.layout.opencode_executable = "opencode".into();
+    let primary =
+        crate::agents::opencode_native_executable(std::path::Path::new("opencode")).unwrap();
+    assert_eq!(
+        scanner.opencode_executable_target(),
+        primary.or_else(|| Some(std::fs::canonicalize(&entry).unwrap()))
+    );
+    assert!(matches!(
+        scanner.opencode_settings_discovery().outcome,
+        AgentDiscoveryOutcomeV1::Supported { .. }
+    ));
+    // Losing a saved installation cannot switch the user's Agent to this fallback.
+    scanner.layout.opencode_executable = root.path().join("explicitly-selected-but-missing");
+    assert!(scanner.opencode_executable_target().is_none());
+}
+
+#[test]
+fn opencode_dynamic_configuration_keys_are_scoped_out_of_models_workers_and_import() {
+    let root = tempfile::tempdir().unwrap();
+    let scanner = scanner(root.path());
+    for (section, dynamic_key) in [
+        ("root", "{env:CONFIG_SECTION}"),
+        ("provider", "{file:provider-name.txt}"),
+        ("agent", "{env:AGENT_NAME}"),
+    ] {
+        let mut value = declaration();
+        if section == "root" {
+            value[dynamic_key] = json!([]);
+        } else {
+            value[section][dynamic_key] = json!({});
+        }
+        write_secret_settings(&scanner.opencode_user_models_target(), value);
+        let model_rejected = scanner
+            .opencode_model_dependencies("hiroute-main-test", &[])
+            .is_err();
+        let native = scanner.opencode_native_context().unwrap();
+        let config = native.read_config(None).unwrap();
+        let worker_rejected =
+            crate::agents::validate_opencode_composition(&native, &config, root.path()).is_err();
+        let sources = scanner.opencode_api_sources().unwrap();
+        let import_rejected = !sources.is_empty()
+            && sources
+                .iter()
+                .all(|source| !source.supported_auth && source.credential.is_none());
+        assert_eq!(
+            (model_rejected, worker_rejected, import_rejected),
+            (true, true, true),
+            "{section}"
+        );
+    }
+}
+#[test]
+fn opencode_static_import_is_secret_free_and_rejects_stale_credential_reads() {
+    let root = tempfile::tempdir().unwrap();
+    let scanner = scanner(root.path());
+    write_secret_settings(&scanner.opencode_user_models_target(), declaration());
+    let sources = scanner.opencode_api_sources().unwrap();
+    assert_eq!(sources.len(), 1);
+    let source = &sources[0];
+    assert!(source.supported_auth);
+    assert!(
+        !serde_json::to_string(source)
+            .unwrap()
+            .contains("static-only")
+    );
+    let (endpoint, key) = scanner.read_opencode_api_source(source).unwrap();
+    assert_eq!(endpoint.as_str(), "http://127.0.0.1:4222/v1");
+    assert_eq!(key.expose(), b"static-only");
+    let mut changed = declaration();
+    changed["provider"]["ordinary"]["options"]["apiKey"] = "rotated".into();
+    write_secret_settings(&scanner.opencode_user_models_target(), changed);
+    assert!(scanner.read_opencode_api_source(source).is_err());
+}
+#[test]
+fn opencode_dynamic_options_and_oauth_remain_non_importable() {
+    for option in ["headers", "fetch", "region"] {
+        let root = tempfile::tempdir().unwrap();
+        let scanner = scanner(root.path());
+        let mut value = declaration();
+        value["provider"]["ordinary"]["options"][option] = json!({"unsafe":"must-not-run"});
+        write_secret_settings(&scanner.opencode_user_models_target(), value);
+        assert!(
+            scanner.opencode_api_sources().unwrap()[0]
+                .credential
+                .is_none()
+        );
+    }
+    let root = tempfile::tempdir().unwrap();
+    let scanner = scanner(root.path());
+    write_secret_settings(&scanner.opencode_user_models_target(), declaration());
+    let native = scanner.opencode_native_context().unwrap();
+    write_secret_settings(
+        &native.data_root.join("auth.json"),
+        json!({"ordinary":{"type":"oauth","access":"never-copy"}}),
+    );
+    assert!(
+        scanner.opencode_api_sources().unwrap()[0]
+            .credential
+            .is_none()
+    );
+}
+#[test]
+fn opencode_settings_dependencies_detect_layer_changes_and_owned_provider_shadowing() {
+    let root = tempfile::tempdir().unwrap();
+    let scanner = scanner(root.path());
+    let native = scanner.opencode_native_context().unwrap();
+    let a = scanner
+        .opencode_model_dependencies("hiroute-main-test", &[])
+        .unwrap();
+    write_secret_settings(
+        &native.config_root.join("config.json"),
+        json!({"small_model":"daily/small"}),
+    );
+    let b = scanner
+        .opencode_model_dependencies("hiroute-main-test", &[])
+        .unwrap();
+    assert_ne!(a, b);
+    write_secret_settings(
+        &native.config_root.join("config.json"),
+        json!({"provider":{"hiroute-main-test":{"options":{"apiKey":"foreign"}}}}),
+    );
+    assert!(
+        scanner
+            .opencode_model_dependencies("hiroute-main-test", &[])
+            .is_err()
+    );
+}
+
+#[test]
+fn opencode_default_reference_conflict_is_a_preview_fact_and_a_stage_rejection() {
+    let root = tempfile::tempdir().unwrap();
+    let scanner = scanner(root.path());
+    let native = scanner.opencode_native_context().unwrap();
+    write_secret_settings(
+        &scanner.opencode_user_models_target(),
+        json!({"provider":{"hiroute-main-test":{"models":{"route":{}}}}}),
+    );
+    write_secret_settings(
+        &native.config_root.join("config.json"),
+        json!({"small_model":"hiroute-main-test/route"}),
+    );
+    let (_, in_use) = scanner
+        .opencode_model_facts("hiroute-main-test", &[])
+        .unwrap();
+    assert!(
+        in_use,
+        "Preview must retain a closed, actionable reference conflict"
+    );
+    assert!(
+        scanner
+            .opencode_model_dependencies("hiroute-main-test", &[])
+            .is_err(),
+        "staging must reject the dangling reference"
+    );
+}
+
+#[test]
+fn opencode_restore_file_capabilities_survive_a_missing_executable_and_bad_model_json() {
+    let root = tempfile::tempdir().unwrap();
+    let scanner = scanner(root.path());
+    write_secret_settings(
+        &scanner.opencode_user_models_target(),
+        json!({"provider":{}}),
+    );
+    std::fs::write(
+        scanner.opencode_user_models_target(),
+        b"malformed daily model configuration",
+    )
+    .unwrap();
+    let discovery = scanner.opencode_settings_discovery();
+    let AgentDiscoveryOutcomeV1::Supported { installation } = discovery.outcome else {
+        panic!("existing files must remain recoverable");
+    };
+    assert!(installation.capability_evidence.iter().any(|p| p.capability
+        == hiroute_domain::AgentCapability::AtomicManagedReplace
+        && p.state == hiroute_domain::CapabilityState::Proven));
+    assert!(scanner.opencode_executable_target().is_none());
+}

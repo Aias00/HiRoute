@@ -190,6 +190,7 @@ pub fn preview_agent_settings(
                     | AgentModelSelectionV2::QoderAdditional { .. }
                     | AgentModelSelectionV2::PiAdditional { .. }
                     | AgentModelSelectionV2::DshAdditional { .. }
+                    | AgentModelSelectionV2::OpenCodeAdditional { .. }
             ) {
                 // A short-lived isolated HTTP challenge diagnoses a native client; it is not
                 // authorization to write a safely observed Codex configuration. Actual client
@@ -241,6 +242,14 @@ pub fn preview_agent_settings(
                     .common
                     .available_surfaces
                     .contains(&hiroute_domain::AgentModelSurfaceV2::DshCli)
+            {
+                return Err(SettingsPlanningError::InvalidSelection);
+            }
+            if matches!(settings, AgentModelSelectionV2::OpenCodeAdditional { .. })
+                && !model
+                    .common
+                    .available_surfaces
+                    .contains(&hiroute_domain::AgentModelSurfaceV2::OpenCodeCli)
             {
                 return Err(SettingsPlanningError::InvalidSelection);
             }
@@ -604,7 +613,7 @@ fn validate_model_default(
                     .then_some(name.as_str())
             }),
         },
-        AgentModelSelectionV2::QoderAdditional { .. } | AgentModelSelectionV2::PiAdditional { .. } | AgentModelSelectionV2::DshAdditional { .. } => return Ok(()),
+        AgentModelSelectionV2::QoderAdditional { .. } | AgentModelSelectionV2::PiAdditional { .. } | AgentModelSelectionV2::DshAdditional { .. } | AgentModelSelectionV2::OpenCodeAdditional { .. } => return Ok(()),
         AgentModelSelectionV2::ClaudeLauncher { .. } => {
             let facts = facts.claude().ok_or_else(invalid)?;
             claude_presets = grant

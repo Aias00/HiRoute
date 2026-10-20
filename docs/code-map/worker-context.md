@@ -35,7 +35,7 @@ restoration must verify ownership rather than infer it from a provider name.
 | Resolve resources and construct a run | [Installation](../../crates/daemon/src/delegation/installation.rs), [native context](../../crates/daemon/src/delegation/profile/native_context.rs), [profile guide](../../crates/daemon/src/delegation/profile/README.md) | Effective instance HOME/config root supplies resources; per-run overrides supply route, credential and permission policy |
 | Project native context/output budgets | [Shared budget policy](../../crates/domain/src/agents/additional_model.rs), [native projection](../../crates/integrations/src/agents/qoder_budget.rs) | Preserve the frozen Plan's active-candidate/protocol bounds; Gateway output capping alone cannot prove native compaction limits |
 | Admit and attribute model requests | [Run authority](../../crates/daemon/src/delegation/run_authority.rs), [Gateway dispatch](../../crates/gateway/src/dispatch/run.rs) | Sealed Plan, live run, harness, protocol and observation identity must agree |
-| Confirm the native session/model | [ACP model confirmation](../../crates/daemon/src/delegation/acp/model.rs), [ACP driver](../../crates/daemon/src/delegation/acp/mod.rs) | Confirm the exact native model before prompt; missing capability cannot silently change the route |
+| Confirm the native session/model | [ACP model confirmation](../../crates/daemon/src/delegation/acp/model.rs), [ACP driver](../../crates/daemon/src/delegation/acp/mod.rs) | Confirm typed mode before the final typed model for OpenCode; confirm the exact native model before prompt; missing capability cannot silently change the route |
 | Continue the same task | [History binding](../../crates/daemon/src/delegation/profile/native_history.rs), [resume](../../crates/daemon/src/delegation/executor/resume.rs) | Restore the exact frozen context/session with a fresh credential; never select the newest history or start a replacement conversation |
 | Start, cancel and finalize processes | [Executor](../../crates/daemon/src/delegation/executor.rs), [OS launcher](../../crates/daemon/src/delegation/local_worker/README.md), [finalization](../../crates/daemon/src/delegation/finalization.rs) | Explicit argv/environment/materials and owned process identity; stopping and successful task completion are separate facts |
 | Read, hide, expire or clean up content | [Reads](../../crates/daemon/src/control/runtime/delegation_reads.rs), [Continue admission](../../crates/daemon/src/control/runtime/delegation_continue.rs), [maintenance](../../crates/daemon/src/control/runtime/delegation_maintenance.rs), [native cleanup](../../crates/daemon/src/delegation/native_cleanup.rs) | Saved progress is independent of execution/cleanup state; current content permission and exact cleanup ownership still apply; borrowed history is not a deletion target |
@@ -49,6 +49,12 @@ restoration must verify ownership rather than infer it from a provider name.
 | Qoder | HOME/QODER_CONFIG_DIR and project Skills | Selected native ACP CLI; [profile](../../crates/daemon/src/delegation/profile/qoder.rs) | Borrowed opaque history, exact ACP load; [Qoder guide](../../tools/product-e2e/tests/QODER_DELEGATION.md) |
 | Pi | HOME/PI_CODING_AGENT_DIR, project and installed package Skills | Selected npm CLI + Node, bundled SDK→ACP bridge; [profile](../../crates/daemon/src/delegation/profile/pi.rs) | Task-owned v3 transcript, validated before open; [Pi guide](../../tools/product-e2e/tests/PI_INTEGRATION.md) |
 | DeepSeek Harness (DSH) | HOME/DSH_HOME, project and custom Skill roots | Selected native ACP CLI and public run patch; [profile](../../crates/daemon/src/delegation/profile/dsh.rs) | Task-owned opaque history, exact ACP resume; [DSH guide](../../tools/product-e2e/tests/DSH_INTEGRATION.md) |
+| OpenCode | HOME/XDG, explicit config and additive resource roots, project Skills | Selected native ACP binary; [profile](../../crates/daemon/src/delegation/profile/opencode.rs) | Borrowed opaque SQLite history, bounded format admission and exact ACP load; [OpenCode guide](../../tools/product-e2e/tests/OPENCODE_INTEGRATION.md) |
+
+OpenCode's passive Agent and Worker discovery also inspect the official installer's
+`~/.opencode/bin` directory when a GUI launch lacks its shell PATH. Agent discovery
+keeps the PATH entry first; a saved explicit installation never falls back to a
+different binary. This does not grant a Worker selection or native-format capability.
 
 The [profile guide](../../crates/daemon/src/delegation/profile/README.md) owns startup
 flags, credential delivery, native tool permissions and resource restrictions.
@@ -195,9 +201,12 @@ has started, cancellation still needs owned-process stop evidence. Startup may
 settle the old revision-2 `Cancelling` record only when the exact record proves
 that preparation, process binding and prompt intent never occurred.
 
-Codex [startup coordination](../../crates/daemon/src/delegation/lifecycle/startup.rs)
-serializes only same-daemon, same borrowed-root spawn/initialize, releasing before
-session creation or prompt. An unconfirmed initializer retains occupancy until
+The shared [startup coordinator](../../crates/daemon/src/delegation/lifecycle/startup.rs)
+protects same-daemon Codex borrowed-root initialization and OpenCode database
+initialization. OpenCode rechecks the captured configuration and read-only database
+admission after waiting on its frozen database path. Coordination ends at successful
+ACP initialize, before session creation/load or prompt; tasks remain concurrent.
+An unconfirmed initializer retains occupancy until
 [owned stop](../../crates/daemon/src/delegation/lifecycle.rs) verifies its exact process.
 Retry Cancel through the existing task action; residual acknowledgement or daemon
 restart is not proof that the original processes stopped. Other roots and clients

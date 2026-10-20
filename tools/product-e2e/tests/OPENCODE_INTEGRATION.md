@@ -1,0 +1,29 @@
+# OpenCode native integration acceptance
+
+OpenCode uses the shared Agent settings transaction, static API import and native ACP Worker lifecycle. This guide owns the native acceptance inputs; the [Worker map](../../../docs/code-map/worker-context.md) locates production code.
+
+## Installation and context
+
+Select the actual native executable explicitly. The official `opencode-ai` npm launcher can locate a platform package without being executed. An ambiguous platform/CPU variant requires choosing its native binary. Initial Worker format admission supports the official v1.19.3 platform package with adjacent name/version/os/cpu/libc metadata; a standalone copied binary or an unaudited format remains unavailable for Worker/Continue. Discovery, ordinary model settings and Skill ownership do not depend on this database-format capability.
+
+Use a dedicated synthetic HOME and workspace for acceptance. OpenCode uses native HOME/XDG config/data/cache/state semantics, absolute `OPENCODE_CONFIG`, additive `OPENCODE_CONFIG_DIR` and an absolute frozen database selector. Do not use daily credentials or move a real user's history. The production Worker borrows these roots; its owned task directory contains only descriptors and run material. Existing database migration IDs must match the audited native format before launch. Unknown/pending/legacy formats are preserved and refused.
+
+## Real product entry
+
+Set `HIROUTE_PRODUCT_CANDIDATE_SHA` to the exact candidate and `HIROUTE_WORKER_OPENCODE_BINARY` to the selected official native binary. Run through the [configured validation runner](../../../docs/validation-routing.md):
+
+```text
+cargo test --locked -p hiroute-product-e2e --test opencode_delegation -- --ignored --nocapture --test-threads=1
+```
+
+Missing inputs fail. The tests build the production CLI and daemon and use their public Local Control/Worker commands. Only upstream model replies and fixture-owned user files are synthetic. A normal Cargo run that leaves these tests ignored does not establish acceptance.
+
+The shared journeys cover saved Responses/Messages routes, daemon restart, grant rotation, default-reference refusal, independent model/Skill restore, passive source prepare/save with stale-credential refusal, actual installed Skill → public CLI → Worker, native Skill/read/edit/shell effects, concurrent routing/cancellation, missing-history refusal and exact Continue. OpenCode also exercises automatic native compaction and auxiliary requests on the frozen model route, including summary consumption after restart. A changed current Plan or current environment cannot select a new session on Continue.
+
+The explicit collaboration prerequisite check uses private configuration and history while loading the actual installed user Skill directory through OpenCode's resource loader. It validates exact path/body and a nonce-correlated trusted CLI result. It does not parse daily model configuration to authorize installation, inject a substitute installed Skill, or establish real delegated completion.
+
+## Evidence and platform limits
+
+Require every selected business case to be green in its scenario report. A successful build, fixture response or process exit alone is insufficient. Retain the exact source SHA, native package identity, selected protocol, task/native-session identities, source request kinds, owned-child cancellation and preserved native files. The product tests must not promote SDK metadata or mock IPC to native success.
+
+macOS/Linux/native Windows each need their real filesystem, installation and process boundary evidence. The Unix product entry above does not establish Windows acceptance. Windows compilation and native execution follow the existing [Windows validation workflow](../../../docs/validation-routing.md#windows-iteration-and-release-validation); neither another OS nor a cross-compile replaces execution. Browser component checks cover OpenCode forms separately and do not prove native Desktop authorization or persistence.

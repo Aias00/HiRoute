@@ -353,6 +353,7 @@ impl ProductionControlRuntime {
                     (AgentKindV1::ClaudeCode, WorkerHarnessV1::ClaudeCode),
                     (AgentKindV1::Qoder, WorkerHarnessV1::QoderCli),
                     (AgentKindV1::Pi, WorkerHarnessV1::Pi),
+                    (AgentKindV1::OpenCode, WorkerHarnessV1::OpenCode),
                     (
                         AgentKindV1::DeepseekHarness,
                         WorkerHarnessV1::DeepseekHarness,
@@ -420,11 +421,29 @@ impl ProductionControlRuntime {
             hiroute_integrations::DSH_INTEGRATION_PROFILE_REF_V1,
         )
         .map_err(|e| e.to_string())?;
+        let opencode_subject = AgentConnectionTransactionSubjectV1::from_registered_profile(
+            "agent_opencode_default",
+            hiroute_integrations::OPENCODE_PROFILE_ID_V1,
+            hiroute_integrations::OPENCODE_INTEGRATION_PROFILE_REF_V1,
+        )
+        .map_err(|e| e.to_string())?;
         let artifacts = stores
             .open_managed_artifacts_with_external_targets(
                 storage_root.join("managed-artifacts"),
                 storage_root.join("artifact-restores"),
                 [
+                    (
+                        AgentConnectionEffectRoleV1::ManagedConfiguration
+                            .target_for(&opencode_subject)
+                            .map_err(|e| e.to_string())?,
+                        scanner.opencode_user_models_target(),
+                    ),
+                    (
+                        AgentConnectionEffectRoleV1::RoutingSkill
+                            .target_for(&opencode_subject)
+                            .map_err(|e| e.to_string())?,
+                        scanner.opencode_user_skill_target(),
+                    ),
                     (
                         AgentConnectionEffectRoleV1::ManagedConfiguration
                             .target_for(&dsh_subject)
@@ -476,7 +495,9 @@ impl ProductionControlRuntime {
                             .map_err(|error| error.to_string())?,
                         scanner.qoder_user_skill_target(),
                     ),
-                ],
+                ]
+                .into_iter()
+                .filter(|(_, path)| path.is_absolute()),
             )
             .map_err(|error| error.to_string())?;
         let observation_workspace_key = observation_workspace_key(storage_root)?;
@@ -1390,6 +1411,7 @@ fn release_agent_scanner(
             AgentKindV1::Qoder => &mut layout.qoder_executable,
             AgentKindV1::Pi => &mut layout.pi_executable,
             AgentKindV1::DeepseekHarness => &mut layout.dsh_executable,
+            AgentKindV1::OpenCode => &mut layout.opencode_executable,
         };
         *target = executable.clone();
     }
@@ -1425,6 +1447,7 @@ fn discovered_agent(
                 AgentKindV1::Qoder => QODER_PROFILE_ID_V1,
                 AgentKindV1::Pi => hiroute_integrations::PI_PROFILE_ID_V1,
                 AgentKindV1::DeepseekHarness => hiroute_integrations::DSH_PROFILE_ID_V1,
+                AgentKindV1::OpenCode => hiroute_integrations::OPENCODE_PROFILE_ID_V1,
             }
             .to_owned(),
             version.clone(),

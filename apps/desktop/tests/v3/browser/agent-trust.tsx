@@ -103,7 +103,7 @@ function splitCodexStatus(): AgentSnapshot {
   return snapshot;
 }
 
-function additionalAgent(configured: boolean, ecosystem: 'qoder' | 'pi' | 'dsh' = 'qoder'): AgentSnapshot {
+function additionalAgent(configured: boolean, ecosystem: 'qoder' | 'pi' | 'dsh' | 'opencode' = 'qoder'): AgentSnapshot {
   const context = `agent-context/${ecosystem}/sha256:${'a'.repeat(64)}`;
   return {
     trusted_authority: true, plans: { plans: [] },
@@ -123,7 +123,7 @@ function additionalAgent(configured: boolean, ecosystem: 'qoder' | 'pi' | 'dsh' 
   };
 }
 
-function additionalRouted(ecosystem: 'qoder' | 'pi' | 'dsh' = 'qoder'): AgentSnapshot {
+function additionalRouted(ecosystem: 'qoder' | 'pi' | 'dsh' | 'opencode' = 'qoder'): AgentSnapshot {
   const snapshot = additionalAgent(true, ecosystem);
   snapshot.plans = structuredClone(readyAgents.plans);
   const agent = modelAgent(snapshot, `agent_${ecosystem}_default`);
@@ -160,6 +160,7 @@ const control = {
   qoderConfigured: () => additionalAgent(true),
   qoderRouted: () => additionalRouted(),
   additionalRouted,
+  opencodeFresh:()=>additionalAgent(false,"opencode"),
 };
 Object.assign(window, { agentTrust: control });
 
@@ -193,11 +194,14 @@ function Harness() {
     setRefresh(0);
     setGeneration(value => value + 1);
   };
-  return <PresentationRoot language="zh" theme="dark" textScale={1}>
+  const parameters=new URLSearchParams(window.location.search);
+  const language=parameters.get('language')==='en'?'en':'zh';
+  const theme=parameters.get('theme')==='light'?'light':'dark';
+  return <PresentationRoot language={language} theme={theme} textScale={1}>
     <div className="app-window">
       <div role="note" style={{ gridColumn: '1 / -1', gridRow: 1 }}>组件测试：所有 IPC 为 mock；不连接 Tauri、daemon 或真实安装。</div>
       <main className="main" style={{ gridColumn: '1 / -1', gridRow: 2 }}>
-      <Agents key={generation} language="zh" refreshVersion={refresh} operation={operation} mutationAllowed onMutation={() => { control.mutations += 1; }} onOperation={(operation, presentation) => { control.operations.push({ operation, presentation }); setOperation(operation); }} />
+      <Agents key={generation} language={language} refreshVersion={refresh} operation={operation} mutationAllowed onMutation={() => { control.mutations += 1; }} onOperation={(operation, presentation) => { control.operations.push({ operation, presentation }); setOperation(operation); }} />
     </main></div>
   </PresentationRoot>;
 }

@@ -17,6 +17,19 @@ pub(super) fn attach_file_capabilities(
     );
 }
 
+/// Recovery/file editing remains available when a selected native executable disappears.
+pub(super) fn attach_optional_file_capabilities(
+    installation: &mut SupportedAgentInstallationV1,
+    executable: Option<&Path>,
+    target: &Path,
+) {
+    attach_capabilities(
+        installation,
+        dependencies(executable, target),
+        "hiroute.native-files/v1",
+    );
+}
+
 /// Settings support is derived from the selected configuration target only. A concrete
 /// executable is located separately; its inode, digest, release or version is not a save gate.
 pub(super) fn attach_target_file_capabilities(
@@ -117,7 +130,10 @@ fn attach_capabilities(
 }
 
 #[cfg(unix)]
-fn dependencies(executable: Option<&Path>, target: &Path) -> Result<(CanonicalDigest, bool), ()> {
+pub(super) fn dependencies(
+    executable: Option<&Path>,
+    target: &Path,
+) -> Result<(CanonicalDigest, bool), ()> {
     use std::os::unix::fs::MetadataExt;
     let file_identity = |metadata: &std::fs::Metadata| {
         (
@@ -251,7 +267,10 @@ fn dependencies(_executable: Option<&Path>, _target: &Path) -> Result<(Canonical
 }
 
 #[cfg(windows)]
-fn dependencies(executable: Option<&Path>, target: &Path) -> Result<(CanonicalDigest, bool), ()> {
+pub(super) fn dependencies(
+    executable: Option<&Path>,
+    target: &Path,
+) -> Result<(CanonicalDigest, bool), ()> {
     use hiroute_platform::file_security::capture;
     use hiroute_platform::windows::security::{file_identity, file_link_count, open_identity};
     use std::os::windows::fs::MetadataExt;

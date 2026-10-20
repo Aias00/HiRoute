@@ -39,7 +39,7 @@ results in the relevant run record.
 | Map | Scope |
 | --- | --- |
 | [Architecture and ownership](architecture.md) | Shared layers, source admission, durable state, observation and change boundaries |
-| [Agent integrations and Workers](worker-context.md) | Shared configuration/lifecycle owners, with Codex, Claude, Qoder, Pi and DSH differences together |
+| [Agent integrations and Workers](worker-context.md) | Shared configuration/lifecycle owners, with Codex, Claude, Qoder, Pi, DSH and OpenCode differences together |
 | [Decision models and routing](decision-foundation.md) | Saved connections, provider adapters, per-turn policy and competence attribution |
 | [Tests as product documentation](testing.md) | Proof levels, reusable fixtures, representative fault cases and validation selection |
 

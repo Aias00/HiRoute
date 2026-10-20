@@ -563,6 +563,31 @@ const scenarios = [
     assert(!c().commands.some(({ command }) => /subscription|discovered_model|model_catalog/.test(command)), 'Additional routing opened model discovery or import');
     assert(calls('check_agent_live').length === 0, 'Saving routes implicitly invoked a model');
   }),
+  scenario('opencode.routing.additional-plans', ['opencode'], 'OpenCode adds selected routes without replacing native models or applying a cancelled draft', async () => {
+    c().reset(); c().agents = c().opencodeFresh(); c().agents.plans = c().registered().plans; await tick();
+    await until(() => facet('model'), 'OpenCode optional model routing');
+    assert(document.querySelector('[data-agent-id="agent_opencode_default"] .detail-hero [data-brand="opencode"] svg'), 'OpenCode details are missing their official mark');
+    assert(document.querySelector('.native-list [data-brand="opencode"] svg'), 'OpenCode list is missing its official mark');
+    await openEditor('model');
+    const pick = () => [...dialog().querySelectorAll('[data-agent-plan-id] input')].slice(0, 2).forEach(input => input.click());
+    pick(); await tick();
+    assert(dialog().textContent.includes('当前默认模型保持不变') && dialog().textContent.includes('模型选择器'), 'Additional routing does not explain native preservation and selection');
+    assert(!dialog().querySelector('[data-agent-default], [data-client-model-id], [data-agent-fixed-models]'), 'OpenCode borrowed native model, source or default controls');
+    assert(dialog().querySelectorAll('[data-plan-protocol] select').length === 2, 'Each selected route needs its own protocol choice');
+    [...dialog().querySelectorAll('button')].find(button => button.textContent === '取消').click(); await tick();
+    assert(configureSpecs().length === 0 && !dialog(), 'Cancelling OpenCode model draft changed configuration');
+    await openEditor('model'); pick(); await tick();
+    const selected = [...dialog().querySelectorAll('[data-agent-plan-id]')].filter(row => row.querySelector('input').checked).map(row => row.dataset.agentPlanId);
+    changeSelect(dialog().querySelector(`[data-agent-plan-id="${selected[1]}"] [data-plan-protocol] select`), 'messages');
+    await tick();
+    await save();
+    const spec = configureSpecs().at(-1);
+    assert(JSON.stringify(spec.model.settings) === JSON.stringify({ mode: 'opencode_additional', allowed_plan_ids: selected,
+      plan_protocols: { [selected[0]]: 'responses', [selected[1]]: 'messages' } }), 'OpenCode changed the ecosystem, selected routes or their independent protocols');
+    assert(spec.collaboration.intent === 'keep' && !spec.restore_native_model, 'Model save changed collaboration or a native default');
+    assert(!c().commands.some(({ command }) => /subscription|discovered_model|model_catalog/.test(command)), 'Additional routing opened model discovery or import');
+    assert(calls('check_agent_live').length === 0, 'Saving routes implicitly invoked a model');
+  }),
   scenario('qoder.routing.adjust-and-restore', ['qoder', 'qoder-model-routing'], 'Qoder repairs selected routes, rotates their token and restores each facet independently', async () => {
     c().reset(); c().agents = c().qoderRouted();
     const unavailablePlan = c().agents.agents[0].settings.current_selection.allowed_plan_ids[1];
@@ -613,7 +638,7 @@ const scenarios = [
     await until(() => configureSpecs().some(spec => spec.collaboration.intent === 'restore'), 'independent collaboration restore');
     assert(configureSpecs().at(-1).model.intent === 'keep' && agent.settings.current_selection.mode === 'qoder_additional', 'Collaboration restore removed model routes');
   }),
-  ...['pi', 'dsh'].map(ecosystem => scenario(`${ecosystem}.routing.default-in-use`, ['agent-recovery'], `${ecosystem} preserves a route used by its native default and directs recovery to the selected client`, async () => {
+  ...['pi', 'dsh', 'opencode'].map(ecosystem => scenario(`${ecosystem}.routing.default-in-use`, ['agent-recovery'], `${ecosystem} preserves a route used by its native default and directs recovery to the selected client`, async () => {
     c().reset(); c().agents = c().additionalRouted(ecosystem); await tick();
     await until(() => facet('model')?.textContent === '调整' && !facet('model').disabled, 'additional model routing');
     const agent = c().agents.agents[0];

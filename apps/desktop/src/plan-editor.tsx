@@ -11,7 +11,7 @@ import { ProviderIcon } from './ui/ProviderIcon';
 import { planErrorCode, planErrorMessage } from './plan-editor-errors';
 import { ReasoningDialog, type NativeReasoning } from './ui/ReasoningDialog';
 import { ModelPicker } from './ui/ModelPicker';
-import { BrandIcon, Disclosure, UiIcon } from './ui';
+import { BrandIcon, Disclosure, UiIcon, type BrandKind } from './ui';
 import { WorkerDependencies } from './features/WorkerDependencies';
 import { PlanQuality, type PlanQualityModel } from './features/PlanQuality';
 import { PlanRuntimeSettings } from './features/PlanRuntimeSettings';
@@ -21,7 +21,7 @@ import React, { forwardRef, useEffect, useImperativeHandle, useRef, useState } f
 import { invoke } from '@tauri-apps/api/core';
 export type Selection = { binding_id: string; reasoning?: { kind: 'profile'; profile: string } | { kind: 'toggle'; enabled: boolean } | { kind: 'budget'; tokens: number } };
 type Mode = 'fixed_model' | 'smart_saving' | 'free_first' | 'custom_branches';
-type Work = { harness: 'codex_cli' | 'claude_code' | 'qoder_cli' | 'pi' | 'deepseek_harness'; protocol: 'responses' | 'messages' };
+type Work = { harness: 'codex_cli' | 'claude_code' | 'qoder_cli' | 'pi' | 'deepseek_harness' | 'opencode'; protocol: 'responses' | 'messages' };
 type SmartClassifier = Classifier;
 // Inactive inputs belong to this editing session, never to the persisted plan.
 export type PlanEditorMemory = { branchRouting?: BranchRouting; customWindowTokens?: number };
@@ -108,7 +108,7 @@ function activePlanQualityModels(plan: Plan, candidates: Candidate[]): PlanQuali
   }
   return models;
 }
-export const PlanEditor = forwardRef<PlanEditorHandle, { plan?: Plan; draft?: Draft; creating?: boolean; initialBindingId?: string; editingMemory?: PlanEditorMemory; language: 'zh' | 'en'; active?: boolean; refreshVersion?: number; usedBy?: { id: string; name: string; brand: 'codex' | 'claude-code' | 'qoder' | 'pi' | 'dsh' | 'agent'; isDefault: boolean }[]; onOpenAgent?: (agentId: string) => void; onOpenSession?: (sessionId: string, requestId: string) => void; onOpenServices?: OpenDecisionConnection; onDone: () => Promise<void>; onClose: () => void; onDirty?: (dirty: boolean) => void; onEdit?: () => void; onBusyChange?: (busy: boolean) => void; onOperation?: (operation: PlanOperation | null) => void; onPersisted?: (editor: PersistedEditor<Plan, Draft> | null, action: 'save_draft' | 'publish', identity: PersistenceIdentity, operation: PlanOperation | null) => void }>(function PlanEditor({ plan, draft, creating = false, initialBindingId, editingMemory, language, active = true, refreshVersion = 0, usedBy = [], onOpenAgent, onOpenSession, onOpenServices, onDone, onClose, onDirty, onEdit, onBusyChange, onOperation, onPersisted }, ref) {
+export const PlanEditor = forwardRef<PlanEditorHandle, { plan?: Plan; draft?: Draft; creating?: boolean; initialBindingId?: string; editingMemory?: PlanEditorMemory; language: 'zh' | 'en'; active?: boolean; refreshVersion?: number; usedBy?: { id: string; name: string; brand: BrandKind; isDefault: boolean }[]; onOpenAgent?: (agentId: string) => void; onOpenSession?: (sessionId: string, requestId: string) => void; onOpenServices?: OpenDecisionConnection; onDone: () => Promise<void>; onClose: () => void; onDirty?: (dirty: boolean) => void; onEdit?: () => void; onBusyChange?: (busy: boolean) => void; onOperation?: (operation: PlanOperation | null) => void; onPersisted?: (editor: PersistedEditor<Plan, Draft> | null, action: 'save_draft' | 'publish', identity: PersistenceIdentity, operation: PlanOperation | null) => void }>(function PlanEditor({ plan, draft, creating = false, initialBindingId, editingMemory, language, active = true, refreshVersion = 0, usedBy = [], onOpenAgent, onOpenSession, onOpenServices, onDone, onClose, onDirty, onEdit, onBusyChange, onOperation, onPersisted }, ref) {
   const en = language === 'en', text = (zh: string, eng: string) => en ? eng : zh;
   const [editor, setEditor] = useState<Editor>(() => structuredClone(draft?.editor ?? (plan ? reopen(plan) : emptyEditor())));
   const [draftId] = useState(() => draft?.draft_id ?? 'draft/' + crypto.randomUUID());
@@ -419,8 +419,9 @@ export const PlanEditor = forwardRef<PlanEditorHandle, { plan?: Plan; draft?: Dr
       ['deepseek_harness', 'DeepSeek Harness', text('原生 ACP 任务委派', 'Native ACP task delegation')],
       ['pi', 'Pi', text('使用 Pi 执行委派任务', 'Use Pi for delegated tasks')],
       ['qoder_cli', 'Qoder CLI', text('使用 Qoder CLI 执行委派任务', 'Use Qoder CLI for delegated tasks')],
-    ] as const).map(([value, title, description]) => <button className={`v3-executor${editor.work?.harness === value ? ' selected' : ''}`} type="button" key={value} aria-pressed={editor.work?.harness === value} onClick={() => { if (editor.work?.harness !== value) update({ work: { harness: value, protocol: value === 'claude_code' ? 'messages' : 'responses' } }); }}><BrandIcon kind={value === 'codex_cli' ? 'codex' : value === 'claude_code' ? 'claude-code' : value === 'pi' ? 'pi' : value === 'deepseek_harness' ? 'dsh' : 'qoder'} label={`${title} logo`} /><div><strong>{title}</strong><span>{description}</span></div>{editor.work?.harness === value && <UiIcon name="check" />}</button>)}</div>{validationIssue?.group === 'executor' && <p className="oc-inline-error route-lane-error">{validationIssue.message}</p>}
-      {editor.work && (editor.work.harness === 'pi' || editor.work.harness === 'deepseek_harness' || editor.work.harness === 'qoder_cli') && <AgentProtocolChoice name={editor.display_name || text('任务路由', 'Task route')} language={language} value={editor.work.protocol} advice={workerProtocolAdvice(editor, options)} onChange={protocol => update({ work: { ...editor.work!, protocol } })} />}
+      ['opencode', 'OpenCode', text('使用 OpenCode 执行委派任务', 'Use OpenCode for delegated tasks')],
+    ] as const).map(([value, title, description]) => <button className={`v3-executor${editor.work?.harness === value ? ' selected' : ''}`} type="button" key={value} aria-pressed={editor.work?.harness === value} onClick={() => { if (editor.work?.harness !== value) update({ work: { harness: value, protocol: value === 'claude_code' ? 'messages' : 'responses' } }); }}><BrandIcon kind={value === 'codex_cli' ? 'codex' : value === 'claude_code' ? 'claude-code' : value === 'pi' ? 'pi' : value === 'deepseek_harness' ? 'dsh' : value === 'opencode' ? 'opencode' : 'qoder'} label={`${title} logo`} /><div><strong>{title}</strong><span>{description}</span></div>{editor.work?.harness === value && <UiIcon name="check" />}</button>)}</div>{validationIssue?.group === 'executor' && <p className="oc-inline-error route-lane-error">{validationIssue.message}</p>}
+      {editor.work && (editor.work.harness === 'pi' || editor.work.harness === 'deepseek_harness' || editor.work.harness === 'qoder_cli' || editor.work.harness === 'opencode') && <AgentProtocolChoice name={editor.display_name || text('任务路由', 'Task route')} language={language} value={editor.work.protocol} advice={workerProtocolAdvice(editor, options)} onChange={protocol => update({ work: { ...editor.work!, protocol } })} />}
 {editor.work && <WorkerDependencies key={editor.work.harness} harness={editor.work.harness} language={language} active={active && moreSettingsOpen} onOperation={onOperation} />}
     </div>}</section>
       </Disclosure>

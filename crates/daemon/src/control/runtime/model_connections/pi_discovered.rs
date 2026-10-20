@@ -1,7 +1,7 @@
 //! Pi sources use the same closed prepare/save transaction as other native API discoveries.
 use super::*;
 use hiroute_application_api::{ComputeDiscoveryRefV1, ComputeScanItemV1};
-use hiroute_integrations::{DiscoveredAuthSource, PiApiSource};
+use hiroute_integrations::{DiscoveredAuthSource, NativeApiEcosystem, PiApiSource};
 
 pub(super) fn pi_discovery(source: &PiApiSource) -> ComputeDiscoveryRefV1 {
     ComputeDiscoveryRefV1 {
@@ -12,18 +12,10 @@ pub(super) fn pi_discovery(source: &PiApiSource) -> ComputeDiscoveryRefV1 {
 impl LocalControlAdapter {
     pub(in crate::control::runtime) fn native_compute_scan_items(
         &self,
-        dsh: bool,
+        ecosystem: NativeApiEcosystem,
     ) -> Result<Vec<ComputeScanItemV1>, hiroute_application::control::ControlReadError> {
-        let agent_id = if dsh {
-            "agent_dsh_default"
-        } else {
-            "agent_pi_default"
-        };
-        let sources = match if dsh {
-            self.scanner.dsh_api_sources()
-        } else {
-            self.scanner.pi_api_sources()
-        } {
+        let agent_id = ecosystem.agent_id();
+        let sources = match self.scanner.native_api_sources(ecosystem) {
             Ok(sources) => sources,
             Err(_) => {
                 return Ok(vec![ComputeScanItemV1 {
@@ -40,10 +32,10 @@ impl LocalControlAdapter {
                     inventory_eligible: false,
                     discovery: None,
                     actions_required: vec![
-                        if dsh {
-                            "check_dsh_configuration"
-                        } else {
-                            "check_pi_configuration"
+                        match ecosystem {
+                            NativeApiEcosystem::Pi => "check_pi_configuration",
+                            NativeApiEcosystem::Dsh => "check_dsh_configuration",
+                            NativeApiEcosystem::OpenCode => "check_opencode_configuration",
                         }
                         .into(),
                     ],
@@ -86,7 +78,7 @@ impl LocalControlAdapter {
                     connection_option_id: None,
                     endpoint_profile_id: None,
                     registered_base_url: None,
-                    observed_model_id: Some(source.model_id),
+                    observed_model_id: (!source.model_id.is_empty()).then_some(source.model_id),
                     model_configuration_id: None,
                     inventory_eligible: ready,
                     discovery,
@@ -112,13 +104,12 @@ impl LocalControlAdapter {
         let protocol = source
             .protocol
             .ok_or(ComputeManagementControlError::DiscoveryNotImportable)?;
-        let dsh = source.source_ref.starts_with("dsh-source/");
-        let (base_url, secret) = (if dsh {
-            self.scanner.read_dsh_api_source(&source)
-        } else {
-            self.scanner.read_pi_api_source(&source)
-        })
-        .map_err(|_| ComputeManagementControlError::DiscoveryChanged)?;
+        let ecosystem = NativeApiEcosystem::from_source(&source)
+            .ok_or(ComputeManagementControlError::DiscoveryNotImportable)?;
+        let (base_url, secret) = self
+            .scanner
+            .read_native_api_source(&source)
+            .map_err(|_| ComputeManagementControlError::DiscoveryChanged)?;
         let credential = source
             .credential
             .as_ref()
@@ -133,10 +124,10 @@ impl LocalControlAdapter {
             observed_revision: credential.observed_revision,
         };
         let candidate_digest = hiroute_domain::CanonicalDigest::of(&(
-            if dsh {
-                "dsh-discovered-candidate/v1"
-            } else {
-                "pi-discovered-candidate/v1"
+            match ecosystem {
+                NativeApiEcosystem::Pi => "pi-discovered-candidate/v1",
+                NativeApiEcosystem::Dsh => "dsh-discovered-candidate/v1",
+                NativeApiEcosystem::OpenCode => "opencode-discovered-candidate/v1",
             },
             &source.evidence_digest,
             prepare_id,
@@ -195,11 +186,7 @@ impl LocalControlAdapter {
             candidate_ref: Some(candidate.candidate_ref),
             lineage_ref: pi_discovery(&source).discovery_ref,
             trusted_lineage_digest: None,
-            display_name: format!(
-                "{} · {}",
-                if dsh { "DSH" } else { "Pi" },
-                source.provider_id
-            ),
+            display_name: format!("{} · {}", ecosystem.label(), source.provider_id),
             existing_source_id: None,
             edit_revision: source.revision,
             check_id: prepare_id.into(),

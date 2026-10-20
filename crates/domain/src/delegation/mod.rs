@@ -52,6 +52,8 @@ pub enum WorkerHarnessV1 {
     QoderCli,
     Pi,
     DeepseekHarness,
+    #[serde(rename = "opencode")]
+    OpenCode,
 }
 
 #[derive(Clone, Copy, Debug, Deserialize, Eq, PartialEq, Serialize)]
