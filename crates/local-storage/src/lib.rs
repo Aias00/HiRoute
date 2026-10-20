@@ -735,7 +735,7 @@ impl LocalStorageError {
             Self::UpgradeSourceUnsupported => {
                 StorageRecovery::new(C::UnsupportedFormat, A::PreserveAndDiagnose)
             }
-            Self::Permission => StorageRecovery::new(C::AccessDenied, A::PreserveAndDiagnose),
+            Self::Permission => StorageRecovery::new(C::AccessDenied, A::RetryCurrent),
             Self::Locked | Self::Crypto => {
                 StorageRecovery::new(C::MissingKey, A::PreserveAndDiagnose)
             }
@@ -743,10 +743,10 @@ impl LocalStorageError {
                 if e.kind() == std::io::ErrorKind::WouldBlock
                     || (cfg!(windows) && matches!(e.raw_os_error(), Some(32 | 33))) =>
             {
-                StorageRecovery::new(C::Locked, A::PreserveAndDiagnose)
+                StorageRecovery::new(C::Locked, A::RetryCurrent)
             }
             Self::Io(e) if e.kind() == std::io::ErrorKind::PermissionDenied => {
-                StorageRecovery::new(C::AccessDenied, A::PreserveAndDiagnose)
+                StorageRecovery::new(C::AccessDenied, A::RetryCurrent)
             }
             _ => StorageRecovery::new(C::UnknownState, A::PreserveAndDiagnose),
         }

@@ -121,7 +121,7 @@ mod tests {
         assert_eq!(error.recovery().cause, Cause::Locked);
         let report = receiver.try_recv().unwrap();
         assert_eq!(report.cause, Cause::Locked);
-        assert_eq!(report.action, Action::PreserveAndDiagnose);
+        assert_eq!(report.action, Action::RetryCurrent);
         assert_eq!(
             fs::read(root.join(hiroute_host_runtime::STORAGE_RECOVERY_FILE)).unwrap(),
             before
@@ -171,6 +171,27 @@ mod tests {
             StorageRecovery::read(&root).unwrap().unwrap().action,
             Action::ResumeCurrent
         );
+        for (kind, cause) in [
+            (std::io::ErrorKind::WouldBlock, Cause::Locked),
+            (std::io::ErrorKind::PermissionDenied, Cause::AccessDenied),
+        ] {
+            let failure = publish_failure(
+                &root,
+                LocalStorageError::Io(std::io::Error::new(kind, "file prerequisite")),
+            );
+            let report = failure.recovery();
+            assert_eq!(report.cause, cause);
+            assert_eq!(
+                report.action,
+                Action::RetryCurrent,
+                "a retained old source must not turn a correctable prerequisite into restoration"
+            );
+            assert!(report.backup_batch.is_none());
+            assert_eq!(
+                StorageRecovery::read(&root).unwrap().unwrap().action,
+                Action::RetryCurrent
+            );
+        }
         drop(stores);
         // The retained source still exists after a later generation is present.
         // Arbitrary damage to that current generation cannot inherit resume.

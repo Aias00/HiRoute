@@ -16,7 +16,39 @@ impl StorageRecovery {
             StartupFailureCode::UpgradeSourceUnsupported => StorageRecoveryCause::UnsupportedFormat,
             _ => return None,
         };
-        Some(Self::new(cause, StorageRecoveryAction::PreserveAndDiagnose))
+        let action = if matches!(
+            cause,
+            StorageRecoveryCause::Locked | StorageRecoveryCause::AccessDenied
+        ) {
+            StorageRecoveryAction::RetryCurrent
+        } else {
+            StorageRecoveryAction::PreserveAndDiagnose
+        };
+        Some(Self::new(cause, action))
+    }
+
+    pub fn read_for_admission_failure(
+        code: StartupFailureCode,
+        storage: Option<&Path>,
+    ) -> Option<Self> {
+        Some(Self::from_admission_code(code)?.with_verified_restore(storage))
+    }
+
+    fn with_verified_restore(self, storage: Option<&Path>) -> Self {
+        // The current diagnostic supplies only the cause. Whole-group restore
+        // authority still comes from revalidating the storage owner's exact
+        // original batch. Never borrow program-only reinstall or resume advice.
+        if matches!(
+            self.cause,
+            StorageRecoveryCause::MissingKey | StorageRecoveryCause::UnsupportedFormat
+        ) && let Some(storage) = storage
+            && let Ok(Some(record)) = Self::read(storage)
+            && record.cause == self.cause
+            && record.action == StorageRecoveryAction::RestoreCompleteGroup
+        {
+            return record;
+        }
+        self
     }
 
     /// Use only on an already failed startup surface. Prefer this attempt's
@@ -24,7 +56,7 @@ impl StorageRecovery {
     /// A log record never grants reinstall, resume or restore authority.
     pub fn read_for_failed_startup(storage: &Path, diagnostics: &Path) -> Option<Self> {
         if let Some(report) = admission_failure(diagnostics) {
-            return Some(report);
+            return Some(report.with_verified_restore(Some(storage)));
         }
         match Self::read(storage) {
             Ok(report) => report,
@@ -115,7 +147,17 @@ mod tests {
             let storage = directory.path().join("inaccessible-storage");
             let report = StorageRecovery::read_for_failed_startup(&storage, &diagnostics).unwrap();
             assert_eq!(report.cause, cause);
-            assert_eq!(report.action, StorageRecoveryAction::PreserveAndDiagnose);
+            assert_eq!(
+                report.action,
+                if matches!(
+                    cause,
+                    StorageRecoveryCause::Locked | StorageRecoveryCause::AccessDenied
+                ) {
+                    StorageRecoveryAction::RetryCurrent
+                } else {
+                    StorageRecoveryAction::PreserveAndDiagnose
+                }
+            );
             assert_eq!(report.backup_batch, None);
             assert_eq!(report.original_state_digest, None);
             assert!(!storage.exists());

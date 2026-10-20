@@ -129,29 +129,21 @@ pub async fn startup_status(
 ) -> Result<StartupReport, String> {
     super::main_window(&window)?;
     if let Some(code) = state.1.error.get() {
+        use hiroute_diagnostics::event::StartupFailureCode as Failure;
+        let storage = state.1.data_root.as_ref().map(|root| root.join("storage"));
+        let admission = |code| {
+            hiroute_host_runtime::StorageRecovery::read_for_admission_failure(
+                code,
+                storage.as_deref(),
+            )
+        };
         return Ok(StartupReport {
             state: "failed",
             storage_recovery: match code.as_str() {
-                "DAEMON_UPGRADE_SOURCE_UNSUPPORTED" => {
-                    Some(hiroute_host_runtime::StorageRecovery::new(
-                        hiroute_host_runtime::StorageRecoveryCause::UnsupportedFormat,
-                        hiroute_host_runtime::StorageRecoveryAction::PreserveAndDiagnose,
-                    ))
-                }
-                "DAEMON_STORAGE_ACCESS_DENIED" => Some(hiroute_host_runtime::StorageRecovery::new(
-                    hiroute_host_runtime::StorageRecoveryCause::AccessDenied,
-                    hiroute_host_runtime::StorageRecoveryAction::PreserveAndDiagnose,
-                )),
-                "DAEMON_STORAGE_KEY_UNAVAILABLE" => {
-                    Some(hiroute_host_runtime::StorageRecovery::new(
-                        hiroute_host_runtime::StorageRecoveryCause::MissingKey,
-                        hiroute_host_runtime::StorageRecoveryAction::PreserveAndDiagnose,
-                    ))
-                }
-                "DAEMON_STORAGE_LOCKED" => Some(hiroute_host_runtime::StorageRecovery::new(
-                    hiroute_host_runtime::StorageRecoveryCause::Locked,
-                    hiroute_host_runtime::StorageRecoveryAction::PreserveAndDiagnose,
-                )),
+                "DAEMON_UPGRADE_SOURCE_UNSUPPORTED" => admission(Failure::UpgradeSourceUnsupported),
+                "DAEMON_STORAGE_ACCESS_DENIED" => admission(Failure::StorageAccessDenied),
+                "DAEMON_STORAGE_KEY_UNAVAILABLE" => admission(Failure::StorageKeyUnavailable),
+                "DAEMON_STORAGE_LOCKED" => admission(Failure::StorageLocked),
                 _ => matches!(
                     code.as_str(),
                     "DAEMON_STORAGE_UNREADABLE"

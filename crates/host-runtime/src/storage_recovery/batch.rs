@@ -220,6 +220,55 @@ mod tests {
             StorageRecovery::read(&storage).unwrap(),
             Some(report.clone())
         );
+        use hiroute_diagnostics::event::StartupFailureCode as Code;
+        for (code, cause) in [
+            (
+                Code::StorageKeyUnavailable,
+                StorageRecoveryCause::MissingKey,
+            ),
+            (
+                Code::UpgradeSourceUnsupported,
+                StorageRecoveryCause::UnsupportedFormat,
+            ),
+        ] {
+            let mut admitted = report.clone();
+            admitted.cause = cause;
+            admitted.action = StorageRecoveryAction::RestoreCompleteGroup;
+            admitted.store(&storage).unwrap();
+            assert_eq!(
+                StorageRecovery::read_for_admission_failure(code, Some(&storage)),
+                Some(admitted.clone())
+            );
+            let prerequisite =
+                StorageRecovery::read_for_admission_failure(Code::StorageLocked, Some(&storage))
+                    .unwrap();
+            assert_eq!(prerequisite.action, StorageRecoveryAction::RetryCurrent);
+            assert!(
+                prerequisite.backup_batch.is_none(),
+                "file use cannot borrow a prior restore target"
+            );
+            admitted.action = StorageRecoveryAction::ResumeCurrent;
+            admitted.store(&storage).unwrap();
+            assert_eq!(
+                StorageRecovery::read_for_admission_failure(code, Some(&storage))
+                    .unwrap()
+                    .action,
+                StorageRecoveryAction::PreserveAndDiagnose,
+                "a diagnostic cannot grant resume"
+            );
+            admitted.action = StorageRecoveryAction::RestoreCompleteGroup;
+            admitted.store(&storage).unwrap();
+            std::fs::write(source.join("storage/master-key"), b"corrupted value").unwrap();
+            assert_eq!(
+                StorageRecovery::read_for_admission_failure(code, Some(&storage))
+                    .unwrap()
+                    .action,
+                StorageRecoveryAction::PreserveAndDiagnose,
+                "damaged retained material cannot grant restoration"
+            );
+            std::fs::write(source.join("storage/master-key"), b"retained source").unwrap();
+        }
+        report.store(&storage).unwrap();
         // An extant file or unchanged length is insufficient: corruption of a
         // retained key must revoke the otherwise correct batch's restore advice.
         std::fs::write(source.join("storage/master-key"), b"corrupted value").unwrap();

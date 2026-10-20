@@ -25,7 +25,7 @@ pub(super) fn failure_report(
     if let Some(current) = current {
         return Some(current.clone());
     }
-    if let Some(report) = StorageRecovery::from_admission_code(code) {
+    if let Some(report) = StorageRecovery::read_for_admission_failure(code, storage) {
         return Some(report);
     }
     match code {
@@ -66,7 +66,7 @@ mod tests {
         )
         .unwrap();
         assert_eq!(report.cause, StorageRecoveryCause::Locked);
-        assert_eq!(report.action, StorageRecoveryAction::PreserveAndDiagnose);
+        assert_eq!(report.action, StorageRecoveryAction::RetryCurrent);
         assert!(
             report
                 .operator_guidance()
