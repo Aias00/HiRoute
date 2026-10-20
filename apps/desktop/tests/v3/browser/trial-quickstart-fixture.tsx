@@ -18,6 +18,7 @@ const catalog: { model_configuration_id: string; display_name: string; binding_i
 const featured = ['model.trial','model.openai.gpt-6-luna'].map(id=>({id:`featured/${id}`,kind:'new_model',model_configuration_id:id,headline:{en:id,zh:id},note:{en:'',zh:''},links:[],included_on:'2026-10-16'}));
 export const trialModel = catalog.find(m=>m.binding_ids.includes('binding/bailian/qwen-coder'))!;
 export const primaryModel = catalog.find(m=>m.binding_ids.includes('binding/codex/gpt-5.6-sol'))!;
+if (new URLSearchParams(location.search).has('feed-trial')) trialModel.origin = {kind:'feed',sequence:12,included_on:'2026-10-16'};
 Object.assign(window,{trialModel,primaryModel});
 export async function quickStartInvoke(command:string,payload:any,params:URLSearchParams) {
  if(command==='model_availability') return {featured:params.has('saved-only')?[]:featured,models:params.has('saved-only')?[]:catalog};

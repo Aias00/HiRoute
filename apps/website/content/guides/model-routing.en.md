@@ -13,7 +13,7 @@ Create or edit a plan in Smart routing, then choose How to use models:
 | Type | When to use it | Behavior |
 | --- | --- | --- |
 | Fixed model | You need a predictable candidate order | Tries candidates in order, skipping models that lack required capabilities or are temporarily unavailable |
-| Difficulty routing | You want regular models for simple tasks and primary models for complex work | Chooses regular or primary using this turn's degree result and any applicable previous-stage score |
+| Difficulty routing | You want to lower cost by assigning simple tasks to a cheaper Regular model, with Primary for complex work | Chooses regular or primary using this turn's degree result and any applicable previous-stage score |
 | Custom branches | Tasks such as writing and reviewing need different models | Selects a task category, then regular or primary models within that branch |
 | Free first | You want free models attempted first | Tries free candidates in a fixed order, then either stops or uses an optional primary fallback |
 

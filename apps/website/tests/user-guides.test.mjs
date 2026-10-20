@@ -71,3 +71,15 @@ test('decision guidance exposes current routing choices and released CLI paths i
     assert.doesNotMatch(cli, /(?:publishes|公开)\s*\d+\s*(?:Released|个)/);
   }
 });
+
+test('routing introductions use current names and condition the cost benefit on a cheaper Regular model', async () => {
+  for (const language of ['zh', 'en']) {
+    const routing = await renderUserGuide('model-routing', language);
+    assert.match(routing, language === 'zh' ? /更便宜的常规模型来降低成本/ : /lower cost.*cheaper Regular model/);
+    const cli = await renderUserGuide('cli', language);
+    const quickstart = await renderUserGuide('quickstart', language);
+    assert.doesNotMatch([routing, cli, quickstart].join('\n'), /智能省钱|省钱路由|省钱组合|Smart saving/i);
+    const linux = await renderUserGuide('install-linux', language);
+    assert.doesNotMatch(linux, /signed model information|signature verified|签名已校验/i);
+  }
+});

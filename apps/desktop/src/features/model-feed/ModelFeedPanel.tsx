@@ -27,7 +27,7 @@ export function ModelFeedPanel({ language, mutable = true, onChanged }: { langua
       if (live.current) { setStatus(result); setPreview(null); window.dispatchEvent(new Event('model-feed-changed')); onChanged?.(); }
     } catch (failure) {
       if (live.current) {
-        setError(safeDiagnosticCode(failure, 'MODEL_FEED_UNAVAILABLE').toLowerCase().includes('stale') ? (zh ? '影响范围已变化，请重新查看后再移除。' : 'The affected sources changed. Review the impact again.') : (zh ? '操作未完成，请重试。当前已验证的信息会保留。' : 'The action did not complete. Retry; validated information is retained.'));
+        setError(safeDiagnosticCode(failure, 'MODEL_FEED_UNAVAILABLE').toLowerCase().includes('stale') ? (zh ? '影响范围已变化，请重新查看后再移除。' : 'The affected sources changed. Review the impact again.') : (zh ? '操作未完成，请重试。已完成内容校验的信息会保留。' : 'The action did not complete. Retry; validated information is retained.'));
         setPreview(null);
       }
     } finally { active.current = false; if (live.current) setBusy(false); }

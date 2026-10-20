@@ -45,7 +45,7 @@ Quickstart 只读当前服务、准确的配置目标、可复用的模型来源
    ```
 
    只选部分模型时重复使用 `--model-ref REF`。`--all-selectable` 会固定为本次候选中的具体模型列表，不会自动扩展到后来发现的模型；没有可选模型时不能保存。准备凭据、保存、供应商检查和原生 Agent 的真实请求是不同效果。
-3. 用 `routing options --request-stdin` 输入 `{}`，获取当前绑定 ID。可选择 `--mode fixed_model --model BINDING_ID`，也可直接创建省钱组合：
+3. 用 `routing options --request-stdin` 输入 `{}`，获取当前绑定 ID。可选择 `--mode fixed_model --model BINDING_ID`，也可直接创建按难度分流组合：
 
    ```sh
    hiroute routing preview --name '日常省钱' --purpose '处理日常和复杂开发任务' --mode smart_saving --economy ECONOMY_BINDING --primary PRIMARY_BINDING --decision local_rules --apply-file route-apply.json

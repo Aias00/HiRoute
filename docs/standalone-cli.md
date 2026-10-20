@@ -1235,14 +1235,14 @@ Plans use the existing `routing preview/apply` transaction with `hiroute.plan-ed
 | `smart_saving` | `smart.classifier`, `smart.economy`, `smart.primary` and `smart.judgment` |
 | `custom_branches` | `branch_routing.classifier`, `branch_routing.branches`, `branch_routing.default_branch_id` and `branch_routing.judgment` |
 
-Smart saving and custom branches judge the group again for each new user message,
+Difficulty routing and custom branches judge the group again for each new user message,
 then prefer a valid held candidate only within that group. This is automatic.
 The optional deprecated `reselect_on_user_message` field is accepted as a no-op
 for supported older callers; new requests can omit it. Serialized legacy values
 may remain in readback to preserve sealed Plan and publication consistency.
 
 `classifier` is `{kind: "decision_service", service: <complete saved connection revision>}`
-for a decision model or custom extension. Only Smart saving may instead use
+for a decision model or custom extension. Only Difficulty routing may instead use
 `{kind: "local_rules"}`. Publication verifies the connection ID, revision and full content
 against its saved immutable version; there is no inline `rest` connection.
 

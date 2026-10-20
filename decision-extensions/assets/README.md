@@ -14,7 +14,7 @@ not browser IPC mocks. Computer Use produced the window images; JPEG-to-PNG
 conversion preserved their dimensions without repainting or compositing the UI.
 
 The stores contain constructed order-callback repair records: Qwen 3.8 Flash in
-the economy group scores 0.37, and Qwen 3.8 Max in the primary group scores 0.91.
+the regular group scores 0.37, and Qwen 3.8 Max in the primary group scores 0.91.
 There are two scored stages, a 0.5 competence floor and a 0.8 simple-probability
 threshold. The low first-stage score activates primary protection on the next
 stage. Three request records retain execution and assessment context without
