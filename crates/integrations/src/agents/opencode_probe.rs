@@ -98,9 +98,34 @@ impl OpenCodeCollaborationProbe {
         let (before, before_parts) = dependency_parts(&executable, native, &cli, &target)?;
         let resource_metadata = || {
             let path = native.skill_target();
-            path.ancestors()
-                .take(2)
-                .map(|path| std::fs::symlink_metadata(path).ok())
+            std::iter::once(executable.as_path())
+                .chain(path.ancestors().take(2))
+                .map(|path| {
+                    std::fs::symlink_metadata(path).ok().map(|metadata| {
+                        #[cfg(unix)]
+                        {
+                            use std::os::unix::fs::MetadataExt;
+                            format!(
+                                "{:?}",
+                                (
+                                    metadata.dev(),
+                                    metadata.ino(),
+                                    metadata.uid(),
+                                    metadata.gid(),
+                                    metadata.mode(),
+                                    metadata.nlink(),
+                                    metadata.len(),
+                                    metadata.mtime(),
+                                    metadata.mtime_nsec(),
+                                    metadata.ctime(),
+                                    metadata.ctime_nsec()
+                                )
+                            )
+                        }
+                        #[cfg(not(unix))]
+                        format!("{metadata:?}")
+                    })
+                })
                 .collect::<Vec<_>>()
         };
         let before_metadata = resource_metadata();
