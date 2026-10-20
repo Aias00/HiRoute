@@ -157,6 +157,10 @@ copy through Models → Model feed → Remove copy, where the preview can also t
 retrieval off. A published plan continues to execute its frozen models after removal;
 new model selection and default prices use the model facts still available.
 
+## Use HiRoute on an Omarchy desktop
+
+On an Omarchy desktop, an optional integration adds routed Codex and Claude Code entries to the app launcher, a HiRoute indicator on the bar and desktop notifications. See [Use HiRoute on Omarchy](/en/docs/omarchy/).
+
 ## 6. Uninstall
 
 Stop the service, then use the uninstall entry in the same official installer:
@@ -166,6 +170,6 @@ hiroute service stop --output json
 curl -fsSL https://hiroute.ai/install/standalone.py | python3 - uninstall
 ```
 
-Uninstall is limited to version directories, stable entry points, the service definition, and management Skills named by the installation marker. Runtime data is preserved. It refuses replaced stable links, service definitions, or Skills before deletion, but it does not audit every custom change inside an owned version directory; do not store your own files there.
+Uninstall is limited to version directories, stable entry points, the service definition, and management Skills named by the installation marker. Runtime data is preserved. It refuses replaced stable links, service definitions, or Skills before deletion, but it does not audit every custom change inside an owned version directory; do not store your own files there. When the Omarchy integration is enabled, uninstall disables it first and stops if that fails.
 
 Continue with [HiRoute CLI](/en/docs/cli/) for output, idempotent recovery, and command boundaries, or read [Smart model routing](/en/docs/model-routing/) and [Smart task routing](/en/docs/task-routing/) for the product mechanisms.

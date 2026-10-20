@@ -11,6 +11,7 @@ export const guidePages = {
   'install-macos': { zh: 'macOS 安装与首次启动', en: 'Install and open HiRoute on macOS' },
   'install-linux': { zh: 'Linux 无界面版安装', en: 'Install HiRoute headless on Linux' },
   'install-windows': { zh: 'Windows 桌面版安装', en: 'Install HiRoute Desktop on Windows' },
+  omarchy: { zh: '在 Omarchy 上使用 HiRoute', en: 'Use HiRoute on Omarchy' },
   'model-routing': { zh: '使用智能模型路由', en: 'Use smart model routing' },
   'task-routing': { zh: '使用智能任务路由', en: 'Use smart task routing' },
   cli: { zh: 'HiRoute CLI', en: 'HiRoute CLI' },

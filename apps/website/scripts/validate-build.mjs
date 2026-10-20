@@ -12,6 +12,7 @@ const required = [
   'docs/index.html', 'en/docs/index.html',
   'docs/install-macos/index.html', 'en/docs/install-macos/index.html',
   'docs/install-linux/index.html', 'en/docs/install-linux/index.html',
+  'docs/omarchy/index.html', 'en/docs/omarchy/index.html',
   'docs/model-routing/index.html', 'en/docs/model-routing/index.html',
   'docs/task-routing/index.html', 'en/docs/task-routing/index.html',
   'docs/cli/index.html', 'en/docs/cli/index.html',

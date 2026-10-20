@@ -71,3 +71,30 @@ test('decision guidance exposes current routing choices and released CLI paths i
     assert.doesNotMatch(cli, /(?:publishes|公开)\s*\d+\s*(?:Released|个)/);
   }
 });
+
+test('the Omarchy guide uses the installed integration help and states the account boundary', async () => {
+  const source = await fs.readFile(path.join(root, '../../crates/cli/src/host_commands/omarchy.rs'), 'utf8');
+  const help = JSON.parse(`"${source.match(/const HELP: &str = "((?:[^"\\]|\\.)*)";/)[1]}"`);
+  const usage = help.split('\n').filter(line => line.startsWith('  hiroute integrations omarchy '));
+  const manifest = JSON.parse(await fs.readFile(path.join(root, '../../contracts/cli/manifest.v1.json'), 'utf8'));
+  for (const language of ['zh', 'en']) {
+    const markdown = await fs.readFile(path.join(root, 'content/guides', `omarchy.${language}.md`), 'utf8');
+    const commands = [...markdown.matchAll(/hiroute integrations omarchy ([a-z-]+)((?: --?[a-z-]+(?: [a-z-]+)?)*)/g)];
+    assert.ok(commands.length >= 5, `${language} guide should show the integration commands`);
+    for (const [, verb, options] of commands) {
+      const line = usage.find(entry => entry.startsWith(`  hiroute integrations omarchy ${verb}`));
+      assert.ok(line, `${language} guide uses unknown verb ${verb}`);
+      // Arguments after the exact -- delimiter belong to the native Agent.
+      for (const flag of `${options} `.split(' -- ')[0].match(/--[a-z-]+/g) ?? []) assert.ok(line.includes(flag), `${verb} has no ${flag}`);
+    }
+    for (const commandId of ['agent.launch', 'sessions.timeline']) {
+      const command = manifest.commands.find(entry => entry.command_id === commandId);
+      assert.equal(command?.lifecycle, 'released');
+      assert.ok(markdown.includes(`hiroute ${command.path.join(' ')}`), `${language} guide is missing ${commandId}`);
+    }
+    const linux = await renderUserGuide('install-linux', language);
+    assert.ok(linux.includes(`href="${guideRoute('omarchy', language)}"`), `${language} Linux guide must link the Omarchy guide`);
+  }
+  assert.match(await renderUserGuide('omarchy', 'en'), /They do not follow Omarchy&#39;s active account|They do not follow Omarchy's active account/);
+  assert.match(await renderUserGuide('omarchy', 'zh'), /不跟随 Omarchy 当前账户/);
+});

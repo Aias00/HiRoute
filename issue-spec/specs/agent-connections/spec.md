@@ -593,6 +593,97 @@ to native remains a separate labelled action with its existing ownership rules.
 Source SPEC comments:
 - https://github.com/higress-group/HiRoute/issues/140#issuecomment-6235502571
 
+### Requirement: Routed launch checks readiness and never falls back to the native agent silently
+
+HiRoute SHALL provide a public routed launch for Codex and Claude Code. It starts the
+native agent executable through that agent's HiRoute-owned configuration: Codex's
+independent profile, or Claude Code's independent launch mode. It SHALL run in the
+caller's working directory and terminal, pass caller arguments through, and reject
+only arguments that would replace HiRoute's provider, Gateway, model mapping or
+authentication. Rejected arguments SHALL be named in the error. Before starting the
+agent, it SHALL check three things: the HiRoute service is ready; the agent's routed
+configuration is applied and current; and every Plan the configuration maps is
+published. When a check fails, it SHALL NOT start the agent. It SHALL state the
+failed check and its repair action, and exit with a documented reserved status that
+the routed launch uses only for preflight failures. In interactive use it MAY then
+offer to start the native agent with the same arguments, but only after explicit user
+confirmation, and the native session SHALL be labelled as not routed. Non-interactive
+use SHALL never start the native agent. A routed launch SHALL NOT change native
+configuration, Agent connections or Plans. Once the agent has started, its exit
+status and signal handling SHALL be preserved.
+
+#### Scenario: Ready launch preserves arguments
+
+- **WHEN** the service is ready, Codex's independent profile is applied and its Plan is published, and the user runs the routed launch with an approval option and a prompt
+- **THEN** Codex starts with the HiRoute profile, receives the same approval option and prompt, and its exit status is returned unchanged.
+
+#### Scenario: Service not running
+
+- **WHEN** the service is stopped and the user starts the routed launch interactively
+- **THEN** no agent starts until the user confirms. The message names the stopped service and the command that starts it, and only an explicit confirmation starts the native agent, labelled as not routed.
+
+#### Scenario: Non-interactive failure
+
+- **WHEN** the routed configuration is missing and the routed launch runs without a terminal
+- **THEN** it exits with the reserved preflight status and starts no agent.
+
+#### Scenario: Routing override rejected
+
+- **WHEN** the user passes an argument that would replace the Claude Code settings source or model provider
+- **THEN** the launch is refused before the agent starts and the error names the rejected argument.
+
+Source SPEC comments:
+- https://github.com/higress-group/HiRoute/issues/164#issuecomment-6262811592
+
+### Requirement: Claude Code independent launch mode leaves ordinary sessions native
+
+The owner SHALL be able to choose an independent launch mode when configuring Claude
+Code for one Claude configuration scope, whatever credential source Claude uses. This
+mode makes the existing managed-launch activation, which writes no native
+configuration, an explicit choice instead of an automatic fallback. In this mode
+HiRoute SHALL keep the Opus, Sonnet and Haiku preset mappings, the Gateway endpoint
+and the connection credential in HiRoute-owned state. It SHALL apply them only to
+sessions started by the routed launch, as a per-launch overlay that takes precedence
+over user and project settings for those fields. It SHALL NOT write Claude's user
+settings, project settings or stored credentials. Ordinary `claude` sessions SHALL
+remain native, including sessions of other accounts whose settings files link to the
+same user settings. Independent mode and the existing ordinary connection SHALL be
+mutually exclusive in one scope, including pending operations. Switching requires
+completing the other mode's restore or disable first. Configure, preview, apply,
+status, disable and recovery SHALL use the existing reversible operation contracts.
+Preset mapping, return to previous routing and the trial quick start SHALL accept
+independent mode as a target. A process, project or managed-policy setting that would
+bypass the overlay for routing or authentication SHALL block the routed launch with
+an explicit reason. It SHALL NOT produce an unrouted session presented as routed.
+Disabling independent mode SHALL leave no native file to restore.
+
+#### Scenario: Native sessions stay native
+
+- **WHEN** independent mode is applied with Opus mapped to a published Plan and the user starts ordinary `claude` in another terminal
+- **THEN** the ordinary session uses its native configuration and credentials, and Claude's user settings file is byte-for-byte unchanged.
+
+#### Scenario: Routed session uses the mapping
+
+- **WHEN** the user starts the routed launch for Claude Code and selects the Opus preset
+- **THEN** requests from that session reach the HiRoute Gateway under the mapped Plan and are recorded under that Agent connection.
+
+#### Scenario: Modes are exclusive
+
+- **WHEN** the ordinary Claude Code connection is active in the same scope and the owner previews independent mode
+- **THEN** the preview is refused with the active ordinary connection named and its restore action offered.
+
+#### Scenario: Project override blocks the launch
+
+- **WHEN** the current project's Claude settings set a different API base URL
+- **THEN** the routed launch refuses to start, names the overriding setting source, and does not start an unrouted session.
+
+#### Scenario: Trial quick start targets the mode
+
+- **WHEN** the owner completes the trial quick start and selects Claude Code in independent mode
+- **THEN** the flow maps the selected presets in HiRoute-owned state and writes no Claude settings file.
+
+Source SPEC comments:
+- https://github.com/higress-group/HiRoute/issues/164#issuecomment-6262813111
 ## Implementation references
 
 - [Shared settings transaction](../../../crates/application/src/agent_connection/settings/transaction.rs)
@@ -601,3 +692,9 @@ Source SPEC comments:
   and [legacy-tail scenarios](../../../crates/daemon/src/control/runtime/settings_profile_legacy_tests.rs).
 - [Saved native-model journey](../../../crates/daemon/tests/support/additional_model_product.py)
   and [real collaboration journey](../../../crates/daemon/tests/support/collaboration_product.py).
+- [Routed launch](../../../crates/cli/src/routed_launch.rs) with its
+  [readiness check](../../../crates/application/src/agent_connection/routed_launch.rs),
+  and the [Claude independent launch state](../../../crates/application/src/agent_connection/claude_launch_state.rs)
+  with its [one-slot guard](../../../crates/daemon/src/control/runtime/settings_claude_slot.rs).
+- [Routed launch journey](../../../crates/daemon/tests/support/routed_launch_product.py)
+  and [Claude independent-mode journey](../../../crates/daemon/tests/support/claude_independent_product.py).

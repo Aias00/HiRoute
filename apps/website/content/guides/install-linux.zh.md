@@ -154,6 +154,10 @@ hiroute models feed settings apply --retrieval off
 并同时关闭自动获取。移除后，已发布计划仍使用发布时冻结的模型执行；新选择和默认价格
 以当前仍可用的模型信息为准。
 
+## 在 Omarchy 桌面上使用
+
+在 Omarchy 桌面上，可选的集成会在应用启动器中添加经由路由的 Codex 和 Claude Code 入口，在状态栏添加 HiRoute 指示，并发送桌面通知。详见 [在 Omarchy 上使用 HiRoute](/docs/omarchy/)。
+
 ## 6. 卸载
 
 先停止服务，再运行同一份官方安装器的卸载入口：
@@ -163,6 +167,6 @@ hiroute service stop --output json
 curl -fsSL https://hiroute.ai/install/standalone.py | python3 - uninstall
 ```
 
-卸载会按安装记录删除对应的程序版本目录、命令入口、服务配置和管理 Skill，保留运行数据。如果命令入口、服务配置或 Skill 已被其他程序替换，安装器会停止删除，避免误删。版本目录会整体移除，请将自己的文件保存在其他位置。
+卸载会按安装记录删除对应的程序版本目录、命令入口、服务配置和管理 Skill，保留运行数据。如果命令入口、服务配置或 Skill 已被其他程序替换，安装器会停止删除，避免误删。版本目录会整体移除，请将自己的文件保存在其他位置。启用了 Omarchy 集成时，卸载会先停用集成；停用失败时卸载会停止。
 
 下一步阅读 [HiRoute CLI](/docs/cli/) 了解输出、幂等恢复和命令边界，或阅读 [智能模型路由](/docs/model-routing/) 与 [智能任务路由](/docs/task-routing/) 了解产品机制。

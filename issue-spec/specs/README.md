@@ -25,11 +25,12 @@ and performance evidence belongs to revision-bound validation records.
 | Try models with Regular/Primary routing | [Difficulty routing](smart-saving-routing/spec.md) | Thresholds, trust levels, evidence gates and per-turn recovery |
 | Connect a decision model or define categories | [Decision services](decision-services/spec.md) | Saved revisions, System One/custom v1, category/degree/competence policy |
 | Execute a model request with bounded relay | [Request routing](request-routing/spec.md) | Grant/Fixed scope, native controls, expressibility, continuity, pre-body relay |
-| Configure native coding Agents reversibly | [Agent connections](agent-connections/spec.md) | Independent model/Skill facets, provider differences, grant/restore ownership |
+| Configure native coding Agents reversibly | [Agent connections](agent-connections/spec.md) | Independent model/Skill facets, provider differences, grant/restore ownership, routed launch, Claude independent mode |
 | Discover authorized models or delegate by purpose | [Agent plan discovery](agent-plan-discovery/spec.md) | Model directory versus instance Worker directory and collaboration guidance |
 | Start, inspect, cancel, or continue delegated work | [Worker delegation](agent-delegation/spec.md) | Admission, frozen execution, Harness differences, capacity, progress, exact session |
 | Read conversations and execution evidence | [Session history](session-history/spec.md) | Native correlation, live search, content visibility, receipts, quality stages |
-| Inspect consumption and value | [Usage and value](usage-and-savings/spec.md) | Actual usage, currencies, cache ratio, API-equivalent estimates, retained aggregates |
+| Inspect consumption and value | [Usage and value](usage-and-savings/spec.md) | Actual usage, currencies, cache ratio, API-equivalent estimates, retained aggregates, token share outside the subscription |
+| Start and watch routed Agents on an Omarchy desktop | [Omarchy integration](omarchy-integration/spec.md) | Opt-in owned files, routed launcher entries, bar indicator, notifications, console entry |
 | Delete local content or recover supported stores | [Local data](local-data-and-diagnostics/spec.md) | Retention, visibility/reclamation, coherent backups/migration, OS-access boundary |
 | Configure and read safe runtime diagnostics | [Diagnostics](runtime-diagnostic-logging/spec.md) | Applied level, closed typed failures, safe correlation, bounded local logs |
 

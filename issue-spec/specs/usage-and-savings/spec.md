@@ -154,9 +154,74 @@ HiRoute SHALL provide bounded backend-ranked session and request spending querie
 Source SPEC comments:
 - https://github.com/higress-group/HiRoute/issues/125#issuecomment-6229105150
 
+### Requirement: Token share outside the subscription is reported from recorded usage
+
+HiRoute SHALL provide a read view, through the public CLI and the shared product UI,
+of the tokens handled per routing group and per billing class of the serving source:
+subscription, paid, free and unknown. The billing class is the one frozen with the
+published route revision that served each attempt. The view covers a selected period,
+either today in the disclosed local timezone or the last seven days, with an optional
+Agent filter, and is computed from recorded attempt usage. The headline SHALL be the
+share of known tokens handled by paid or free sources, among known tokens with a
+known billing class for requests routed by HiRoute in the period. Tokens served by an
+unknown billing class SHALL be reported separately and excluded from the headline.
+The token basis SHALL be disclosed. It counts input tokens, including cache reads and
+cache writes, plus output tokens, and each component SHALL be available. Requests
+with unknown usage SHALL be counted and excluded from the share, never treated as
+zero. Consumption from a failed attempt counts once, as in existing usage
+aggregation. Whether a subscription was used SHALL be decided from recorded requests,
+including requests whose usage is unknown, and never from token totals. A request has
+unknown usage only when no usage was recorded for it; a recorded zero is known usage.
+The headline SHALL be the first of these that applies, and only the last reports a
+percentage: when the period has no routed request, it says so; when routed requests
+exist but none was served by a subscription-backed source or by a source of unknown
+billing class, it says that no subscription was used; when subscription-backed
+requests exist but none of them has recorded usage, it says that subscription usage
+is unknown; when the known tokens of subscription, paid and free sources total zero,
+it says that there is no comparable usage; otherwise it reports the share and
+discloses the number of requests with unknown usage. The share of agent turns by
+group SHALL be reported as secondary information. The view SHALL NOT present the
+share as remaining quota, quota extension, cost or savings. It SHALL state that token
+counts from different models are an approximate comparison.
+
+#### Scenario: Mixed day
+
+- **WHEN** today Regular handled 3.1M known tokens through a paid API-key source and Primary handled 6.9M through a subscription source
+- **THEN** the headline reports 31% of tokens outside the subscription with the disclosed basis, and the components and turn share are available.
+
+#### Scenario: Unknown usage is disclosed
+
+- **WHEN** two requests in the period have no recorded usage
+- **THEN** they are reported as unknown and excluded from the share, and the share is computed from known tokens only.
+
+#### Scenario: No subscription in the period
+
+- **WHEN** every routed request in the period used paid or free sources
+- **THEN** the headline states that no subscription-backed source was used instead of reporting 100%.
+
+#### Scenario: Subscription usage is unknown
+
+- **WHEN** today a paid source handled requests with 2M known tokens and a subscription-backed source handled one request with no recorded usage
+- **THEN** the headline states that subscription usage is unknown, neither claims that no subscription was used nor reports 100%, and the request with unknown usage is disclosed.
+
+#### Scenario: Only an unknown billing class
+
+- **WHEN** the only routed requests today were served by a source of unknown billing class and have recorded usage
+- **THEN** the headline states that there is no comparable usage, reports no percentage, and discloses the unknown-class tokens.
+
+#### Scenario: Agent filter
+
+- **WHEN** the user filters the seven-day view to Codex
+- **THEN** only requests attributed to Codex sessions contribute, and the filter is shown with the result.
+
+Source SPEC comments:
+- https://github.com/higress-group/HiRoute/issues/164#issuecomment-6262814631
 ## Implementation references
 
 - [Value projection](../../../crates/observation/src/value/mod.rs),
   [usage archive](../../../crates/observation/src/valuation/usage_archive.rs), and
   [value contract scenarios](../../../crates/observation/src/store/tests/value_contract.rs).
 - [Source price types](../../../crates/domain/src/compute/source_price/mod.rs).
+- [Token share query](../../../crates/observation/src/query_v2/token_share.rs),
+  its [control projection](../../../crates/application/src/observation_query/control/v2/token_share.rs)
+  and [token share scenarios](../../../crates/observation/src/store/tests/token_share.rs).
