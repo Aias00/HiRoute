@@ -43,13 +43,10 @@ pub(crate) struct ServiceStatus {
 
 pub(crate) fn recovery() -> Result<serde_json::Value, ServiceFailure> {
     let layout = StandaloneLayout::from_environment().map_err(|_| ServiceFailure::Unavailable)?;
-    let record = hiroute_host_runtime::StorageRecovery::read(&layout.storage_root())
-        .unwrap_or_else(|_| {
-            Some(hiroute_host_runtime::StorageRecovery::new(
-                hiroute_host_runtime::StorageRecoveryCause::UnknownState,
-                hiroute_host_runtime::StorageRecoveryAction::PreserveAndDiagnose,
-            ))
-        });
+    let record = hiroute_host_runtime::StorageRecovery::read_for_failed_startup(
+        &layout.storage_root(),
+        &layout.diagnostics_root(),
+    );
     let instructions = record.as_ref().map(|record| {
         let mut text = record.operator_guidance().to_owned();
         if let Some(space) = &record.storage_space {

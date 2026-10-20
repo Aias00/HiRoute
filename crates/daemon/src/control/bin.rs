@@ -288,7 +288,27 @@ fn diagnostics_elapsed_ms(diagnostics: &DiagnosticRuntime) -> u64 {
 
 fn classify_role_all_error(error: &RoleAllError) -> StartupFailureCode {
     match error {
-        RoleAllError::StorageRecovery(_) => StartupFailureCode::UpgradeStorageFailed,
+        RoleAllError::StorageRecovery(recovery) => {
+            if recovery.action == hiroute_host_runtime::StorageRecoveryAction::PreserveAndDiagnose {
+                match recovery.cause {
+                    hiroute_host_runtime::StorageRecoveryCause::AccessDenied => {
+                        StartupFailureCode::StorageAccessDenied
+                    }
+                    hiroute_host_runtime::StorageRecoveryCause::Locked => {
+                        StartupFailureCode::StorageLocked
+                    }
+                    hiroute_host_runtime::StorageRecoveryCause::MissingKey => {
+                        StartupFailureCode::StorageKeyUnavailable
+                    }
+                    hiroute_host_runtime::StorageRecoveryCause::UnsupportedFormat => {
+                        StartupFailureCode::UpgradeSourceUnsupported
+                    }
+                    _ => StartupFailureCode::UpgradeStorageFailed,
+                }
+            } else {
+                StartupFailureCode::UpgradeStorageFailed
+            }
+        }
         RoleAllError::InvalidConfiguration => StartupFailureCode::InvalidConfiguration,
         RoleAllError::StandaloneProxyUnavailable => StartupFailureCode::DependencyUnavailable,
         RoleAllError::JoinTimeout(_) => StartupFailureCode::Internal,

@@ -52,9 +52,10 @@ impl ShellState {
                 hiroute_host_runtime::StandaloneLayout::from_environment()
                     .ok()
                     .and_then(|layout| {
-                        hiroute_host_runtime::StorageRecovery::read(&layout.storage_root())
-                            .ok()
-                            .flatten()
+                        hiroute_host_runtime::StorageRecovery::read_for_failed_startup(
+                            &layout.storage_root(),
+                            &layout.diagnostics_root(),
+                        )
                     })
             } else {
                 None

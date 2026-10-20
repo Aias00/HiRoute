@@ -131,20 +131,42 @@ pub async fn startup_status(
     if let Some(code) = state.1.error.get() {
         return Ok(StartupReport {
             state: "failed",
-            storage_recovery: matches!(
-                code.as_str(),
-                "DAEMON_STORAGE_UNREADABLE"
-                    | "DAEMON_UPGRADE_SOURCE_UNSUPPORTED"
-                    | "DAEMON_UPGRADE_STORAGE_FAILED"
-            )
-            .then(|| {
-                state.1.data_root.as_ref().and_then(|root| {
-                    hiroute_host_runtime::StorageRecovery::read(&root.join("storage"))
-                        .ok()
-                        .flatten()
+            storage_recovery: match code.as_str() {
+                "DAEMON_UPGRADE_SOURCE_UNSUPPORTED" => {
+                    Some(hiroute_host_runtime::StorageRecovery::new(
+                        hiroute_host_runtime::StorageRecoveryCause::UnsupportedFormat,
+                        hiroute_host_runtime::StorageRecoveryAction::PreserveAndDiagnose,
+                    ))
+                }
+                "DAEMON_STORAGE_ACCESS_DENIED" => Some(hiroute_host_runtime::StorageRecovery::new(
+                    hiroute_host_runtime::StorageRecoveryCause::AccessDenied,
+                    hiroute_host_runtime::StorageRecoveryAction::PreserveAndDiagnose,
+                )),
+                "DAEMON_STORAGE_KEY_UNAVAILABLE" => {
+                    Some(hiroute_host_runtime::StorageRecovery::new(
+                        hiroute_host_runtime::StorageRecoveryCause::MissingKey,
+                        hiroute_host_runtime::StorageRecoveryAction::PreserveAndDiagnose,
+                    ))
+                }
+                "DAEMON_STORAGE_LOCKED" => Some(hiroute_host_runtime::StorageRecovery::new(
+                    hiroute_host_runtime::StorageRecoveryCause::Locked,
+                    hiroute_host_runtime::StorageRecoveryAction::PreserveAndDiagnose,
+                )),
+                _ => matches!(
+                    code.as_str(),
+                    "DAEMON_STORAGE_UNREADABLE"
+                        | "DAEMON_UPGRADE_SOURCE_UNSUPPORTED"
+                        | "DAEMON_UPGRADE_STORAGE_FAILED"
+                )
+                .then(|| {
+                    state.1.data_root.as_ref().and_then(|root| {
+                        hiroute_host_runtime::StorageRecovery::read(&root.join("storage"))
+                            .ok()
+                            .flatten()
+                    })
                 })
-            })
-            .flatten(),
+                .flatten(),
+            },
             code: Some(code.clone()),
             recovery_available: state.1.data_root.as_ref().is_some_and(|root| {
                 root.is_absolute()

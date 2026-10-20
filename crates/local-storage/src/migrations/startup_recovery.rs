@@ -96,6 +96,41 @@ mod tests {
     use super::*;
     use hiroute_host_runtime::{StorageRecovery, StorageRecoveryCause as Cause};
     #[test]
+    fn early_writer_and_root_refusals_report_the_attempt_without_replacing_writer_facts() {
+        let directory = crate::test_tempdir().unwrap();
+        let root = directory.path().join("storage");
+        let stores = crate::LocalStorageSet::open_for_daemon_startup(&root).unwrap();
+        let prior = StorageRecovery::new(Cause::UnknownState, Action::PreserveAndDiagnose);
+        prior.store(&root).unwrap();
+        let before = fs::read(root.join(hiroute_host_runtime::STORAGE_RECOVERY_FILE)).unwrap();
+        let (sender, receiver) = std::sync::mpsc::channel();
+        let options = crate::StorageStartupOptions {
+            startup_failure: Some(sender),
+            ..Default::default()
+        };
+        let error = crate::LocalStorageSet::open_for_daemon_startup_with_options(&root, &options)
+            .err()
+            .unwrap();
+        assert_eq!(error.recovery().cause, Cause::Locked);
+        let report = receiver.try_recv().unwrap();
+        assert_eq!(report.cause, Cause::Locked);
+        assert_eq!(report.action, Action::PreserveAndDiagnose);
+        assert_eq!(
+            fs::read(root.join(hiroute_host_runtime::STORAGE_RECOVERY_FILE)).unwrap(),
+            before
+        );
+        drop(stores);
+        let blocked = directory.path().join("not-a-directory");
+        hiroute_platform::durable::write_private_new(&blocked, b"preserve foreign input").unwrap();
+        assert!(
+            crate::LocalStorageSet::open_for_daemon_startup_with_options(&blocked, &options)
+                .is_err()
+        );
+        assert_eq!(receiver.try_recv().unwrap().cause, Cause::AccessDenied);
+        assert_eq!(fs::read(blocked).unwrap(), b"preserve foreign input");
+    }
+
+    #[test]
     fn a_verified_old_source_does_not_make_current_corruption_resumable() {
         let directory = crate::test_tempdir().unwrap();
         let root = directory.path().join("storage");

@@ -426,12 +426,14 @@ pub fn start_role_all(config: RoleAllConfig) -> Result<RoleAllHandle, RoleAllErr
     config
         .diagnostics
         .stage_begin(StartupStage::PublicationReconcile);
+    let (storage_failure, storage_failures) = std::sync::mpsc::channel();
     let runtime = ProductionControlRuntime::prepare_for_role_all_with_codex_desktop_engine(
         &config.storage_root,
         catalog,
         cpa.clone(),
         config.codex_desktop_engine.clone(),
         hiroute_local_storage::StorageStartupOptions {
+            startup_failure: Some(storage_failure),
             gateway_lkg: Some(config.gateway_lkg.clone()),
             upgrade_progress: config.upgrade_progress.clone(),
             recovery_package: std::env::var_os("HIROUTE_RECOVERY_PACKAGE")
@@ -439,12 +441,10 @@ pub fn start_role_all(config: RoleAllConfig) -> Result<RoleAllHandle, RoleAllErr
             ..Default::default()
         },
     )
-    .map_err(
-        |error| match hiroute_host_runtime::StorageRecovery::read(&config.storage_root) {
-            Ok(Some(recovery)) => RoleAllError::StorageRecovery(recovery),
-            _ => RoleAllError::Component("Storage", error),
-        },
-    );
+    .map_err(|error| match storage_failures.try_iter().last() {
+        Some(recovery) => RoleAllError::StorageRecovery(recovery),
+        None => RoleAllError::Component("Storage", error),
+    });
     let runtime = match runtime {
         Ok(runtime) => {
             config

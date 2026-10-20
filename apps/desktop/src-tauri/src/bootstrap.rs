@@ -74,6 +74,9 @@ fn decode_startup_failure(value: &serde_json::Value) -> Result<Option<&'static s
     }
     Ok(Some(match failure.code {
         StartupFailureCode::StorageUnavailable => "DAEMON_STORAGE_UNREADABLE",
+        StartupFailureCode::StorageAccessDenied => "DAEMON_STORAGE_ACCESS_DENIED",
+        StartupFailureCode::StorageLocked => "DAEMON_STORAGE_LOCKED",
+        StartupFailureCode::StorageKeyUnavailable => "DAEMON_STORAGE_KEY_UNAVAILABLE",
         StartupFailureCode::UpgradeSourceUnsupported => "DAEMON_UPGRADE_SOURCE_UNSUPPORTED",
         StartupFailureCode::UpgradeStorageFailed => "DAEMON_UPGRADE_STORAGE_FAILED",
         StartupFailureCode::ReleaseFactsInvalid => "DAEMON_RELEASE_INVALID",

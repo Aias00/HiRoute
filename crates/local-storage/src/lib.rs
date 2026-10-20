@@ -46,6 +46,16 @@ pub struct StorageStartupOptions {
     pub recovery_package: Option<std::path::PathBuf>,
     pub upgrade_progress:
         Option<std::sync::mpsc::Sender<hiroute_host_runtime::StorageUpgradePhase>>,
+    /// Per-attempt typed facts also reach the caller when admission cannot
+    /// acquire the writer lock or write a recovery file.
+    pub startup_failure: Option<std::sync::mpsc::Sender<hiroute_host_runtime::StorageRecovery>>,
+}
+impl StorageStartupOptions {
+    pub fn report_failure(&self, recovery: hiroute_host_runtime::StorageRecovery) {
+        if let Some(sender) = &self.startup_failure {
+            let _ = sender.send(recovery);
+        }
+    }
 }
 
 impl LocalStorageSet {
@@ -56,8 +66,8 @@ impl LocalStorageSet {
         &self,
         storage: &Path,
         cause: hiroute_host_runtime::StorageRecoveryCause,
-    ) {
-        let _ = migrations::startup_recovery::publish_failure(
+    ) -> hiroute_host_runtime::StorageRecovery {
+        migrations::startup_recovery::publish_failure(
             storage,
             LocalStorageError::InvalidData.with_recovery(
                 cause,
@@ -70,7 +80,8 @@ impl LocalStorageSet {
                     hiroute_host_runtime::StorageRecoveryAction::PreserveAndDiagnose
                 },
             ),
-        );
+        )
+        .recovery()
     }
 
     /// Provisional read-only checks; startup repeats admission under its writer lock.
@@ -139,19 +150,23 @@ impl LocalStorageSet {
         options: &StorageStartupOptions,
     ) -> Result<Self, LocalStorageError> {
         let storage_root = storage_root.as_ref();
-        migrations::prepare_storage_root(storage_root)?;
-        let startup_lock = std::sync::Arc::new(migrations::acquire_startup_lock(storage_root)?);
-        hiroute_host_runtime::StorageRecovery::clear(storage_root)?;
-        let result = migrations::validate_startup_format(storage_root).and_then(|()| {
-            Self::open_locked_stores(
-                authority,
-                barrier,
-                storage_root,
-                startup_lock.clone(),
-                Some(options),
-            )
-        });
-        result.map_err(|error| migrations::startup_recovery::publish_failure(storage_root, error))
+        let result = (|| {
+            migrations::prepare_storage_root(storage_root)?;
+            let startup_lock = std::sync::Arc::new(migrations::acquire_startup_lock(storage_root)?);
+            hiroute_host_runtime::StorageRecovery::clear(storage_root)?;
+            let result = migrations::validate_startup_format(storage_root).and_then(|()| {
+                Self::open_locked_stores(
+                    authority,
+                    barrier,
+                    storage_root,
+                    startup_lock.clone(),
+                    Some(options),
+                )
+            });
+            result
+                .map_err(|error| migrations::startup_recovery::publish_failure(storage_root, error))
+        })();
+        result.inspect_err(|error: &LocalStorageError| options.report_failure(error.recovery()))
     }
 
     // SQL coordinator component harness only: unsupported formats never pass through the
@@ -707,6 +722,12 @@ impl LocalStorageError {
             Self::Permission => StorageRecovery::new(C::AccessDenied, A::PreserveAndDiagnose),
             Self::Locked | Self::Crypto => {
                 StorageRecovery::new(C::MissingKey, A::PreserveAndDiagnose)
+            }
+            Self::Io(e)
+                if e.kind() == std::io::ErrorKind::WouldBlock
+                    || (cfg!(windows) && matches!(e.raw_os_error(), Some(32 | 33))) =>
+            {
+                StorageRecovery::new(C::Locked, A::PreserveAndDiagnose)
             }
             Self::Io(e) if e.kind() == std::io::ErrorKind::PermissionDenied => {
                 StorageRecovery::new(C::AccessDenied, A::PreserveAndDiagnose)

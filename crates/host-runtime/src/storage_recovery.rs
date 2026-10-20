@@ -8,6 +8,7 @@ use std::{
 
 pub const STORAGE_RECOVERY_SCHEMA: &str = "hiroute.storage-startup-recovery/v1";
 pub const STORAGE_RECOVERY_FILE: &str = "startup-recovery.json";
+mod admission;
 mod batch;
 
 #[derive(Clone, Debug, Deserialize, Serialize, Eq, PartialEq)]
