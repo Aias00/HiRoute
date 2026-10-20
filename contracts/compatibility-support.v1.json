@@ -287,6 +287,9 @@
     "hiroute.observation.serialization-failure/v1",
     "hiroute.observation.valuation-summary/v2",
     "hiroute.observation.value-report/v2",
+    "hiroute.opencode-additional-model/v1",
+    "hiroute.opencode-collaboration/v1",
+    "hiroute.opencode-native-restore/v2",
     "hiroute.operation-cancel-request/v1",
     "hiroute.operation-event/v1",
     "hiroute.operation-idempotency-lookup/v1",
@@ -373,6 +376,7 @@
     "hiroute.settings-hermes-plugin-file/v1",
     "hiroute.settings-login-item/v1",
     "hiroute.settings-model-publication/v1",
+    "hiroute.settings-opencode-model-file/v1",
     "hiroute.settings-pi-model-file/v1",
     "hiroute.settings-qoder-model-file/v1",
     "hiroute.settings-service-completion/v2",
@@ -459,11 +463,7 @@
     "hiroute.worker-result-request/v1",
     "hiroute.worker-settings/v1",
     "hiroute.worker-status-request/v1",
-    "hiroute.worker-wait-request/v1",
-    "hiroute.opencode-additional-model/v1",
-    "hiroute.opencode-collaboration/v1",
-    "hiroute.opencode-native-restore/v2",
-    "hiroute.settings-opencode-model-file/v1"
+    "hiroute.worker-wait-request/v1"
   ],
   "subjects": [
     {
