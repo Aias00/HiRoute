@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Real Git/worktree/file lifecycle with fake build tools, NOT product E2E."""
+"""Build/lease regressions with fake tools and one bounded real Rust manifest consumer."""
 import importlib.util
 import json
 import os
@@ -16,6 +16,8 @@ sys.dont_write_bytecode = True
 spec = importlib.util.spec_from_file_location("builds", Path(__file__).with_name("pilot-builds.py"))
 m = importlib.util.module_from_spec(spec)
 spec.loader.exec_module(m)
+REAL_RUSTC = shutil.which('rustc')
+REAL_PATH = os.environ.get('PATH', '')
 
 
 class Lifecycle(unittest.TestCase):
@@ -32,6 +34,9 @@ class Lifecycle(unittest.TestCase):
         (self.repo / 'rust-toolchain.toml').write_text('[toolchain]\nchannel = "fixture"\n')
         (self.repo / 'scripts').mkdir()
         (self.repo / 'scripts/desktop-pilot.py').write_text('import json,sys\nprint(json.dumps({"build":{"frontendDist":sys.argv[-1]}}))\n')
+        native = self.repo / 'apps/desktop/src-tauri'
+        native.mkdir(parents=True)
+        (native / 'development-cpa-artifacts.v1.json').write_text('{"fixture":"default"}\n')
         m.local.git(self.repo, 'add', '.')
         m.local.git(self.repo, 'commit', '-qm', 'fixture')
         m.local.git(self.repo, 'remote', 'add', 'origin', str(self.repo))
@@ -48,6 +53,10 @@ if name=='cargo' and 'metadata' in sys.argv:
  print(json.dumps({'target_directory':str(root/'target')}));sys.exit(0)
 if name=='cargo':
  p=root/'target/debug';p.mkdir(parents=True)
+ manifest=os.environ.get('HIROUTE_CPA_MANIFEST')
+ manifest=pathlib.Path(manifest) if manifest is not None else root/'apps/desktop/src-tauri/development-cpa-artifacts.v1.json'
+ if not manifest.is_absolute(): manifest=root/'apps/desktop/src-tauri'/manifest
+ (p/'compiled-cpa.json').write_bytes(manifest.read_bytes())
  for name in ('hiroute-desktop','hirouted','hiroute'):
   (p/name).write_text('#!/bin/sh\\nexit 0\\n');(p/name).chmod(0o700)
  gen=root/'apps/desktop/src-tauri/gen';gen.mkdir(parents=True);(gen/'schema').write_text('generated')
@@ -65,6 +74,7 @@ print('fixture build completed')
         env = patch.dict(os.environ, {'PATH': str(self.bin) + os.pathsep + os.environ['PATH']})
         env.start()
         self.addCleanup(env.stop)
+        os.environ.pop('HIROUTE_CPA_MANIFEST', None)
         stats = patch.object(m.local.remote, 'stats', return_value={'cache_hits': 0})
         stats.start()
         self.addCleanup(stats.stop)
@@ -127,6 +137,210 @@ print('fixture build completed')
         with patch.dict(os.environ, {'RUSTFLAGS': '-C debuginfo=1'}):
             second = self.acquire('task-two')
         self.assertNotEqual(first['build_run'], second['build_run'])
+
+    def test_equal_cpa_manifest_contents_share_a_build_across_paths(self):
+        first_manifest = self.root / 'private-first-cpa.json'
+        same_content_manifest = self.root / 'private-same-cpa.json'
+        second_manifest = self.root / 'private-second-cpa.json'
+        first_manifest.write_text('{"fixture":"first"}\n')
+        same_content_manifest.write_text('{"fixture":"first"}\n')
+        second_manifest.write_text('{"fixture":"second"}\n')
+        with patch.dict(os.environ, {'HIROUTE_CPA_MANIFEST': str(first_manifest)}):
+            first = self.acquire()
+            reused = self.acquire()
+        with patch.dict(os.environ, {'HIROUTE_CPA_MANIFEST': str(same_content_manifest)}):
+            same_content = self.acquire('task-two')
+        with patch.dict(os.environ, {'HIROUTE_CPA_MANIFEST': str(second_manifest)}):
+            second = self.acquire('task-three')
+        self.assertTrue(reused['reused'])
+        self.assertEqual(first['build_run'], reused['build_run'])
+        self.assertTrue(same_content['reused'])
+        self.assertEqual(first['build_run'], same_content['build_run'])
+        self.assertNotEqual(first['build_run'], second['build_run'])
+        self.start(first)
+
+    def test_changing_explicit_cpa_manifest_in_place_invalidates_reuse(self):
+        manifest = self.root / 'private-cpa.json'
+        manifest.write_text('{"fixture":"before"}\n')
+        with patch.dict(os.environ, {'HIROUTE_CPA_MANIFEST': str(manifest)}):
+            first = self.acquire()
+            manifest.write_text('{"fixture":"after"}\n')
+            second = self.acquire('task-two')
+        self.assertNotEqual(first['build_run'], second['build_run'])
+        self.start(first)
+
+    def test_missing_or_invalid_cpa_manifest_fails_before_build(self):
+        missing = self.root / 'missing-cpa.json'
+        directory = self.root / 'cpa-directory'
+        directory.mkdir()
+        invalid = []
+        for index, contents in enumerate((b'not json\n', b'[]', b'\xff',
+                                           b'{"size":NaN}', b'{"size":Infinity}', b'{"size":-Infinity}')):
+            path = self.root / ('invalid-cpa-%s.json' % index)
+            path.write_bytes(contents)
+            invalid.append(path)
+        fifo = self.root / 'cpa-fifo'
+        os.mkfifo(fifo)
+        link = self.root / 'cpa-link.json'
+        link.symlink_to(self.repo / 'apps/desktop/src-tauri/development-cpa-artifacts.v1.json')
+        for manifest in (missing, directory, *invalid, fifo, link):
+            with self.subTest(manifest=manifest), \
+                    patch.dict(os.environ, {'HIROUTE_CPA_MANIFEST': str(manifest)}), \
+                    patch.object(m.local, 'run') as build, \
+                    self.assertRaisesRegex(ValueError, 'CPA manifest'):
+                self.acquire()
+            build.assert_not_called()
+
+    def test_source_changes_do_not_invalidate_an_acquired_build_or_publish_its_path(self):
+        manifest = self.root / 'private-cpa.json'
+        manifest.write_text('{"fixture":"stable"}\n')
+        with patch.dict(os.environ, {'HIROUTE_CPA_MANIFEST': str(manifest)}):
+            result = self.acquire()
+        row = self.store.load(result['build_run'])
+        for public in (result, row, self.manager.locate(result['lease'])):
+            self.assertNotIn(str(manifest), json.dumps(public, sort_keys=True))
+        snapshot = self.store.record_path(result['build_run']).parent / 'cpa-manifest.json'
+        self.assertEqual(snapshot.stat().st_mode & 0o777, 0o600)
+        self.assertFalse((self.manager.root / 'manifests').exists())
+        manifest.write_text('{"fixture":"changed"}\n')
+        self.start(result)
+        self.assertEqual(snapshot.read_bytes(), b'{"fixture":"stable"}\n')
+
+    def test_default_cpa_manifest_comes_from_candidate_and_reuses_equal_explicit_bytes(self):
+        manifest = self.repo / 'apps/desktop/src-tauri/development-cpa-artifacts.v1.json'
+        original = manifest.read_bytes()
+        manifest.write_text('{"fixture":"dirty execution checkout"}\n')
+        result = self.acquire()
+        self.assertEqual((Path(result['checkout']) / 'target/debug/compiled-cpa.json').read_bytes(), original)
+        manifest.write_bytes(original)
+        with patch.dict(os.environ, {'HIROUTE_CPA_MANIFEST': str(manifest)}):
+            explicit = self.acquire('task-two')
+        self.assertTrue(explicit['reused'])
+        self.assertEqual(result['build_run'], explicit['build_run'])
+
+    def test_relative_cpa_manifest_uses_desktop_package_directory(self):
+        manifest = self.repo / 'apps/desktop/src-tauri/relative-cpa.json'
+        manifest.write_text('{"fixture":"relative"}\n')
+        with patch.dict(os.environ, {'HIROUTE_CPA_MANIFEST': 'relative-cpa.json'}):
+            result = self.acquire()
+            reused = self.acquire('task-two')
+        self.assertTrue(reused['reused'])
+        self.assertEqual((Path(result['checkout']) / 'target/debug/compiled-cpa.json').read_bytes(), manifest.read_bytes())
+        self.start(result)
+
+    def test_deleted_source_rejects_fresh_acquisition_but_old_lease_still_starts(self):
+        manifest = self.root / 'private-cpa.json'
+        manifest.write_text('{"fixture":"stable"}\n')
+        with patch.dict(os.environ, {'HIROUTE_CPA_MANIFEST': str(manifest)}):
+            result = self.acquire()
+            manifest.unlink()
+            with patch.object(m.local, 'run') as build, self.assertRaisesRegex(ValueError, 'CPA manifest'):
+                self.acquire('task-two')
+            build.assert_not_called()
+        self.start(result)
+
+    def test_native_build_consumes_captured_snapshot_when_source_changes_during_compilation(self):
+        manifest = self.root / 'private-cpa.json'
+        original = b'{"fixture":"verified"}\n'
+        manifest.write_bytes(original)
+        start_command = m.local.remote.start_locked_command
+        snapshot_paths = []
+
+        def changed_source(argv, checkout, env, output, handles):
+            if argv != m.COMMAND:
+                return start_command(argv, checkout, env, output, handles)
+            manifest.write_text('{"fixture":"changed during compilation"}\n')
+            source = Path(env['HIROUTE_CPA_MANIFEST'])
+            snapshot_paths.append(source)
+            return start_command(argv, checkout, env, output, handles)
+
+        with patch.dict(os.environ, {'HIROUTE_CPA_MANIFEST': str(manifest)}), \
+                patch.object(m.local.remote, 'start_locked_command', side_effect=changed_source):
+            result = self.acquire()
+        self.assertEqual((Path(result['checkout']) / 'target/debug/compiled-cpa.json').read_bytes(), original)
+        self.assertEqual(len(snapshot_paths), 1)
+        self.assertNotEqual(snapshot_paths[0], manifest)
+        self.assertEqual(snapshot_paths[0].stat().st_mode & 0o777, 0o600)
+        self.start(result)
+
+    def test_original_cpa_manifest_is_read_only_once_before_build_preparation(self):
+        manifest = self.root / 'private-cpa.json'
+        original = b'{"fixture":"captured"}\n'
+        manifest.write_bytes(original)
+        run = m.local.run
+
+        def change_before_prepare(*args, **kwargs):
+            manifest.write_text('{"fixture":"new input"}\n')
+            return run(*args, **kwargs)
+
+        with patch.dict(os.environ, {'HIROUTE_CPA_MANIFEST': str(manifest)}), \
+                patch.object(m, 'read_cpa_manifest', wraps=m.read_cpa_manifest) as read, \
+                patch.object(m.local, 'run', side_effect=change_before_prepare):
+            result = self.acquire()
+        source_reads = [call for call in read.call_args_list if Path(call.args[0]) == manifest]
+        self.assertEqual(len(source_reads), 1)
+        self.assertEqual((Path(result['checkout']) / 'target/debug/compiled-cpa.json').read_bytes(), original)
+
+    def test_hardlinked_regular_manifests_are_ingested_by_content(self):
+        manifest = self.root / 'private-cpa.json'
+        manifest.write_text('{"fixture":"hardlinked"}\n')
+        alias = self.root / 'other-cpa.json'
+        os.link(manifest, alias)
+        with patch.dict(os.environ, {'HIROUTE_CPA_MANIFEST': str(manifest)}):
+            first = self.acquire()
+        with patch.dict(os.environ, {'HIROUTE_CPA_MANIFEST': str(alias)}):
+            second = self.acquire('task-two')
+        self.assertTrue(second['reused'])
+        self.assertEqual(first['build_run'], second['build_run'])
+
+    def test_altered_cpa_snapshot_rejects_reuse_and_start(self):
+        result = self.acquire()
+        snapshot = self.store.record_path(result['build_run']).parent / 'cpa-manifest.json'
+        snapshot.write_text('{"fixture":"altered snapshot"}\n')
+        with self.assertRaisesRegex(ValueError, 'CPA manifest snapshot'):
+            self.acquire('task-two')
+        with patch.object(m.pilot, 'start') as launch, self.assertRaisesRegex(ValueError, 'CPA manifest snapshot'):
+            self.manager.start(types.SimpleNamespace(lease=result['lease'], case='model', timeout=1,
+                                                     data_root=None, process_home=None))
+        launch.assert_not_called()
+
+    @unittest.skipUnless(REAL_RUSTC, 'real rustc is required for the bounded manifest consumer')
+    def test_production_build_script_and_embedded_constant_consume_the_captured_snapshot(self):
+        native = Path(__file__).resolve().parents[1] / 'apps/desktop/src-tauri'
+        manifest = self.root / 'private-cpa.json'
+        original = b'{"fixture":"captured by real consumer"}\n'
+        manifest.write_bytes(original)
+        output = self.root / 'consumer-out'
+        output.mkdir()
+        build_script = self.root / 'build-script'
+        consumer = self.root / 'manifest-consumer'
+        source = self.root / 'consumer.rs'
+        # Reuse the production include_str! declaration, not another manifest reader.
+        declaration = next(line for line in (native / 'src/development_cpa.rs').read_text().splitlines()
+                           if line.startswith('const MANIFEST_JSON:'))
+        source.write_text(declaration + '\nfn main() { print!("{}", MANIFEST_JSON); }\n')
+        start_command = m.local.remote.start_locked_command
+        observed = []
+
+        def compile_snapshot(argv, checkout, env, log, handles):
+            if argv == m.COMMAND:
+                manifest.unlink()  # The consumer must no longer need the ingestion source.
+                consumer_env = dict(env, PATH=REAL_PATH, OUT_DIR=str(output), PROFILE='debug')
+                for src, binary in ((native / 'build.rs', build_script), (source, consumer)):
+                    subprocess.run([REAL_RUSTC, '--edition=2024', str(src), '-o', str(binary)],
+                                   cwd=native, env=consumer_env, check=True, capture_output=True, timeout=60)
+                    if binary == build_script:
+                        subprocess.run([str(binary)], cwd=native, env=consumer_env,
+                                       check=True, capture_output=True, timeout=10)
+                observed.append(subprocess.check_output([str(consumer)], timeout=10))
+            return start_command(argv, checkout, env, log, handles)
+
+        with patch.dict(os.environ, {'HIROUTE_CPA_MANIFEST': str(manifest)}), \
+                patch.object(m.local.remote, 'start_locked_command', side_effect=compile_snapshot):
+            result = self.acquire()
+        self.assertEqual(observed, [original])
+        self.assertEqual((output / 'cpa-artifacts.json').read_bytes(), original)
+        self.start(result)
 
     def test_failed_build_is_retained_without_creating_duplicate_on_retry(self):
         cargo = self.bin / 'cargo'

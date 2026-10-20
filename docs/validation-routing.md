@@ -590,6 +590,25 @@ contents and all three executable identities/digests. Same-owner acquire is
 idempotent; different owners share binaries with independent leases and sessions.
 An invalid existing bundle is retained and reported, not silently rebuilt.
 
+The recipe binds the effective Desktop CPA manifest's exact content digest. The
+checked-in default is read from the exact candidate blob; an explicit
+`HIROUTE_CPA_MANIFEST` is read on the execution host, resolving relative paths from
+the execution repository's `apps/desktop/src-tauri` directory. Ingestion captures
+and validates the bytes once, then hashes that buffer. Equal bytes reuse the same
+build even at different paths or through default versus explicit selection, when
+all other inputs match. The original path is not retained in recipes, lease state
+or status output.
+
+Compilation consumes a private build-owned snapshot of the captured bytes. Reuse
+and each Pilot start check that snapshot along with the existing frontend and
+executable attestations. Changing or deleting the ingestion source afterwards does
+not invalidate an acquired build or lease. A fresh acquisition reads the current
+input: changed bytes select another identity, and a missing, unreadable, symbolic-link,
+non-regular or invalid-JSON input fails before the managed build starts. JSON must be
+a UTF-8 object without non-finite constants (`NaN` or `Infinity`); Python does not
+duplicate the native manifest schema. Hardlinked regular source files are admitted
+by their captured contents.
+
 Use `pilot-build start --lease LEASE --case CASE` to launch each scenario with
 the existing isolated Pilot launcher. It returns the session and socket for
 `pilot-cli`. All scenarios for that lease use the same build. These managed
