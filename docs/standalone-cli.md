@@ -231,7 +231,7 @@ Quickstart is read-only: it shows the current service, exact targets, reusable s
    ```
 
    Use repeated `--model-ref REF` for a subset. `--all-selectable` freezes concrete current refs; zero selectable models blocks saving. Preparation, save, provider checks and real native requests are different effects.
-3. Select returned binding IDs with `routing options --request-stdin` and `{}`. Create a fixed route with `--mode fixed_model --model BINDING_ID`, or go directly to smart saving:
+3. Select returned binding IDs with `routing options --request-stdin` and `{}`. Create a fixed route with `--mode fixed_model --model BINDING_ID`, or go directly to difficulty routing:
 
    ```sh
    hiroute routing preview --name 'Economy work' --purpose 'Routine and complex development' --mode smart_saving --economy ECONOMY_BINDING --primary PRIMARY_BINDING --decision local_rules --apply-file route-apply.json
@@ -600,7 +600,7 @@ Query real candidates instead of hand-writing an internal binding:
 printf '{}\n' | hiroute routing options --request-stdin --output json > routing-options.json
 ```
 
-For the ordinary path, use Quickstart convenience inputs above and shared authoring defaults. The following advanced JSON example demonstrates an explicitly chosen fixed policy; its limits are not product defaults, and it is not required before smart saving:
+For the ordinary path, use Quickstart convenience inputs above and shared authoring defaults. The following advanced JSON example demonstrates an explicitly chosen fixed policy; its limits are not product defaults, and it is not required before difficulty routing:
 
 ```json
 {
@@ -1291,14 +1291,14 @@ Plans use the existing `routing preview/apply` transaction with `hiroute.plan-ed
 | `smart_saving` | `smart.classifier`, `smart.economy`, `smart.primary` and `smart.judgment` |
 | `custom_branches` | `branch_routing.classifier`, `branch_routing.branches`, `branch_routing.default_branch_id` and `branch_routing.judgment` |
 
-Smart saving and custom branches judge the group again for each new user message,
+Difficulty routing and custom branches judge the group again for each new user message,
 then prefer a valid held candidate only within that group. This is automatic.
 The optional deprecated `reselect_on_user_message` field is accepted as a no-op
 for supported older callers; new requests can omit it. Serialized legacy values
 may remain in readback to preserve sealed Plan and publication consistency.
 
 `classifier` is `{kind: "decision_service", service: <complete saved connection revision>}`
-for a decision model or custom extension. Only Smart saving may instead use
+for a decision model or custom extension. Only Difficulty routing may instead use
 `{kind: "local_rules"}`. Publication verifies the connection ID, revision and full content
 against its saved immutable version; there is no inline `rest` connection.
 

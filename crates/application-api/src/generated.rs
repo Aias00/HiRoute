@@ -1,6 +1,7 @@
 use std::collections::BTreeMap;
 mod compute_discovery;
 mod delegation;
+mod model_feed;
 mod native_protocol;
 mod plan_authoring;
 mod subscription_login;
@@ -563,6 +564,7 @@ pub fn generated_contract_files() -> Vec<GeneratedContractFile> {
     files.extend(plan_authoring::files());
     files.extend(native_protocol::files());
     files.extend(compute_discovery::files());
+    files.extend(model_feed::files());
     let file_digests = files
         .iter()
         .map(|(path, contents)| {
@@ -629,6 +631,11 @@ mod tests {
                 "local-control.v2.schema.json",
                 "machine-envelope.v2.schema.json",
                 "manifest.v1.json",
+                "model-availability.v1.schema.json",
+                "model-feed-removal-preview.v1.schema.json",
+                "model-feed-remove.v1.schema.json",
+                "model-feed-settings.v1.schema.json",
+                "model-feed-status.v1.schema.json",
                 "operation-cancel-request.v1.schema.json",
                 "operation-lookup.v1.schema.json",
                 "plan-content-change.v2.schema.json",

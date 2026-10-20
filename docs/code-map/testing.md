@@ -58,6 +58,12 @@ contains expected-red composition, [adapter contracts](../../tools/product-e2e/t
 are component evidence, and [oracle tests](../../tools/product-e2e/tests/product_oracle.rs)
 validate the oracle. The real installed management loop is in
 [publication_process.rs](../../crates/daemon/tests/publication_process.rs).
+Its [https-feed lifecycle](../../crates/daemon/tests/support/model_feed_product.py)
+checks registered-source admission, published sessions, new Workers and exact Continue
+through withdrawal, cache removal, restart and later embedded absorption. The daemon's
+`integration-test-hooks` feature supplies only the external feed/inventory fixtures;
+Gateway calls reuse the existing TLS E2E dial map. The Gateway's [registered-feed TLS case](../../crates/gateway/src/test_control/registered_feed_tls.rs) connects its production transport directly to that same external OpenSSL fixture, exposing handshake failures before the installed lifecycle. Normal builds have no feed fixture
+trust root or transport override. The test does not establish live production signing.
 
 ## Reuse the fixture at the owning boundary
 
@@ -70,6 +76,8 @@ validate the oracle. The real installed management loop is in
 | Observe native routing and rejected attempts | [NativeContextUpstream](../../crates/daemon/tests/support/native_context_fixture.py): count every model POST, including rejected endpoints/models/credentials; keep the ledger for positive route/history assertions |
 | Prove exact Continue, concurrent routes and cancellation | [Native context](../../crates/daemon/tests/support/native_context_product.py), [boundary journey](../../crates/daemon/tests/support/native_context_boundaries.py), [boundary oracle guide](../../crates/daemon/tests/support/NATIVE_CONTEXT_BOUNDARIES.md) |
 | Prove restoration of old durable state | [Frozen producer fixtures](../../crates/local-storage/src/migrations/fixtures/README.md), [crash-boundary tests](../../crates/local-storage/src/migrations/upgrade_batch_recovery_tests.rs): old bytes through the current consumer, not a new serializer pretending to be history |
+| Upgrade connected Agents from a released package | [Released grant upgrade](../../crates/daemon/tests/support/released_grant_upgrade.py): pass the repository and checksum-pinned v0.3.1 Linux archive, with current binaries in `HIROUTE_VALIDATION_PRODUCT_BIN_DIR`; released transactions create both connections, current startup preserves grants/native files, and real requests plus public session queries prove attribution across restart. Native probes and the upstream are bounded fixtures. |
+| Recover interrupted Agent settings before the service receipt | [Publication process](../../crates/daemon/tests/publication_process.rs) runs [Agent recovery](../../crates/daemon/tests/support/publication_agent_recovery.py) at `after_target` and `after_active`; startup completes the journal before Apply replay, authenticated requests acquire the Agent, user native files remain byte-identical, and the recovered managed profile is stable across restart. |
 | Locate recovery material while the service is down | [Shared presentation](../../apps/desktop/tests/storage-recovery.test.mjs), [production-style geometry](../../apps/desktop/tests/v3/visual/storage-recovery-scenarios.mjs), [offline CLI formatter](../../crates/cli/src/service.rs): verified batch and source location, platform folder route and guide names; unsafe/absent locations remain unverified. Native opening/restoration needs its own installed evidence. |
 | Preserve native probe failure classification | [Pi probe tests](../../crates/integrations/src/agents/pi_runtime_tests.rs), [immutable launcher](../../crates/integrations/tests/fixtures/pi-node-launcher.sh): mutable test bodies are interpreter inputs; executable availability and version/output failures have separate assertions |
 | Exercise actual Desktop controls | [Browser scenario map](../../apps/desktop/tests/README.md) and native acceptance: select stable scenario IDs and require every declared outcome |
