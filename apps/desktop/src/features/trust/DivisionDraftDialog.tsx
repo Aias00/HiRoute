@@ -6,7 +6,7 @@ import { divisionDraft, divisionSource } from './division-draft';
 import { protectionExplanation } from './protection-copy';
 
 type Harness = NonNullable<Editor['work']>['harness'];
-const harnessNames: Record<Harness, string> = { codex_cli: 'Codex CLI', claude_code: 'Claude Code', deepseek_harness: 'DeepSeek Harness', pi: 'Pi', qoder_cli: 'Qoder CLI' };
+const harnessNames: Record<Harness, string> = { codex_cli: 'Codex CLI', claude_code: 'Claude Code', deepseek_harness: 'DeepSeek Harness', pi: 'Pi', qoder_cli: 'Qoder CLI', opencode: 'OpenCode' };
 export function DivisionDraftDialog({ plan, editor, branch, language, options, onClose, onDraft }: { plan: Plan; editor: Editor; branch: string; language: 'zh' | 'en'; options: Options | null; onClose(): void; onDraft(editor: Editor): Promise<boolean> }) {
   const text = (zh: string, en: string) => language === 'zh' ? zh : en;
   const source = useMemo(() => divisionSource(editor, branch), [editor, branch]);

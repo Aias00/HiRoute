@@ -835,6 +835,32 @@ class Runner(unittest.TestCase):
             with self.subTest(value=value), self.assertRaises(ValueError):
                 controller.windows_path(value)
 
+    def test_temporary_acl_cases_preserve_an_existing_product_profile(self):
+        home, local = self.root / 'home', self.root / 'local'
+        marker = home / '.local/share/hiroute/standalone.json'
+        marker.parent.mkdir(parents=True)
+        marker.write_bytes(b'preserve installed product')
+        cases = (
+            'windows_artifact_restart_restores_original_content_and_native_acl',
+            'windows_acl_change_loses_compensation_ownership_even_with_equal_content',
+            'windows_backup_authentication_binds_native_permission_facts',
+            'windows_owned_directory_cleanup_preserves_user_additions_and_replacements',
+        )
+        for case in cases:
+            request = dict(binary='hiroute_local_storage.exe', ignored=False,
+                           case='control::windows_artifacts_tests::' + case)
+            with self.subTest(case=case):
+                self.assertEqual(host.admit_test_profile(request, home, local), 'temporary_artifact_component')
+                for changed in ({'binary': 'windows_headless.exe'}, {'ignored': True},
+                                {'case': request['case'] + '_unknown'}):
+                    with self.assertRaisesRegex(ValueError, 'existing installation'):
+                        host.admit_test_profile({**request, **changed}, home, local)
+        self.assertEqual(marker.read_bytes(), b'preserve installed product')
+        marker.unlink()
+        self.assertEqual(host.admit_test_profile(dict(binary='windows_headless.exe',
+            ignored=True, case='actual_windows_complete_public_headless_business'), home, local),
+            'disposable_installation_profile')
+
     def test_shell_payload_preserves_quotes_without_interpolation(self):
         value = "C:/space ' $env:PATH ; directory/file.py"
         script = '& ' + controller.ps_literal(value)

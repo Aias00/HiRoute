@@ -101,6 +101,7 @@ INTEGRATION_SHARDS = {
         ("hiroute-product-e2e", "dsh_delegation"),
         ("hiroute-product-e2e", "gateway_adapter_contract"),
         ("hiroute-product-e2e", "local_observation"),
+        ("hiroute-product-e2e", "opencode_delegation"),
         ("hiroute-product-e2e", "pi_delegation"),
         ("hiroute-product-e2e", "product_oracle"),
         ("hiroute-product-e2e", "qoder_delegation"),

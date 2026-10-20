@@ -15,6 +15,7 @@ hiroute-gateway = { path = "../gateway" }
 hiroute-platform = { path = "../platform" }
 http.workspace = true
 reqwest = { version = "=0.13.4", features = ["blocking"] }
+rusqlite.workspace = true
 serde.workspace = true
 serde_json.workspace = true
 serde_yaml.workspace = true

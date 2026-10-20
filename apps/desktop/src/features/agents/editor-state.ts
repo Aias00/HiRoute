@@ -99,7 +99,7 @@ export function agentEditorSeed(
   const currentModel = facet === 'model' ? agentModelStatus(agent)?.current_selection : undefined;
   const codex = currentModel?.mode === 'codex_default' ? currentModel : undefined;
   const claude = currentModel?.mode === 'claude_launcher' ? currentModel : undefined;
-  const qoder = (currentModel?.mode === 'qoder_additional' || currentModel?.mode === 'pi_additional' || currentModel?.mode === 'dsh_additional') ? currentModel : undefined;
+  const qoder = (currentModel?.mode === 'qoder_additional' || currentModel?.mode === 'pi_additional' || currentModel?.mode === 'dsh_additional' || currentModel?.mode === 'opencode_additional') ? currentModel : undefined;
   const collaboration = facet === 'collaboration'
     && selection
     && 'trigger_mode' in selection
@@ -117,7 +117,7 @@ export function agentEditorSeed(
     fixedModels: currentModel && 'fixed_models' in currentModel ? currentModel.fixed_models : [],
     nativeModelMode: codex?.native_model_mode ?? 'hiroute_only',
     allowedPlanIds: codex?.allowed_plan_ids ?? qoder?.allowed_plan_ids
-      ?? (initialPlan && (ecosystem === 'codex' || ecosystem === 'qoder' || ecosystem === 'pi' || ecosystem === 'dsh') ? [initialPlan] : []),
+      ?? (initialPlan && (ecosystem === 'codex' || ecosystem === 'qoder' || ecosystem === 'pi' || ecosystem === 'dsh' || ecosystem === 'opencode') ? [initialPlan] : []),
     defaultChoice: codex?.default_selection ?? (initialPlan && ecosystem === 'codex'
       ? { kind: 'plan', plan_id: initialPlan } : { kind: 'preserve_native' }),
     claudePresets: claude?.preset_mappings ?? {
@@ -148,7 +148,7 @@ export function agentModelFormInvalid(agent: Agent | undefined, editorValues: Ag
   if (agentEcosystem(agent.agent_id) === 'hermes') {
     return !agent.native_target || !enabledPlanIds.includes(editorValues.hermesPlanId);
   }
-  if (['qoder', 'pi', 'dsh'].includes(agentEcosystem(agent.agent_id) ?? '')) {
+  if (['qoder', 'pi', 'dsh', 'opencode'].includes(agentEcosystem(agent.agent_id) ?? '')) {
     return editorValues.allowedPlanIds.length === 0
       || editorValues.allowedPlanIds.some(id => !enabledPlanIds.includes(id));
   }

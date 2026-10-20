@@ -208,7 +208,8 @@ fn overlay(
         (
             a @ (AgentModelSelectionV2::QoderAdditional { .. }
             | AgentModelSelectionV2::PiAdditional { .. }
-            | AgentModelSelectionV2::DshAdditional { .. }),
+            | AgentModelSelectionV2::DshAdditional { .. }
+            | AgentModelSelectionV2::OpenCodeAdditional { .. }),
             b,
         ) if preset == "models" && std::mem::discriminant(a) == std::mem::discriminant(b) => {
             *a = b.clone();
@@ -278,6 +279,7 @@ pub fn previous_routing_targets(
         "agent_dsh_default",
         "agent_pi_default",
         "agent_qoder_default",
+        "agent_opencode_default",
     ] {
         let head = match connection.previous_routing_head(agent) {
             Ok(head) => head,
@@ -344,6 +346,9 @@ fn mapped_presets(settings: &AgentModelSelectionV2, plan: &str) -> Vec<String> {
             allowed_plan_ids, ..
         }
         | AgentModelSelectionV2::QoderAdditional {
+            allowed_plan_ids, ..
+        }
+        | AgentModelSelectionV2::OpenCodeAdditional {
             allowed_plan_ids, ..
         } if allowed_plan_ids.iter().any(|id| id.as_str() == plan) => vec!["models".into()],
         _ => Vec::new(),

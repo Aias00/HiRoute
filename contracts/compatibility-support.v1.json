@@ -297,6 +297,9 @@
     "hiroute.observation.serialization-failure/v1",
     "hiroute.observation.valuation-summary/v2",
     "hiroute.observation.value-report/v2",
+    "hiroute.opencode-additional-model/v1",
+    "hiroute.opencode-collaboration/v1",
+    "hiroute.opencode-native-restore/v2",
     "hiroute.operation-cancel-request/v1",
     "hiroute.operation-event/v1",
     "hiroute.operation-idempotency-lookup/v1",
@@ -391,6 +394,7 @@
     "hiroute.settings-hermes-plugin-file/v1",
     "hiroute.settings-login-item/v1",
     "hiroute.settings-model-publication/v1",
+    "hiroute.settings-opencode-model-file/v1",
     "hiroute.settings-pi-model-file/v1",
     "hiroute.settings-qoder-model-file/v1",
     "hiroute.settings-service-completion/v2",
@@ -1226,6 +1230,16 @@
         "hiroute.upgrade-source-backup/v2"
       ],
       "legacy_support": []
+    },
+    {
+      "subject": "opencode_native_provider_restore",
+      "audited_prefixes": [
+        "hiroute.opencode-native-restore"
+      ],
+      "current_contracts": [
+        "hiroute.opencode-native-restore/v2"
+      ],
+      "legacy_support": []
     }
   ],
   "forbidden_contracts": [
@@ -1863,6 +1877,18 @@
         "crates/local-storage/src/backup/source_snapshot/seal.rs",
         "crates/local-storage/src/backup/source_snapshot/seal/tests.rs",
         "crates/daemon/src/control/runtime/history_cutover_tests.rs"
+      ]
+    },
+    {
+      "contract": "hiroute.delegation-native-root/v1",
+      "field": "borrowed-native-context descriptor version 1 for existing native Harnesses; version 2 adds the complete OpenCode context",
+      "mode": "recovery_read_only",
+      "owner": "daemon/delegation/profile/native_history",
+      "reason": "Existing non-OpenCode task descriptor bytes and context digests retain their meaning. OpenCode requires version 2 with its HOME/XDG/config/database selectors; the reader never defaults a missing OpenCode descriptor or reconstructs it from current environment.",
+      "removal_condition": "Retire only when supported retained tasks and backups no longer contain version-1 descriptors, with exact-session continuation fixtures.",
+      "allowed_paths": [
+        "crates/daemon/src/delegation/profile/native_history.rs",
+        "crates/daemon/src/delegation/profile/native_history_tests.rs"
       ]
     },
     {

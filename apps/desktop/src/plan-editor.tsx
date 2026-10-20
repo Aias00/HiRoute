@@ -26,7 +26,7 @@ import React, { forwardRef, useEffect, useImperativeHandle, useRef, useState } f
 import { invoke } from './host';
 export type Selection = { binding_id: string; reasoning?: { kind: 'profile'; profile: string } | { kind: 'toggle'; enabled: boolean } | { kind: 'budget'; tokens: number } };
 type Mode = 'fixed_model' | 'smart_saving' | 'free_first' | 'custom_branches';
-type Work = { harness: 'codex_cli' | 'claude_code' | 'qoder_cli' | 'pi' | 'deepseek_harness'; protocol: 'responses' | 'messages' };
+type Work = { harness: 'codex_cli' | 'claude_code' | 'qoder_cli' | 'pi' | 'deepseek_harness' | 'opencode'; protocol: 'responses' | 'messages' };
 type SmartClassifier = Classifier;
 // Inactive inputs belong to this editing session, never to the persisted plan.
 export type PlanEditorMemory = { branchRouting?: BranchRouting; customWindowTokens?: number };
@@ -456,8 +456,9 @@ const LoadedPlanEditor = forwardRef<PlanEditorHandle, PlanEditorProps & { initia
       ['deepseek_harness', 'DeepSeek Harness', text('原生 ACP 任务委派', 'Native ACP task delegation')],
       ['pi', 'Pi', text('使用 Pi 执行委派任务', 'Use Pi for delegated tasks')],
       ['qoder_cli', 'Qoder CLI', text('使用 Qoder CLI 执行委派任务', 'Use Qoder CLI for delegated tasks')],
-    ] as const).map(([value, title, description]) => <button className={`v3-executor${editor.work?.harness === value ? ' selected' : ''}`} type="button" key={value} aria-pressed={editor.work?.harness === value} onClick={() => { if (editor.work?.harness !== value) update({ work: { harness: value, protocol: value === 'claude_code' ? 'messages' : 'responses' } }); }}><BrandIcon kind={value === 'codex_cli' ? 'codex' : value === 'claude_code' ? 'claude-code' : value === 'pi' ? 'pi' : value === 'deepseek_harness' ? 'dsh' : 'qoder'} label={`${title} logo`} /><div><strong>{title}</strong><span>{description}</span></div>{editor.work?.harness === value && <UiIcon name="check" />}</button>)}</div>{validationIssue?.group === 'executor' && <p className="oc-inline-error route-lane-error">{validationIssue.message}</p>}
-      {editor.work && (editor.work.harness === 'pi' || editor.work.harness === 'deepseek_harness' || editor.work.harness === 'qoder_cli') && <AgentProtocolChoice name={editor.display_name || text('任务路由', 'Task route')} language={language} value={editor.work.protocol} advice={workerProtocolAdvice(editor, options)} onChange={protocol => update({ work: { ...editor.work!, protocol } })} />}
+      ['opencode', 'OpenCode', text('使用 OpenCode 执行委派任务', 'Use OpenCode for delegated tasks')],
+    ] as const).map(([value, title, description]) => <button className={`v3-executor${editor.work?.harness === value ? ' selected' : ''}`} type="button" key={value} aria-pressed={editor.work?.harness === value} onClick={() => { if (editor.work?.harness !== value) update({ work: { harness: value, protocol: value === 'claude_code' ? 'messages' : 'responses' } }); }}><BrandIcon kind={value === 'codex_cli' ? 'codex' : value === 'claude_code' ? 'claude-code' : value === 'pi' ? 'pi' : value === 'deepseek_harness' ? 'dsh' : value === 'opencode' ? 'opencode' : 'qoder'} label={`${title} logo`} /><div><strong>{title}</strong><span>{description}</span></div>{editor.work?.harness === value && <UiIcon name="check" />}</button>)}</div>{validationIssue?.group === 'executor' && <p className="oc-inline-error route-lane-error">{validationIssue.message}</p>}
+      {editor.work && (editor.work.harness === 'pi' || editor.work.harness === 'deepseek_harness' || editor.work.harness === 'qoder_cli' || editor.work.harness === 'opencode') && <AgentProtocolChoice name={editor.display_name || text('任务路由', 'Task route')} language={language} value={editor.work.protocol} advice={workerProtocolAdvice(editor, options)} onChange={protocol => update({ work: { ...editor.work!, protocol } })} />}
 {editor.work && <WorkerDependencies key={editor.work.harness} harness={editor.work.harness} language={language} active={active && moreSettingsOpen} onOperation={onOperation} />}
     </div>}</section>
       </Disclosure>

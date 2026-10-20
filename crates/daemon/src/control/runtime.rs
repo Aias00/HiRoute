@@ -388,7 +388,7 @@ impl ProductionControlRuntime {
             .map_err(|error| error.to_string())?;
         let home = native_agent_home()?;
         let project = std::env::current_dir().map_err(|error| error.to_string())?;
-        let scanner = match overrides.scanner {
+        let mut scanner = match overrides.scanner {
             Some(scanner) => scanner,
             None => {
                 use hiroute_domain::delegation::WorkerHarnessV1;
@@ -397,6 +397,7 @@ impl ProductionControlRuntime {
                     (AgentKindV1::ClaudeCode, WorkerHarnessV1::ClaudeCode),
                     (AgentKindV1::Qoder, WorkerHarnessV1::QoderCli),
                     (AgentKindV1::Pi, WorkerHarnessV1::Pi),
+                    (AgentKindV1::OpenCode, WorkerHarnessV1::OpenCode),
                     (
                         AgentKindV1::DeepseekHarness,
                         WorkerHarnessV1::DeepseekHarness,
@@ -464,6 +465,15 @@ impl ProductionControlRuntime {
             hiroute_integrations::DSH_INTEGRATION_PROFILE_REF_V1,
         )
         .map_err(|e| e.to_string())?;
+        let opencode_subject = AgentConnectionTransactionSubjectV1::from_registered_profile(
+            "agent_opencode_default",
+            hiroute_integrations::OPENCODE_PROFILE_ID_V1,
+            hiroute_integrations::OPENCODE_INTEGRATION_PROFILE_REF_V1,
+        )
+        .map_err(|e| e.to_string())?;
+        let opencode_model_target = AgentConnectionEffectRoleV1::ManagedConfiguration
+            .target_for(&opencode_subject)
+            .map_err(|e| e.to_string())?;
         let mut scoped_targets = Vec::new();
         let mut hermes_scan_targets = BTreeMap::new();
         for target in stores
@@ -493,7 +503,11 @@ impl ProductionControlRuntime {
             (&qoder_subject, scanner.qoder_user_skill_target()),
             (&pi_subject, scanner.pi_user_skill_target()),
             (&dsh_subject, scanner.dsh_user_skill_target()),
-        ] {
+            (&opencode_subject, scanner.opencode_user_skill_target()),
+        ]
+        .into_iter()
+        .filter(|(_, collaboration)| collaboration.is_absolute())
+        {
             let root = collaboration
                 .parent()
                 .and_then(|p| p.parent())
@@ -505,72 +519,105 @@ impl ProductionControlRuntime {
                 root.join("hiroute-management/SKILL.md"),
             ));
         }
-        let artifacts = stores
-            .open_managed_artifacts_with_external_targets(
+        let mut external_targets = [
+            (
+                opencode_model_target.clone(),
+                scanner.opencode_user_models_target(),
+            ),
+            (
+                AgentConnectionEffectRoleV1::RoutingSkill
+                    .target_for(&opencode_subject)
+                    .map_err(|e| e.to_string())?,
+                scanner.opencode_user_skill_target(),
+            ),
+            (
+                AgentConnectionEffectRoleV1::ManagedConfiguration
+                    .target_for(&dsh_subject)
+                    .map_err(|e| e.to_string())?,
+                scanner.dsh_user_models_target(),
+            ),
+            (
+                AgentConnectionEffectRoleV1::RoutingSkill
+                    .target_for(&dsh_subject)
+                    .map_err(|e| e.to_string())?,
+                scanner.dsh_user_skill_target(),
+            ),
+            (
+                AgentConnectionEffectRoleV1::ManagedConfiguration
+                    .target_for(&pi_subject)
+                    .map_err(|error| error.to_string())?,
+                scanner.pi_user_models_target(),
+            ),
+            (
+                AgentConnectionEffectRoleV1::RoutingSkill
+                    .target_for(&pi_subject)
+                    .map_err(|error| error.to_string())?,
+                scanner.pi_user_skill_target(),
+            ),
+            (
+                AgentConnectionEffectRoleV1::ManagedConfiguration
+                    .target_for(&qoder_subject)
+                    .map_err(|error| error.to_string())?,
+                scanner.qoder_user_config_target(),
+            ),
+            (claude_managed_target, scanner.claude_user_settings_target()),
+            (codex_managed_target, scanner.codex_user_config_target()),
+            (profile_target, scanner.codex_profile_config_target()),
+            (
+                AgentConnectionEffectRoleV1::RoutingSkill
+                    .target_for(&codex_subject)
+                    .map_err(|error| error.to_string())?,
+                home.join(".agents/skills/hiroute-collaboration/SKILL.md"),
+            ),
+            (
+                AgentConnectionEffectRoleV1::RoutingSkill
+                    .target_for(&claude_subject)
+                    .map_err(|error| error.to_string())?,
+                home.join(".claude/skills/hiroute-collaboration/SKILL.md"),
+            ),
+            (
+                AgentConnectionEffectRoleV1::RoutingSkill
+                    .target_for(&qoder_subject)
+                    .map_err(|error| error.to_string())?,
+                scanner.qoder_user_skill_target(),
+            ),
+        ]
+        .into_iter()
+        .chain(scoped_targets)
+        .filter(|(_, path)| path.is_absolute())
+        .collect::<Vec<_>>();
+        let mut alternatives = scanner
+            .opencode_model_target_candidates()
+            .into_iter()
+            .skip(1);
+        let artifacts = loop {
+            match stores.open_managed_artifacts_with_external_targets(
                 storage_root.join("managed-artifacts"),
                 storage_root.join("artifact-restores"),
-                [
-                    (
-                        AgentConnectionEffectRoleV1::ManagedConfiguration
-                            .target_for(&dsh_subject)
-                            .map_err(|e| e.to_string())?,
-                        scanner.dsh_user_models_target(),
-                    ),
-                    (
-                        AgentConnectionEffectRoleV1::RoutingSkill
-                            .target_for(&dsh_subject)
-                            .map_err(|e| e.to_string())?,
-                        scanner.dsh_user_skill_target(),
-                    ),
-                    (
-                        AgentConnectionEffectRoleV1::ManagedConfiguration
-                            .target_for(&pi_subject)
-                            .map_err(|error| error.to_string())?,
-                        scanner.pi_user_models_target(),
-                    ),
-                    (
-                        AgentConnectionEffectRoleV1::RoutingSkill
-                            .target_for(&pi_subject)
-                            .map_err(|error| error.to_string())?,
-                        scanner.pi_user_skill_target(),
-                    ),
-                    (
-                        AgentConnectionEffectRoleV1::ManagedConfiguration
-                            .target_for(&qoder_subject)
-                            .map_err(|error| error.to_string())?,
-                        scanner.qoder_user_config_target(),
-                    ),
-                    (claude_managed_target, scanner.claude_user_settings_target()),
-                    (codex_managed_target, scanner.codex_user_config_target()),
-                    (profile_target, scanner.codex_profile_config_target()),
-                    (
-                        AgentConnectionEffectRoleV1::RoutingSkill
-                            .target_for(&codex_subject)
-                            .map_err(|error| error.to_string())?,
-                        home.join(".agents/skills/hiroute-collaboration/SKILL.md"),
-                    ),
-                    (
-                        AgentConnectionEffectRoleV1::RoutingSkill
-                            .target_for(&claude_subject)
-                            .map_err(|error| error.to_string())?,
-                        home.join(".claude/skills/hiroute-collaboration/SKILL.md"),
-                    ),
-                    (
-                        AgentConnectionEffectRoleV1::RoutingSkill
-                            .target_for(&qoder_subject)
-                            .map_err(|error| error.to_string())?,
-                        scanner.qoder_user_skill_target(),
-                    ),
-                ]
-                .into_iter()
-                .chain(scoped_targets),
-            )
-            .map_err(|error| error.to_string())?;
-        if startup.preserve_observation_source
-            && let Some(progress) = &startup.upgrade_progress
-        {
-            let _ = progress.send(hiroute_host_runtime::StorageUpgradePhase::Conversion);
-        }
+                external_targets.clone(),
+            ) {
+                Ok(artifacts) => break artifacts,
+                Err(error) => {
+                    // An added JSONC layer must not redirect an existing JSON recovery target.
+                    // The same store validates every marker against the exact candidate path;
+                    // no new binding metadata or permissive recovery reader is introduced.
+                    if matches!(&error, hiroute_local_storage::LocalStorageError::Locked)
+                        && let Some(path) = alternatives.next()
+                    {
+                        let target = external_targets
+                            .iter_mut()
+                            .find(|(target, _)| target == &opencode_model_target)
+                            .ok_or_else(|| error.to_string())?;
+                        target.1 = path.clone();
+                        scanner
+                            .bind_opencode_model_target(path)
+                            .map_err(|e| e.to_string())?;
+                        continue;
+                    }
+                    return Err(error.to_string());
+                }
+            }
+        };
         let observation_workspace_key = observation_workspace_key(storage_root)?;
         let digest_authority = DigestAuthority::new(*observation_workspace_key);
         let observation_root = storage_root.join("observation");
@@ -1689,6 +1736,7 @@ fn release_agent_scanner(
             AgentKindV1::Qoder => &mut layout.qoder_executable,
             AgentKindV1::Pi => &mut layout.pi_executable,
             AgentKindV1::DeepseekHarness => &mut layout.dsh_executable,
+            AgentKindV1::OpenCode => &mut layout.opencode_executable,
             AgentKindV1::Hermes => continue,
         };
         *target = executable.clone();
@@ -1725,6 +1773,7 @@ fn discovered_agent(
                 AgentKindV1::Qoder => QODER_PROFILE_ID_V1,
                 AgentKindV1::Pi => hiroute_integrations::PI_PROFILE_ID_V1,
                 AgentKindV1::DeepseekHarness => hiroute_integrations::DSH_PROFILE_ID_V1,
+                AgentKindV1::OpenCode => hiroute_integrations::OPENCODE_PROFILE_ID_V1,
                 AgentKindV1::Hermes => hiroute_integrations::HERMES_PROFILE_ID_V1,
             }
             .to_owned(),

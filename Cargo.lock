@@ -2536,6 +2536,7 @@ dependencies = [
  "http",
  "nix",
  "reqwest",
+ "rusqlite",
  "rustix",
  "semver",
  "serde",

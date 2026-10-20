@@ -142,6 +142,10 @@ impl LocalControlAdapter {
                 "agent_claude_default",
                 self.claude_api_point_sources(&catalog).map_err(|_| ()),
             ),
+            (
+                "agent_opencode_default",
+                self.scanner.opencode_api_sources().map_err(|_| ()),
+            ),
             ("agent_hermes_default", hermes_sources),
         ] {
             let sources = match sources {

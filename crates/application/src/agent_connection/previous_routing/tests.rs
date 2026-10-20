@@ -175,3 +175,56 @@ fn recovery_targets_only_include_presets_currently_mapped_to_the_plan() {
     );
     assert!(mapped_presets(&value.settings, "plan/unmapped").is_empty());
 }
+
+#[test]
+fn opencode_previous_routing_recovers_exact_additional_mapping() {
+    let entry = |id: &str, previous: Option<&str>, plan: &str, protocol: &str| {
+        let mut value = fixture(id, previous, "plan/opus", "plan/sonnet");
+        value.settings = serde_json::from_value(serde_json::json!({
+            "mode": "opencode_additional", "allowed_plan_ids": [plan],
+            "plan_protocols": BTreeMap::from([(plan, protocol)])
+        }))
+        .unwrap();
+        value.spec.model = AgentFacetIntent::Configure {
+            settings: value.settings.clone(),
+        };
+        value.resolved = BTreeMap::from([("models".into(), serde_json::json!([plan]))]);
+        value
+    };
+    let current = entry(
+        "op_00000000000000000000000000000002",
+        Some("op_00000000000000000000000000000001"),
+        "plan/trial",
+        "responses",
+    );
+    assert_eq!(mapped_presets(&current.settings, "plan/trial"), ["models"]);
+    assert!(mapped_presets(&current.settings, "plan/unmapped").is_empty());
+    let old = entry(
+        "op_00000000000000000000000000000001",
+        None,
+        "plan/original",
+        "messages",
+    );
+    let expected = old.settings.clone();
+    let mut chain = BTreeMap::from([(old.id.clone(), old)]);
+    let Preview::Available {
+        spec,
+        restored_from,
+        ..
+    } = recover(current, &BTreeSet::from(["models".into()]), |id| {
+        chain.remove(id).ok_or("history_missing")
+    })
+    else {
+        panic!("OpenCode must use the existing additional-model history path")
+    };
+    assert_eq!(
+        spec.model,
+        AgentFacetIntent::Configure { settings: expected }
+    );
+    assert_eq!(spec.collaboration, AgentFacetIntent::Keep);
+    assert_eq!(spec.access_token, AgentAccessTokenIntentV1::Keep);
+    assert_eq!(
+        restored_from["models"].as_str(),
+        "op_00000000000000000000000000000001"
+    );
+}

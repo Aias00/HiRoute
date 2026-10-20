@@ -10,6 +10,8 @@ Windows development execution is owned by [windows-dev.py](../../scripts/windows
 and its [native executor](../../scripts/windows-dev-host.py), reached through
 `validation.py windows`. HOME configuration owns machine/session/client locations;
 the project owns artifact admission, exact-case execution and revision-bound evidence.
+Its four temporary-directory native artifact ACL/recovery cases can execute without
+replacing an existing installation; installed-product cases still require a fresh profile.
 [Orphaned data preparation](../../scripts/windows-dev-profile.py) preserves complete
 backups after explicit user authorization; it does not establish a product scenario.
 [Native Desktop session actions](../../scripts/windows-desktop-session.py) admit
@@ -332,6 +334,9 @@ they retain neither arbitrary result text nor a guessed per-run failure cause.
 The [cancel publication fixture](../../crates/daemon/tests/support/windows_worker_cancel.rs)
 waits for the complete nonce receipt within the original deadline; file existence
 alone does not prove that the native writer has published its contents.
+The shared model oracle follows the declared shell timeout units. OpenCode's
+Windows shell receipt uses the runner's pinned Node with encoded paths, so the
+same cancellation check works with PowerShell, cmd and Git Bash.
 Its residual binding reader distinguishes incomplete publication from fatal native
 identity errors. The [residual oracle](../../crates/daemon/tests/support/windows_worker_residual_oracle.rs)
 keeps correlated tool errors observable, with fixed stage/error facts and no native

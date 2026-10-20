@@ -577,14 +577,15 @@ export function mockProductInvoke(command: string, payload: Record<string, any> 
           continue_session: { state: 'unavailable', reason: 'resume_unavailable' },
           restricted_policy: { state: 'unknown', reason: 'restricted_policy_unverified' },
         },
-        { harness: 'qoder_cli', state: 'unavailable', reason: workerSelections.has('qoder_cli') ? 'runtime_unverified' : 'installation_not_configured', start_approve_all: unavailable, cancel: unavailable, continue_session: unavailable, restricted_policy: unavailable },
+        ...['qoder_cli', 'deepseek_harness', 'opencode'].map(harness => ({ harness, state: 'unavailable', reason: workerSelections.has(harness) ? 'runtime_unverified' : 'installation_not_configured', start_approve_all: unavailable, cancel: unavailable, continue_session: unavailable, restricted_policy: unavailable })),
       ],
     };
   }
   if (command === 'worker_dependencies_discover' || command === 'worker_dependencies_select_confirm') {
     const confirmed = command === 'worker_dependencies_select_confirm' ? preparedWorkerSelection : null;
     const harness = confirmed?.harness ?? payload?.input?.harness ?? 'claude_code';
-    const name = harness === 'codex_cli' ? 'codex' : harness === 'qoder_cli' ? 'qoder' : 'claude';
+    const name = harness === 'codex_cli' ? 'codex' : harness === 'qoder_cli' ? 'qoder' : harness === 'opencode' ? 'opencode' : 'claude';
+    const native = harness === 'qoder_cli' || harness === 'opencode';
     if (confirmed) {
       const { expected_selection_revision: _revision, ...installation } = confirmed;
       workerSelections.set(harness, installation);
@@ -593,7 +594,7 @@ export function mockProductInvoke(command: string, payload: Record<string, any> 
     const selection = selected ?? {
       harness,
       cli_path: `/usr/local/bin/${name}`,
-      ...(harness === 'qoder_cli' ? {} : {
+      ...(native ? {} : {
         adapter_path: `/usr/local/lib/${name}-acp/adapter.js`,
         node_path: '/usr/local/bin/node',
       }),
@@ -601,10 +602,10 @@ export function mockProductInvoke(command: string, payload: Record<string, any> 
     const data = {
       schema: 'hiroute.worker-dependencies-view/v1',
       selection_revisions: [{ harness, revision: 1 }],
-      selected: harness === 'qoder_cli' && !selected ? [] : [selection],
+      selected: native && !selected ? [] : [selection],
       candidates: [
         { harness, component: 'cli', path: selection.cli_path, source: 'selected', state: 'found' },
-        ...(harness === 'qoder_cli' ? [] : [
+        ...(native ? [] : [
           { harness, component: 'adapter', path: selection.adapter_path, source: 'selected', state: 'found' },
           { harness, component: 'node', path: selection.node_path, source: 'selected', state: 'found' },
         ]),
