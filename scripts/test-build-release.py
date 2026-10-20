@@ -60,7 +60,8 @@ class CandidateTests(unittest.TestCase):
         config = self.root / "apps/desktop/src-tauri/tauri.conf.json"
         config.parent.mkdir(parents=True)
         config.write_text(json.dumps({"version": self.version}))
-        for relative in ("LICENSE", "docs/standalone-cli.md", "docs/standalone-windows.md", "assets/skills/hiroute-management/SKILL.md", "scripts/windows-release-toolchain.cmake"):
+        omarchy = [name.replace("integrations/", "assets/integrations/", 1) for name in MODULES["package-standalone"].OMARCHY_FILES]
+        for relative in ("LICENSE", "docs/standalone-cli.md", "docs/standalone-windows.md", "assets/skills/hiroute-management/SKILL.md", "scripts/windows-release-toolchain.cmake", *omarchy):
             path = self.root / relative
             path.parent.mkdir(parents=True, exist_ok=True)
             path.write_bytes((REPO / relative).read_bytes())
@@ -140,7 +141,11 @@ class CandidateTests(unittest.TestCase):
         self.assertEqual(result["website_artifact"]["architecture"], "aarch64")
         self.assertEqual(sum(args[:3] == ("npm", "run", "build") for args in self.commands), 1)
         manifest = next(Path(result["assets"]).glob("*.json"))
-        self.assertIn("console/index.html", json.loads(manifest.read_text())["files"])
+        packaged = json.loads(manifest.read_text())["files"]
+        self.assertIn("console/index.html", packaged)
+        for name in MODULES["package-standalone"].OMARCHY_FILES:
+            source = REPO / "assets" / name
+            self.assertEqual(packaged[name]["sha256"], hashlib.sha256(source.read_bytes()).hexdigest(), name)
         artifacts = list(Path(result["assets"]).iterdir())
         self.assertEqual(len(artifacts), 2)
         catalog = self.root / "releases.json"
