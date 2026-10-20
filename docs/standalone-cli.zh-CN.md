@@ -197,7 +197,7 @@ Quickstart 只读当前服务、准确的配置目标、可复用的模型来源
    ```
 
    只选部分模型时重复使用 `--model-ref REF`。`--all-selectable` 会固定为本次候选中的具体模型列表，不会自动扩展到后来发现的模型；没有可选模型时不能保存。准备凭据、保存、供应商检查和原生 Agent 的真实请求是不同效果。
-3. 用 `routing options --request-stdin` 输入 `{}`，获取当前绑定 ID。可选择 `--mode fixed_model --model BINDING_ID`，也可直接创建省钱组合：
+3. 用 `routing options --request-stdin` 输入 `{}`，获取当前绑定 ID。可选择 `--mode fixed_model --model BINDING_ID`，也可直接创建按难度分流组合：
 
    ```sh
    hiroute routing preview --name '日常省钱' --purpose '处理日常和复杂开发任务' --mode smart_saving --economy ECONOMY_BINDING --primary PRIMARY_BINDING --decision local_rules --apply-file route-apply.json
@@ -506,7 +506,7 @@ jq '{action:"result",operation:.operation}' subscription-operation.json \
 printf '{}\n' | hiroute routing options --request-stdin --output json > routing-options.json
 ```
 
-日常使用优先采用上面的 Quickstart 参数和共享默认值。下面的高级 JSON 示例展示一种显式选择的固定策略；其中的限制不是产品默认值，也不是启用省钱路由前必须创建的临时计划：
+日常使用优先采用上面的 Quickstart 参数和共享默认值。下面的高级 JSON 示例展示一种显式选择的固定策略；其中的限制不是产品默认值，也不是启用按难度分流路由前必须创建的临时计划：
 
 ```json
 {
@@ -998,13 +998,13 @@ hiroute decision services test --request-stdin --output json < decision-test-req
 | `smart_saving` | `smart.classifier`、`smart.economy`、`smart.primary` 与 `smart.judgment` |
 | `custom_branches` | `branch_routing.classifier`、`branch_routing.branches`、`branch_routing.default_branch_id` 与 `branch_routing.judgment` |
 
-智能省钱和自定义分支会在每条新用户消息到来时重新判断模型组，然后只在选中的组内
+按难度分流和自定义分支会在每条新用户消息到来时重新判断模型组，然后只在选中的组内
 优先沿用仍有效的上一轮模型。这个行为自动生效。可选字段 `reselect_on_user_message`
 已废弃；为兼容受支持的旧版调用方，仍接受该字段，但它不影响路由，新请求可以省略。
 读取结果中可能仍包含旧值，以保持密封 Plan 和发布数据的一致性。
 
 决策模型和自定义扩展都使用 `classifier: {kind: "decision_service", service: <完整已保存连接版本>}`。
-只有智能省钱可改用 `{kind: "local_rules"}`。发布按连接 ID、revision 和完整内容核对
+只有按难度分流可改用 `{kind: "local_rules"}`。发布按连接 ID、revision 和完整内容核对
 已保存的不可变版本，不接受 `rest` 直配。
 
 判断设置包含 `degree: {simple_threshold_millis, instructions, simple, complex}` 和

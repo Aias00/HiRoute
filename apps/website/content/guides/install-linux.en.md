@@ -133,8 +133,8 @@ If a network or process interruption leaves acceptance uncertain, do not retry w
 
 ## Model information updates
 
-On feed-capable releases, the local service automatically retrieves signed model
-information from `hiroute.ai`. The same setting applies to Desktop, the web console,
+On feed-capable releases, the local service automatically retrieves model
+information over HTTPS from `hiroute.ai` and validates its content. The same setting applies to Desktop, the web console,
 and standalone use. Requests include no account, installation or usage identifiers.
 Retrieval does not call a model or test a connection. Before the first publication,
 the service continues with its built-in model catalog.

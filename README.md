@@ -31,7 +31,7 @@
   </a>
 </p>
 
-Keep using Codex, Claude Code, Qoder, Pi or DeepSeek Harness. With a smart-saving plan, HiRoute
+Keep using Codex, Claude Code, Qoder, Pi or DeepSeek Harness. With a difficulty-routing plan, HiRoute
 judges each new message: routine work such as reading code or gathering facts can go to an
 economical model, while design decisions and difficult fixes stay with your subscription or
 primary model. Subscriptions, API keys and local models are managed in one place, and each
@@ -56,7 +56,7 @@ runs locally as a Desktop application or a headless CLI and daemon.
 | | |
 | --- | --- |
 | **Route long tasks by stage** | Use the model that fits the work ahead instead of committing an entire task to one model. |
-| **Match models to the work** | Use task difficulty to choose Regular or Primary, with observed competence protecting subsequent work after a low score. |
+| **Protect quality while saving** | Use observed competence to block risky downgrades, while task complexity creates opportunities to use economical models. |
 | **Keep handoffs bounded** | Enforce capability requirements, ordered candidates, and explicit exhaustion instead of silently changing behavior. |
 | **Learn from execution** | Retain the task category, actual model group and candidate, tool outcomes, accepted output, and optional stage competence for later decisions. |
 
@@ -142,7 +142,7 @@ explicitly. Failover does not create a competence score or change the task categ
 
 The principle is:
 
-> **Difficulty selects the model group; competence protects the next stage after a low score.**
+> **Competence blocks risky cost-cutting; complexity creates opportunities to save.**
 
 Difficulty routing also supports heuristic rules. A custom extension is optional: use it when you
 want to own the model integration, judgment, scoring, and context trimming. The official

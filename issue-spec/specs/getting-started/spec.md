@@ -314,8 +314,10 @@ Source SPEC comments:
 ### Requirement: New-model trials compose the existing protected workflow
 
 Home MUST show at most six featured model entries with origin, availability and
-version disclosure; without featured entries it offers unused executable or
-connectable embedded models. Models needing a newer client cannot start a trial.
+version disclosure. When the service provides no featured entries, Home uses the
+client’s bundled announcements, filtered to models present in the available catalog;
+unrelated catalog entries are not substituted. Models needing a newer client cannot
+start a trial.
 Home and routing creation open one full-page, four-step flow for trial model, in-place connection,
 Primary model, decision connection, selected Agent/presets and review.
 

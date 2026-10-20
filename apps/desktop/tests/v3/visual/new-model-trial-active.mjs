@@ -18,6 +18,24 @@ const setVisibility=state=>evaluate(client,`(()=>{Object.defineProperty(document
 const typeInto=(selector,value)=>evaluate(client,`(()=>{const input=document.querySelector(${JSON.stringify(selector)});if(!input)throw Error('Missing input');Object.getOwnPropertyDescriptor(HTMLInputElement.prototype,'value').set.call(input,${JSON.stringify(value)});input.dispatchEvent(new Event('input',{bubbles:true}));return true;})()`);
 async function geometry(){return evaluate(client,`(()=>{const nodes=[...document.querySelectorAll('.model-feed-panel,.trust-control,.plan-quality,.trust-suggestion,.modal,.trial-wizard')].filter(e=>e.getClientRects().length);return nodes.map(e=>({class:e.className,width:e.clientWidth,scroll:e.scrollWidth,left:e.getBoundingClientRect().left,right:e.getBoundingClientRect().right}));})()`);}
 try {
+ for(const [lang,theme,width,height] of [['en','light',755,600],['zh','dark',755,600],['en','dark',1200,813],['zh','light',1200,813]]) {
+  await open(`lang=${lang}&theme=${theme}&view=feed-home`,width,height);
+  await waitFor(client,`!!document.querySelector('.new-model-card')`);
+  const homeCopy=await evaluate(client,`document.querySelector('.new-models').textContent`);
+  assert.ok(homeCopy.includes(lang==='zh'?'内容已校验':'Content validated'));
+  assert.doesNotMatch(homeCopy,/signature|签名/i);
+  await shot(`feed-origin-home-${lang}-${theme}-${width}`);
+  await open(`lang=${lang}&theme=${theme}&view=quickstart&feed-trial=1`,width,height);
+  await click('.new-models button',lang==='zh'?'试用':'Try');
+  await waitFor(client,`!!document.querySelector('.trial-page .trial-agent-choice')`);
+  const wizardCopy=await evaluate(client,`document.querySelector('.trial-page').textContent`);
+  assert.ok(wizardCopy.includes(lang==='zh'?'内容已校验':'content validated'));
+  assert.doesNotMatch(wizardCopy,/signature|签名/i);
+  await evaluate(client,`[...document.querySelectorAll('.trial-page .field-help')].find(e=>e.textContent.includes('hiroute.ai')&&e.textContent.includes(${JSON.stringify(lang==='zh'?'内容已校验':'content validated')})).scrollIntoView({block:'center'});true`);
+  await shot(`feed-origin-trial-${lang}-${theme}-${width}`);
+  assert.ok(await evaluate(client,`[...document.querySelectorAll('.trial-page .field-help')].filter(e=>e.textContent.includes('hiroute.ai')).every(e=>e.scrollWidth<=e.clientWidth+1)`));
+  results.push({id:`feed.origin-content-validation.${lang}.${theme}.${width}`,status:'passed'});
+ }
  for (const lang of ['en','zh']) for (const native of [true,false]) for (const width of [755,1200]) for(const theme of ['light','dark']) {
   const query=`lang=${lang}&theme=${theme}${native?'&native=1':''}`, height=width===755?600:813;
   const expectations=native ? (lang==='zh'?['问题仍相关','无法判断','问题已修正或无关']:['earlier problem still matters','cannot be checked','fixed or unrelated']) : (lang==='zh'?['下一轮交给主力模型']:['next agent turn goes to Primary']);

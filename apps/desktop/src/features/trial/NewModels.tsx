@@ -46,7 +46,7 @@ export function NewModels({ language, active, plans, refreshVersion, onTry, onOp
   }
   return <section className="new-models" aria-labelledby="new-models-title">
     <header className="home-section-head">
-      <div><h2 id="new-models-title">{t('新模型', 'New models')}</h2>{fromFeed && <span>{t('由 hiroute.ai 维护 · 签名已校验', 'Maintained by hiroute.ai · Signature verified')}</span>}</div>
+      <div><h2 id="new-models-title">{t('新模型', 'New models')}</h2>{fromFeed && <span>{t('由 hiroute.ai 维护 · 内容已校验', 'Maintained by hiroute.ai · Content validated')}</span>}</div>
       <button className="btn btn-quiet" disabled={error || !data} onClick={() => onTry()}>{t('试用其他模型', 'Try another model')}<UiIcon name="chevronRight" /></button>
     </header>
     {error && <div className="callout warn" role="alert"><span>{t('模型目录暂时无法刷新，请重试后开始试用。', 'The model catalog could not refresh. Retry before starting a trial.')}</span><button className="btn" onClick={() => setRetry(n => n + 1)}>{t('重试', 'Retry')}</button></div>}
