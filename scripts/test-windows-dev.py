@@ -200,6 +200,39 @@ class Runner(unittest.TestCase):
                 desktop.locked_startup_ui({},self.root,self.root,{},profiles,{},self.root)
         run.assert_not_called();admit.assert_not_called()
 
+    def test_recovery_ui_fixtures_require_an_independent_original_before_native_mutation(self):
+        for action in ('recovery-file-use-ui','recovery-format-ui'):
+            with patch.object(desktop.subprocess,'run') as run,patch.object(desktop,'installed') as admit:
+                with self.assertRaisesRegex(ValueError,'independently measured original product'):
+                    desktop.execute(dict(desktop_action=action),self.root,self.root,{},profiles,
+                                    {'administrator_groups':False},host.manifest,self.root)
+            run.assert_not_called();admit.assert_not_called()
+
+    def test_control_fixture_cleanup_refuses_unexpected_business_changes(self):
+        import sqlite3
+        storage=self.root/'storage';(storage/'live').mkdir(parents=True)
+        control=storage/'live/control.db'
+        with sqlite3.connect(control) as db:
+            db.executescript('CREATE TABLE business(value); INSERT INTO business VALUES(42); PRAGMA user_version=29;')
+        original=control.read_bytes();header=original[:100];before=profiles.inventory(storage)
+        def future():
+            with control.open('r+b') as file:file.seek(60);file.write((2147483647).to_bytes(4,'big'))
+        future()
+        desktop.restore_control_fixture(profiles,storage,before,header)
+        self.assertEqual(control.read_bytes(),original)
+        future()
+        with control.open('r+b') as file:file.seek(200);file.write(b'changed business')
+        changed=control.read_bytes()
+        with self.assertRaisesRegex(ValueError,'Unexpected Control contents'):
+            desktop.restore_control_fixture(profiles,storage,before,header)
+        self.assertEqual(control.read_bytes(),changed,'an unexpected write must be preserved')
+        control.write_bytes(original);future()
+        (storage/'live/runtime.db').write_bytes(b'unexpected concurrent state')
+        changed=control.read_bytes()
+        with self.assertRaisesRegex(ValueError,'Unexpected business changes'):
+            desktop.restore_control_fixture(profiles,storage,before,header)
+        self.assertEqual(control.read_bytes(),changed)
+
     def test_preparation_inspection_is_bounded_metadata_and_not_recovery_admission(self):
         home, local = self.root/'home', self.root/'local'
         program = local/'Programs/HiRoute'; program.mkdir(parents=True)

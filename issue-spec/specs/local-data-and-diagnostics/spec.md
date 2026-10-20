@@ -292,6 +292,11 @@ Recovery presentation SHALL distinguish correcting prerequisites, current-batch 
 - **WHEN** a failure admits current-batch resume or complete-group restoration
 - **THEN** the failure surface displays the verified original batch ID, source directory and guide filenames. Windows explains the folder route from its displayed log directory; macOS provides the preserved-material action. Long portable names wrap without hiding content in Chinese and English. The offline CLI names the absolute source directory derived from its actual storage root. Missing/unsafe locations and unknown causes cannot grant located recovery or resume.
 
+#### Scenario: Correct a file prerequisite before considering restoration
+
+- **WHEN** the current failure establishes a file-use or access prerequisite, including while a complete original source is retained
+- **THEN** consumers offer correction followed by current-version retry, without borrowing that source as a reason to restore old data. A key/unsupported-format diagnostic may retain a complete-group target only when the storage owner revalidates that exact batch and the recorded cause matches the current failure; a diagnostic alone never grants original-program reinstall, current-batch resume or restoration of unverified material.
+
 Source Issue:
 - https://github.com/higress-group/HiRoute/issues/176
 

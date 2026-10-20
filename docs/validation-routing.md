@@ -197,6 +197,8 @@ Administrators SID, including deny-only membership. All native observations and
 screenshots remain in ignored, private evidence.
 `native-files` captures the fixed Codex/Claude configuration files and inventories
 both collaboration and management Skill directories for restoration readback.
+It also fingerprints Codex sessions/history without copying their contents; compare
+immediately around installation/restoration, with no Codex call in between.
 `scroll` uses a recent screenshot's window geometry and pointer coordinates, plus
 an explicit `--scroll-direction up|down`; it sends a bounded native mouse wheel
 event to that foreground window. `codex-call` runs the configured real Codex CLI
@@ -284,6 +286,23 @@ button, releases its handle, quits and reopens the same installed Desktop, then
 checks actual Control/Gateway readiness. It never corrupts databases, changes keys,
 manufactures recovery reports or launches an older program. Its screenshots and
 native UI observations remain private evidence, separate from fixture parser tests.
+`recovery-file-use-ui --from-product ORIGINAL_BUNDLE` uses the same bounded
+sequence against the current Control file after independently verifying the
+complete original Desktop source. Both lock cases require offline current-version
+retry advice rather than borrowing a retained source as a reason to restore old data.
+
+`recovery-format-ui --from-product ORIGINAL_BUNDLE` is an explicitly selected
+fault/recovery journey, not ordinary smoke. It requires a healthy current installation,
+recent inspection and independently verified complete original source. After stopping
+owned processes, it preserves the entire clean current storage, both program namespaces
+and installation metadata, then changes only the current Control's format-29 header
+to a future marker. The actual bundled page and offline CLI must name the verified
+original batch, source and guide in both languages. Success leaves the service offline
+for the immediately following `recovery-preview` / `recovery-restore-original` operator
+case and actual old-program request. A failed presentation assertion removes only the
+fixture's four bytes after proving no other business write, then checks current readiness;
+unexpected changes retain both copies for inspection. Product request deadlines stay
+unchanged. All copied data, fault observations and program material remain private.
 
 Stage separate product and harness bundles when reusing an unchanged product for
 a test-only repair. Results record both full revisions, binary hashes, driver hash,
