@@ -42,9 +42,10 @@ impl StorageRecovery {
 
 fn admission_failure(root: &Path) -> Option<StorageRecovery> {
     let root = PrivateDir::open_existing(root).ok()?;
-    let role = root
-        .open_existing_child(role_dir_name(ProcessRole::Daemon))
-        .ok()??;
+    root.recheck_identity().ok()?;
+    let role =
+        PrivateDir::open_existing(&root.path().join(role_dir_name(ProcessRole::Daemon))).ok()?;
+    root.recheck_identity().ok()?;
     let mut file = role.open_read(CURRENT_LOG_FILE).ok()??;
     file.recheck().ok()?;
     let bytes = file.read_tail(64 * 1024).ok()?;

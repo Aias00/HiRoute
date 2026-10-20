@@ -442,7 +442,7 @@ pub fn start_role_all(config: RoleAllConfig) -> Result<RoleAllHandle, RoleAllErr
         },
     )
     .map_err(|error| match storage_failures.try_iter().last() {
-        Some(recovery) => RoleAllError::StorageRecovery(recovery),
+        Some(recovery) => RoleAllError::StorageRecovery(Box::new(recovery)),
         None => RoleAllError::Component("Storage", error),
     });
     let runtime = match runtime {
@@ -854,7 +854,7 @@ pub enum RoleAllError {
     #[error("role=all configuration is invalid")]
     InvalidConfiguration,
     #[error("storage startup recovery required: {0:?}")]
-    StorageRecovery(hiroute_host_runtime::StorageRecovery),
+    StorageRecovery(Box<hiroute_host_runtime::StorageRecovery>),
     #[error("{0} component failed: {1}")]
     Component(&'static str, String),
     #[error("{0} did not stop before the role=all deadline")]
