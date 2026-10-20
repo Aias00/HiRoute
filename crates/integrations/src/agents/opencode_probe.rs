@@ -203,6 +203,9 @@ impl OpenCodeCollaborationProbe {
             .env("HIROUTE_OPENCODE_PROBE_TOKEN", &token)
             .env("OPENCODE_DB", root_path.join("probe.db"))
             .env("OPENCODE_PURE", "true")
+            // Global .agents/.claude discovery can ignore the private HOME and
+            // race the explicitly selected installed file with a same-name Skill.
+            .env("OPENCODE_DISABLE_EXTERNAL_SKILLS", "true")
             .env("OPENCODE_DISABLE_DEFAULT_PLUGINS", "true")
             .env("OPENCODE_DISABLE_AUTOUPDATE", "true")
             .env("OPENCODE_DISABLE_MODELS_FETCH", "true")
