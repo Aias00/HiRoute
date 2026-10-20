@@ -344,6 +344,9 @@ pub fn opencode_provider(
     let sdk = match model.protocol {
         hiroute_domain::AgentIngressProtocolV1::Responses => "@ai-sdk/openai",
         hiroute_domain::AgentIngressProtocolV1::Messages => "@ai-sdk/anthropic",
+        hiroute_domain::AgentIngressProtocolV1::ChatCompletions => {
+            return Err(qoder_error("OpenCode routing protocol"));
+        }
     };
     let mut options = serde_json::json!({"baseURL":endpoint,"apiKey":api_key});
     if let Some(grant) = local_grant {

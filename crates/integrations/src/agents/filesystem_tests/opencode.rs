@@ -261,3 +261,58 @@ fn opencode_restore_file_capabilities_survive_a_missing_executable_and_bad_model
         && p.state == hiroute_domain::CapabilityState::Proven));
     assert!(scanner.opencode_executable_target().is_none());
 }
+
+#[test]
+fn opencode_connection_points_group_native_bindings_and_recheck_rotated_secrets() {
+    let root = tempfile::tempdir().unwrap();
+    let scanner = scanner(root.path());
+    let mut value = declaration();
+    value["model"] = json!("ordinary/explicit");
+    value["provider"]["ordinary"]["models"]["second"] =
+        json!({"limit":{"context":16384,"output":4096}});
+    value["provider"]["ordinary"]["models"]["messages"] =
+        json!({"provider":{"npm":"@ai-sdk/anthropic"}});
+    write_secret_settings(&scanner.opencode_user_models_target(), value.clone());
+    let sources = scanner.opencode_api_sources().unwrap();
+    let points = crate::agents::native_api_connection_points(sources);
+    assert_eq!(points.len(), 2);
+    let responses = points
+        .iter()
+        .find(|p| p.protocol() == Some(hiroute_domain::UpstreamProtocol::Responses))
+        .unwrap();
+    assert_eq!(responses.sources.len(), 2);
+    assert_eq!(
+        responses.sources[0]
+            .point_binding
+            .as_ref()
+            .unwrap()
+            .configured_default_model_id
+            .as_deref(),
+        Some("explicit")
+    );
+    assert!(points.iter().any(|p| p.protocol()
+        == Some(hiroute_domain::UpstreamProtocol::Messages)
+        && p.sources.len() == 1));
+    value["provider"]["ordinary"]["options"]["apiKey"] = json!("rotated-point-key");
+    write_secret_settings(&scanner.opencode_user_models_target(), value);
+    let fresh =
+        crate::agents::native_api_connection_points(scanner.opencode_api_sources().unwrap());
+    let updated = fresh
+        .iter()
+        .find(|p| p.key_digest == responses.key_digest)
+        .unwrap();
+    assert_ne!(updated.snapshot_digest, responses.snapshot_digest);
+    assert!(
+        scanner
+            .read_opencode_api_source(&responses.sources[0])
+            .is_err()
+    );
+    assert_eq!(
+        scanner
+            .read_opencode_api_source(&updated.sources[0])
+            .unwrap()
+            .1
+            .expose(),
+        b"rotated-point-key"
+    );
+}
