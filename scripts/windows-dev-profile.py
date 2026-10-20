@@ -294,6 +294,10 @@ def original_recovery_source(native_home, local_app_data, baseline):
     """Read the live locator's exact batch; never select a source by directory presence."""
     paths = locations(native_home, local_app_data)
     storage = plain(paths['state'] / 'storage')
+    if os.name == 'nt':
+        # Real retained native Agent material can exceed MAX_PATH under the
+        # batch/source prefix. Match the existing offline inventory helper.
+        storage = plain(extended_windows_path(str(storage)))
     locator_path = storage / 'observation-source-backup.json'
     locator = bounded_json(locator_path, 16 * 1024)
     import re
