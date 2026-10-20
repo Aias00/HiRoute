@@ -776,15 +776,15 @@ def restore_original(request, run, product, pm, helper, activity, manifest, root
         if login is not None:
             winreg.DeleteValue(key, 'HiRoute')
     stage('preserved-registration-and-disabled-owned-shell-login')
+    command(install/'hiroute.exe', ['service','autostart','disable','--output','json'], 'disable-current-task-login')
     command(install/'hiroute.exe', ['service','stop','--output','json'], 'stop-current')
-    command(install/'hiroute.exe', ['service','uninstall','--output','json'], 'unregister-current-task')
     images = ','.join("'" + str(p).replace("'", "''") + "'" for p in allowed | {shell})
     check = subprocess.run(['powershell.exe','-NoProfile','-NonInteractive','-Command',
         "$ErrorActionPreference='Stop';$images=@(" + images + ");@(Get-CimInstance Win32_Process | Where-Object {$_.ExecutablePath -in $images}).Count"],
         capture_output=True, timeout=30, text=True, creationflags=0x08000000)
     if check.returncode or check.stdout.strip() != '0':
         raise ValueError('Owned processes remain; preserve the stopped recovery state before copying data')
-    stage('current-task-unregistered-and-processes-exited')
+    stage('current-task-stopped-login-disabled-and-processes-exited')
     for label, path in [('program',install),('desktop',roots['programs']),('installation',roots['data'])]:
         copy_recovery_tree(helper, path, newer/label, run/(label+'-copy.log'))
     storage = helper.plain(helper.extended_windows_path(str(roots['state']/'storage')))

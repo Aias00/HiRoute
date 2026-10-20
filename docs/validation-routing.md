@@ -263,7 +263,7 @@ locator to its original batch, verifies copied recovery material and the origina
 program, and checks the sealed history directory identity without traversing it.
 `recovery-restore-original` is an explicit mutating operator case requiring that
 successful preview. For legacy sources without complete Desktop location records,
-it stops and unregisters only the verified current Task, preserves the newer group,
+it disables login and stops only the verified current Task, preserves the newer group,
 programs and registration, copies and verifies the entire old group with native
 permissions, and runs the independently verified matching original NSIS. It never
 starts an old program against the new group, merges generations, or replays after
