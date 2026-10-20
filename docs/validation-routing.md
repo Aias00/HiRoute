@@ -246,6 +246,9 @@ match; the compiled acceptance test is never executed as an installer adapter.
 Pending transactions are refused. This can publish preparation material
 and must be inspected before another action. It does not replace installed programs
 and is never a successful full-installer verdict.
+Read-only installation inspection also compares bounded retained Apps-registration
+values with the fixed current-user product key. It reports only differing value
+names; this diagnostic neither imports registration nor admits a recovery source.
 If that failed unreleased producer never registered its generated uninstaller,
 manual `installer-quarantine` can preserve that one file in the run's evidence.
 It requires the same inspection/prior-product admission and an independently

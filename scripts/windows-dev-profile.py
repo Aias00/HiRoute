@@ -3,6 +3,7 @@
 import hashlib
 import json
 import os
+import re
 from pathlib import Path
 import stat
 
@@ -41,6 +42,40 @@ def locations(native_home, local_app_data):
             'shell_state': local_app_data / 'HiRoute/shell',
             'programs': local_app_data / 'Programs/HiRoute',
             'stable_cli': native_home / '.local/bin/hiroute.exe'}
+
+
+def registration_values(text):
+    """Bounded diagnostic comparison only; this never admits a recovery source."""
+    if not text.startswith('Windows Registry Editor Version 5.00') or len(text)>32768:
+        raise ValueError('Unrecognized registration export')
+    values={}
+    for line in text.splitlines():
+        if not line or line.startswith(('Windows Registry Editor','[')):continue
+        match=re.fullmatch(r'("(?:[^"\\]|\\.)*")=(.*)',line)
+        if not match:raise ValueError('Unrecognized registration value')
+        name=json.loads(match[1]);data=match[2]
+        if data.startswith('"'):value=(1,json.loads(data))
+        elif re.fullmatch('dword:[0-9a-fA-F]{8}',data):value=(4,int(data[6:],16))
+        else:raise ValueError('Unrecognized registration value type')
+        if name in values:raise ValueError('Duplicate registration value')
+        values[name]=value
+    return values
+
+
+def registration_comparison(path):
+    import winreg
+    if path.stat().st_size>64*1024:return dict(assessment='export_exceeds_bound')
+    try:retained=registration_values(path.read_text(encoding='utf-16'))
+    except (ValueError,UnicodeError):return dict(assessment='unrecognized_retained_export')
+    current={}
+    with winreg.OpenKey(winreg.HKEY_CURRENT_USER,r'Software\Microsoft\Windows\CurrentVersion\Uninstall\HiRoute',0,winreg.KEY_READ) as key:
+        count=winreg.QueryInfoKey(key)[1]
+        if count>64:return dict(assessment='current_registration_exceeds_bound')
+        for i in range(count):
+            name,value,kind=winreg.EnumValue(key,i);current[name]=(kind,value)
+    return dict(assessment='diagnostic_only_not_recovery_admission',
+        values_equal=retained==current,changed_names=sorted(k for k in retained.keys()&current.keys() if retained[k]!=current[k]),
+        retained_only=sorted(retained.keys()-current.keys()),current_only=sorted(current.keys()-retained.keys()))
 
 
 def inspect_installation(native_home, local_app_data):
@@ -127,6 +162,9 @@ def inspect_installation(native_home, local_app_data):
                     files[name] = dict(bytes=size)
                     if size <= 4 * 1024 * 1024:
                         files[name]['sha256'] = digest(path)
+                    if name=='installation/uninstall.reg' and os.name=='nt':
+                        try:files[name]['registration_comparison']=registration_comparison(path)
+                        except OSError as error:files[name]['registration_comparison']=dict(assessment='unavailable',winerror=getattr(error,'winerror',None))
             packages.append(dict(name=entry.name, files=files))
         facts['retained_preparation_metadata'] = dict(packages=packages, truncated=len(entries) > 32,
                                                      assessment='staging_only_not_recovery_admission')

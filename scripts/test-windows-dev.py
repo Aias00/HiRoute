@@ -32,6 +32,12 @@ desktop = load('windows-desktop-session')
 
 
 class Runner(unittest.TestCase):
+    def test_registration_diagnosis_compares_values_without_granting_recovery(self):
+        text='Windows Registry Editor Version 5.00\r\n\r\n[HKEY_CURRENT_USER\\Software\\Example]\r\n"Path"="C:\\\\Program Files\\\\Example"\r\n"Size"=dword:000000ff\r\n'
+        self.assertEqual(profiles.registration_values(text),dict(Path=(1,r'C:\Program Files\Example'),Size=(4,255)))
+        for other in (text+'"Binary"=hex:ff\r\n',text+'"Size"=dword:000000ff\r\n','unrecognized'):
+            with self.assertRaises(ValueError):profiles.registration_values(other)
+
     def test_preparation_executes_only_the_measured_actual_nsis_shell(self):
         data=b'actual NSIS shell';encoded=base64.b64encode(data).decode('ascii')
         pm=dict(shell_sha256=hashlib.sha256(data).hexdigest())
