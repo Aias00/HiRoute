@@ -187,6 +187,30 @@ class Runner(unittest.TestCase):
             desktop.execute({}, self.root, self.root, {}, profiles, {'administrator_groups': True}, host.manifest, self.root)
         run.assert_not_called()
 
+    def test_original_restore_requires_exact_preview_before_any_native_mutation(self):
+        with patch.object(desktop.subprocess, 'run') as run, patch.object(desktop, 'nsis_install') as install:
+            with self.assertRaisesRegex(ValueError, 'recent successful source preview'):
+                desktop.restore_original({}, self.root, self.root, {}, profiles, {}, host.manifest, self.root)
+        run.assert_not_called()
+        install.assert_not_called()
+
+    def test_offline_restore_copy_never_overwrites_an_existing_generation(self):
+        source, target = self.root/'source', self.root/'current'
+        source.mkdir(); target.mkdir()
+        (target/'newer').write_bytes(b'preserve this generation')
+        with patch.object(desktop.subprocess, 'run') as run, self.assertRaisesRegex(ValueError, 'absent destination'):
+            desktop.copy_recovery_tree(profiles, source, target, self.root/'copy.log')
+        run.assert_not_called()
+        self.assertEqual((target/'newer').read_bytes(), b'preserve this generation')
+
+    def test_offline_restore_copy_requires_a_complete_matching_inventory(self):
+        source, target = self.root/'source', self.root/'restored'
+        source.mkdir(); (source/'master-key').write_bytes(b'original fixture key')
+        with patch.object(desktop.subprocess, 'run', return_value=types.SimpleNamespace(returncode=1)), \
+             self.assertRaisesRegex(ValueError, 'failed verification'):
+            desktop.copy_recovery_tree(profiles, source, target, self.root/'copy.log')
+        self.assertEqual((source/'master-key').read_bytes(), b'original fixture key')
+
     def test_desktop_helper_requires_the_exact_committed_hash(self):
         path = self.root / 'desktop.py'
         path.write_text('raise RuntimeError("must not import")')

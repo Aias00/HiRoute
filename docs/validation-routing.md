@@ -256,6 +256,21 @@ Content-addressed validator helpers are verified and published once by atomic
 rename. Wait/status/collection never overwrite helper files that a running
 standard-user task may be importing.
 
+For complete-group recovery acceptance, `recovery-preview` requires the exact
+independently staged original `--product`, currently installed `--from-product`
+and recent installation inspection in `--observation-run`. It binds the live
+locator to its original batch, verifies copied recovery material and the original
+program, and checks the sealed history directory identity without traversing it.
+`recovery-restore-original` is an explicit mutating operator case requiring that
+successful preview. For legacy sources without complete Desktop location records,
+it stops and unregisters only the verified current Task, preserves the newer group,
+programs and registration, copies and verifies the entire old group with native
+permissions, and runs the independently verified matching original NSIS. It never
+starts an old program against the new group, merges generations, or replays after
+failure. Offline copying may traverse history. Preserve partial states on failure.
+This legacy case does not certify recovery of original Desktop preferences;
+sources with complete Desktop records require their recorded location procedure.
+
 Stage separate product and harness bundles when reusing an unchanged product for
 a test-only repair. Results record both full revisions, binary hashes, driver hash,
 client hashes, actual OS/session/elevation and exactly one test outcome. Zero exit

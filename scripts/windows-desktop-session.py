@@ -690,12 +690,144 @@ def nsis_install(installer, run, locations):
             time.sleep(0.5)
 
 
+def copy_recovery_tree(helper, source, target, log):
+    """Offline operator copy, including DACLs and long paths; never mirror/delete."""
+    source, target = helper.plain(source), helper.plain(target)
+    if not source.is_dir() or target.exists() or source == target or source in target.parents:
+        raise ValueError('Recovery copies require a distinct absent destination')
+    expected = helper.inventory(source)
+    with log.open('wb') as stream:
+        done = subprocess.run(['robocopy.exe', str(source), str(target), '/E', '/COPY:DATS',
+            '/DCOPY:DAT', '/R:0', '/W:0', '/XJ', '/NFL', '/NDL', '/NJH', '/NJS', '/NP'],
+            stdout=stream, stderr=subprocess.STDOUT, timeout=120, creationflags=0x08000000)
+    if done.returncode >= 8 or not target.is_dir() or helper.inventory(target) != expected:
+        raise ValueError('Offline recovery copy failed verification; preserve both directories')
+    return expected
+
+
+def restore_original(request, run, product, pm, helper, activity, manifest, root):
+    """Execute the documented whole-group operator recovery, never an automatic retry."""
+    previous, observation = request.get('from_product'), request.get('observation_run')
+    if not re.fullmatch(r'[a-f0-9]{12}-[a-f0-9]{12}', previous or '') or not re.fullmatch(r'[a-f0-9]{32}', observation or ''):
+        raise ValueError('Original restoration requires exact products and a recent successful source preview')
+    preview = root / 'runs' / observation
+    original = helper.bounded_json(preview / 'request.json')
+    result = helper.bounded_json(preview / 'result.json')
+    if (original.get('desktop_action') != 'recovery-preview' or original['product'] != request['product']
+            or original.get('from_product') != previous or not result.get('passed')
+            or result.get('administrator') is not False
+            or original['config']['user'] != request['config']['user']
+            or original['config']['session_id'] != request['config']['session_id']
+            or time.time() - (preview / 'result.json').stat().st_mtime > 3600):
+        raise ValueError('Original restoration preview is stale or belongs to another product/account')
+    current = root / 'bundles' / previous
+    roots, facts, shell = installed(helper, current, manifest(current))
+    source = helper.original_recovery_source(Path.home(), Path(os.environ['LOCALAPPDATA']), pm)
+    if (source['source']/'recovery-package/restore-locations.json').exists():
+        raise ValueError('This batch requires its complete Desktop location recovery, not the legacy NSIS operator path')
+    measured = helper.bounded_json(preview / 'recovery-source.json')
+    if (measured.get('batch_id') != source['batch_id']
+            or measured.get('locator_sha256') != source['locator_sha256']):
+        raise ValueError('The original recovery source changed after preview')
+    marker = facts['marker']['record']
+    definition = json.loads(facts['definition']['text'])
+    task = definition.get('name', '')
+    if not re.fullmatch(r'HiRoute-[a-f0-9]{64}', task) or definition.get('manager') != 'task':
+        raise ValueError('Original restoration requires the exact owned Task definition')
+    install = helper.plain(marker['install_root'])
+    allowed = {install / 'hirouted.exe', install / 'libexec/cliproxyapi.exe'}
+    if (any(Path(p.get('ExecutablePath') or '') not in allowed for p in activity.get('processes', []))
+            or any(t.get('TaskName') != task for t in activity.get('tasks', []))):
+        raise ValueError('Quit the measured Desktop and preserve unrelated product activity before restoration')
+    extras = source['record'].get('extra_locations', {})
+    for name, target in extras.items():
+        target = helper.plain(target)
+        if (name not in ('gateway.lkg', 'gateway-listener.json') or target.name != name
+                or helper.native_directory_identity(target.parent) != helper.native_directory_identity(roots['state'])):
+            raise ValueError('An original auxiliary destination is outside this native state root')
+    newer = run / 'preserved-current'
+    newer.mkdir()
+    stages = []
+    def stage(name):
+        stages.append(name)
+        (run / 'recovery-operator.json').write_text(json.dumps(dict(batch_id=source['batch_id'],
+            old_revision=pm['source_revision'], current_revision=manifest(current)['source_revision'],
+            stages=stages, preserved_current=str(newer)), indent=2), encoding='utf-8')
+    def command(program, args, label):
+        done = subprocess.run([str(program), *args], capture_output=True, timeout=150, creationflags=0x08000000)
+        (run / (label + '.stdout')).write_bytes(done.stdout)
+        (run / (label + '.stderr')).write_bytes(done.stderr)
+        if done.returncode:
+            raise ValueError('The owned recovery command failed: ' + label)
+        return done
+    native_before = {str(p): helper.digest(p) for p in (Path.home()/'.codex/config.toml', Path.home()/'.codex/hiroute.config.toml') if p.is_file()}
+    import winreg
+    run_key = r'Software\Microsoft\Windows\CurrentVersion\Run'
+    with winreg.OpenKey(winreg.HKEY_CURRENT_USER, run_key, 0, winreg.KEY_QUERY_VALUE | winreg.KEY_SET_VALUE) as key:
+        try:
+            login, kind = winreg.QueryValueEx(key, 'HiRoute')
+        except FileNotFoundError:
+            login, kind = None, None
+        if login is not None and (kind != winreg.REG_SZ or login != '"' + str(shell) + '" --background'):
+            raise ValueError('The current-user HiRoute login value belongs to another installation')
+        (newer / 'shell-login.json').write_text(json.dumps(dict(value=login, kind=kind)), encoding='utf-8')
+        command('reg.exe', ['export', r'HKCU\Software\Microsoft\Windows\CurrentVersion\Uninstall\HiRoute', str(newer/'uninstall.reg'), '/y'], 'preserve-registration')
+        command('schtasks.exe', ['/Query', '/TN', task, '/XML'], 'preserve-task')
+        if login is not None:
+            winreg.DeleteValue(key, 'HiRoute')
+    stage('preserved-registration-and-disabled-owned-shell-login')
+    command(install/'hiroute.exe', ['service','stop','--output','json'], 'stop-current')
+    command(install/'hiroute.exe', ['service','uninstall','--output','json'], 'unregister-current-task')
+    images = ','.join("'" + str(p).replace("'", "''") + "'" for p in allowed | {shell})
+    check = subprocess.run(['powershell.exe','-NoProfile','-NonInteractive','-Command',
+        "$ErrorActionPreference='Stop';$images=@(" + images + ");@(Get-CimInstance Win32_Process | Where-Object {$_.ExecutablePath -in $images}).Count"],
+        capture_output=True, timeout=30, text=True, creationflags=0x08000000)
+    if check.returncode or check.stdout.strip() != '0':
+        raise ValueError('Owned processes remain; preserve the stopped recovery state before copying data')
+    stage('current-task-unregistered-and-processes-exited')
+    for label, path in [('program',install),('desktop',roots['programs']),('installation',roots['data'])]:
+        copy_recovery_tree(helper, path, newer/label, run/(label+'-copy.log'))
+    storage = helper.plain(helper.extended_windows_path(str(roots['state']/'storage')))
+    replacement = storage.with_name('storage.original-restore.' + request['run_id'])
+    expected = copy_recovery_tree(helper, source['source']/'storage', replacement, run/'storage-copy.log')
+    stage('verified-complete-old-group-offline-copy')
+    storage.rename(newer/'storage')
+    replacement.rename(storage)
+    auxiliary = newer/'auxiliary';auxiliary.mkdir()
+    for name, target in extras.items():
+        target = helper.plain(target)
+        if target.exists():target.rename(auxiliary/name)
+        done = subprocess.run(['robocopy.exe',str(source['source']),str(target.parent),name,'/COPY:DATS','/R:0','/W:0','/NFL','/NDL','/NJH','/NJS','/NP'],
+            capture_output=True, timeout=30, creationflags=0x08000000)
+        if done.returncode >= 8 or helper.digest(target) != helper.digest(source['source']/name):
+            raise ValueError('Original auxiliary restoration failed; do not start either program')
+    if helper.inventory(storage) != expected:
+        raise ValueError('The complete restored original group changed before program replacement')
+    stage('complete-old-group-and-auxiliary-files-restored')
+    # A source retained before full Desktop location records existed must use
+    # the independently verified matching original NSIS, after pairing old data.
+    timing = nsis_install(product/'installer.exe',run,roots)
+    installed(helper,product,pm)
+    stage('matching-original-native-installer-completed')
+    status = command(roots['stable_cli'],['system','status','--output','json'],'restored-system')
+    if json.loads(status.stdout).get('data', {}).get('gateway') != 'ready':
+        raise ValueError('The restored original Gateway is not ready; preserve the recovery state')
+    if any(helper.digest(Path(p)) != checksum for p,checksum in native_before.items()):
+        raise ValueError('Native Agent configuration changed during whole-group restoration')
+    stage('original-control-readiness-and-native-config-verified')
+    return dict(native_entry='documented complete-group operator recovery with exact original NSIS',
+                batch_id=source['batch_id'], stages=stages, installer=timing, preserved_current=str(newer),
+                scope='legacy retained source; complete Desktop preference restoration requires a newly captured Desktop bundle')
+
+
 def execute(request, run, product, pm, helper, activity, manifest, root):
     if activity.get('administrator_groups') is not False:
         raise ValueError('Native Desktop evidence requires a standard account, not a filtered administrator')
     action = request['desktop_action']
-    if action not in ('install', 'installer-resume', 'installer-quarantine', 'launch', 'snapshot', 'invoke', 'text', 'click', 'scroll', 'close', 'quit', 'tray-observe', 'desktop-state', 'cli', 'native-files', 'codex-call', 'codex-inference', 'network-probe', 'recovery-preview'):
+    if action not in ('install', 'installer-resume', 'installer-quarantine', 'launch', 'snapshot', 'invoke', 'text', 'click', 'scroll', 'close', 'quit', 'tray-observe', 'desktop-state', 'cli', 'native-files', 'codex-call', 'codex-inference', 'network-probe', 'recovery-preview', 'recovery-restore-original'):
         raise ValueError('Unknown native Desktop action')
+    if action == 'recovery-restore-original':
+        return restore_original(request, run, product, pm, helper, activity, manifest, root)
     if action == 'recovery-preview':
         previous = request.get('from_product')
         observation = request.get('observation_run')

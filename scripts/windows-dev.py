@@ -334,7 +334,7 @@ def main():
     desktop = commands.add_parser('desktop-session', help='Measured installed Desktop and native UI acceptance')
     desktop.add_argument('--product', required=True)
     desktop.add_argument('--action', dest='desktop_action', required=True,
-                         choices=('install', 'installer-resume', 'installer-quarantine', 'launch', 'snapshot', 'invoke', 'text', 'click', 'scroll', 'close', 'quit', 'tray-observe', 'desktop-state', 'cli', 'native-files', 'codex-call', 'codex-inference', 'network-probe', 'recovery-preview'))
+                         choices=('install', 'installer-resume', 'installer-quarantine', 'launch', 'snapshot', 'invoke', 'text', 'click', 'scroll', 'close', 'quit', 'tray-observe', 'desktop-state', 'cli', 'native-files', 'codex-call', 'codex-inference', 'network-probe', 'recovery-preview', 'recovery-restore-original'))
     desktop.add_argument('--from-product', help='Exact installed bundle admitted before a cross-build upgrade')
     desktop.add_argument('--recover-product', help='Exact interrupted bundle, with a recent inspection, before normal NSIS recovery')
     desktop.add_argument('--observation-run')
@@ -410,7 +410,7 @@ def main():
             if args.desktop_action == 'network-probe' and (
                     not args.source_id or not re.fullmatch(r'source/[A-Za-z0-9._:-]{1,240}', args.source_id)):
                 raise ValueError('TLS diagnostics require an explicit saved source identity')
-            if args.desktop_action in ('installer-resume', 'installer-quarantine', 'recovery-preview') and (
+            if args.desktop_action in ('installer-resume', 'installer-quarantine', 'recovery-preview', 'recovery-restore-original') and (
                     not args.from_product or not args.observation_run
                     or not re.fullmatch(r'[a-f0-9]{32}', args.observation_run)):
                 raise ValueError('Installer resume requires the prior product and a recent installation inspection')
@@ -427,7 +427,7 @@ def main():
                     raise ValueError('Scrolling requires an explicit direction')
             values.update(run_id=uuid.uuid4().hex, harness=args.product, binary='hiroute.exe',
                           case='native_desktop_' + args.desktop_action.replace('-', '_'), operation='desktop', ignored=False,
-                          timeout=810 if args.desktop_action == 'install' else 240)
+                          timeout=1500 if args.desktop_action == 'recovery-restore-original' else (810 if args.desktop_action == 'install' else 240))
             values.pop('cli_args')
             if args.desktop_action == 'cli':
                 if args.cli_args is None:
