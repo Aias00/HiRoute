@@ -339,6 +339,9 @@ for line in sys.stdin:
                      package_source / 'assets/skills/hiroute-management/SKILL.md')
         shutil.copy2(self.repo / 'docs/standalone-cli.md',
                      package_source / 'docs/standalone-cli.md')
+        # Linux packages carry the complete Omarchy asset group.
+        omarchy_assets = package_source / 'assets/integrations/omarchy'
+        shutil.copytree(self.repo / 'assets/integrations/omarchy', omarchy_assets)
         (package_source / 'notices/THIRD-PARTY-LICENSES.txt').write_text(
             'Isolated product-test dependency notice\n')
         (package_source / 'notices/third-party-licenses.json').write_text(json.dumps({
@@ -365,6 +368,7 @@ for line in sys.stdin:
             package_source / 'docs/standalone-cli.md',
             package_source / 'notices/THIRD-PARTY-LICENSES.txt',
             package_source / 'notices/third-party-licenses.json',
+            *(path for path in omarchy_assets.rglob('*') if path.is_file()),
         ):
             path.chmod(0o600)
         candidate_hiroute.chmod(0o700)
