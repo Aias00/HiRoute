@@ -96,39 +96,6 @@ impl OpenCodeCollaborationProbe {
             .map_err(|_| fail())?
             .ok_or_else(fail)?;
         let (before, before_parts) = dependency_parts(&executable, native, &cli, &target)?;
-        let resource_metadata = || {
-            let path = native.skill_target();
-            std::iter::once(executable.as_path())
-                .chain(path.ancestors().take(2))
-                .map(|path| {
-                    std::fs::symlink_metadata(path).ok().map(|metadata| {
-                        #[cfg(unix)]
-                        {
-                            use std::os::unix::fs::MetadataExt;
-                            format!(
-                                "{:?}",
-                                (
-                                    metadata.dev(),
-                                    metadata.ino(),
-                                    metadata.uid(),
-                                    metadata.gid(),
-                                    metadata.mode(),
-                                    metadata.nlink(),
-                                    metadata.len(),
-                                    metadata.mtime(),
-                                    metadata.mtime_nsec(),
-                                    metadata.ctime(),
-                                    metadata.ctime_nsec()
-                                )
-                            )
-                        }
-                        #[cfg(not(unix))]
-                        format!("{metadata:?}")
-                    })
-                })
-                .collect::<Vec<_>>()
-        };
-        let before_metadata = resource_metadata();
         let root = super::probe_files::temporary("hiroute-opencode-check-").map_err(|_| fail())?;
         let root_path = std::fs::canonicalize(root.path()).map_err(|_| fail())?;
         let workspace = root_path.join("workspace");
@@ -310,12 +277,6 @@ impl OpenCodeCollaborationProbe {
         }
         let (after, after_parts) = dependency_parts(&executable, native, &cli, &target)?;
         if before != after {
-            if before_parts[0] != after_parts[0] {
-                eprintln!(
-                    "native OpenCode resource metadata: before={before_metadata:?} after={:?}",
-                    resource_metadata()
-                );
-            }
             for (index, name) in [
                 "native-resource",
                 "native-executable",
@@ -360,10 +321,18 @@ fn dependency_parts(
             confirmed_skill(&native.skill_target(), expected_content)?.as_bytes(),
         )),
     };
-    let resource =
-        super::observed_capabilities::dependencies(Some(executable), &native.skill_target())
-            .map_err(|_| qoder_error("native resource identity"))?
-            .0;
+    let resource = match &skill {
+        Some(content) => super::observed_capabilities::content_bound_dependencies(
+            Some(executable),
+            &native.skill_target(),
+            content,
+        ),
+        None => {
+            super::observed_capabilities::dependencies(Some(executable), &native.skill_target())
+        }
+    }
+    .map_err(|_| qoder_error("native resource identity"))?
+    .0;
     let executable = super::native_ingress_probe::binary_identity(executable)
         .map_err(|_| qoder_error("native binary identity"))?;
     let cli = super::native_ingress_probe::binary_identity(cli)

@@ -134,6 +134,32 @@ pub(super) fn dependencies(
     executable: Option<&Path>,
     target: &Path,
 ) -> Result<(CanonicalDigest, bool), ()> {
+    unix_dependencies(executable, target, None)
+}
+
+/// Native Skill checks already confirm these exact bytes and validate the native read receipt.
+/// A ctime-only bookkeeping change is not a new Skill; identity, permissions, links, size and
+/// mtime remain dependencies. Ordinary configuration/Preview keeps its existing version tuple.
+pub(super) fn content_bound_dependencies(
+    executable: Option<&Path>,
+    target: &Path,
+    confirmed_content: &CanonicalDigest,
+) -> Result<(CanonicalDigest, bool), ()> {
+    #[cfg(unix)]
+    return unix_dependencies(executable, target, Some(confirmed_content));
+    #[cfg(not(unix))]
+    {
+        let _ = confirmed_content;
+        dependencies(executable, target)
+    }
+}
+
+#[cfg(unix)]
+fn unix_dependencies(
+    executable: Option<&Path>,
+    target: &Path,
+    confirmed_content: Option<&CanonicalDigest>,
+) -> Result<(CanonicalDigest, bool), ()> {
     use std::os::unix::fs::MetadataExt;
     let file_identity = |metadata: &std::fs::Metadata| {
         (
@@ -198,13 +224,37 @@ pub(super) fn dependencies(
         && file.as_ref().is_none_or(|metadata| {
             metadata.is_file() && !metadata.file_type().is_symlink() && metadata.nlink() == 1
         });
-    let digest = CanonicalDigest::of(&(
-        binary,
-        target,
-        file.as_ref().map(file_identity),
-        parent,
-        directory_identity(&parent_metadata),
-    ))
+    let digest = if let Some(content) = confirmed_content {
+        let skill_identity = file.as_ref().map(|metadata| {
+            (
+                metadata.dev(),
+                metadata.ino(),
+                metadata.uid(),
+                metadata.gid(),
+                metadata.mode(),
+                metadata.nlink(),
+                metadata.len(),
+                metadata.mtime(),
+                metadata.mtime_nsec(),
+            )
+        });
+        CanonicalDigest::of(&(
+            binary,
+            target,
+            skill_identity,
+            parent,
+            directory_identity(&parent_metadata),
+            content,
+        ))
+    } else {
+        CanonicalDigest::of(&(
+            binary,
+            target,
+            file.as_ref().map(file_identity),
+            parent,
+            directory_identity(&parent_metadata),
+        ))
+    }
     .map_err(|_| ())?;
     Ok((digest, replace))
 }
@@ -212,6 +262,79 @@ pub(super) fn dependencies(
 #[cfg(all(test, unix))]
 mod tests {
     use super::*;
+
+    #[test]
+    fn confirmed_skill_content_ignores_ctime_only_churn_and_retains_native_guards() {
+        use std::os::unix::fs::{MetadataExt, PermissionsExt};
+        let root = tempfile::tempdir().unwrap();
+        let target = root.path().join("SKILL.md");
+        std::fs::write(&target, b"original Skill body\n").unwrap();
+        std::fs::set_permissions(&target, std::fs::Permissions::from_mode(0o600)).unwrap();
+        let content = CanonicalDigest::of_bytes(b"original Skill body\n");
+        let original = std::fs::metadata(&target).unwrap();
+        let strict = dependencies(None, &target).unwrap();
+        let confirmed = content_bound_dependencies(None, &target, &content).unwrap();
+        // Reproduce the observed native read: ctime changed while bytes, inode,
+        // access policy and mtime remained identical. chmod with the same policy
+        // provides this metadata event without depending on a macOS background service.
+        std::thread::sleep(std::time::Duration::from_millis(2));
+        std::fs::set_permissions(&target, original.permissions()).unwrap();
+        let after = std::fs::metadata(&target).unwrap();
+        assert_ne!(
+            (original.ctime(), original.ctime_nsec()),
+            (after.ctime(), after.ctime_nsec())
+        );
+        assert_eq!(original.modified().unwrap(), after.modified().unwrap());
+        assert_ne!(strict.0, dependencies(None, &target).unwrap().0);
+        assert_eq!(
+            confirmed,
+            content_bound_dependencies(None, &target, &content).unwrap()
+        );
+
+        std::fs::set_permissions(&target, std::fs::Permissions::from_mode(0o640)).unwrap();
+        assert_ne!(
+            confirmed.0,
+            content_bound_dependencies(None, &target, &content)
+                .unwrap()
+                .0
+        );
+        std::fs::set_permissions(&target, original.permissions()).unwrap();
+        let parent_permissions = std::fs::metadata(root.path()).unwrap().permissions();
+        std::fs::set_permissions(root.path(), std::fs::Permissions::from_mode(0o750)).unwrap();
+        assert_ne!(
+            confirmed.0,
+            content_bound_dependencies(None, &target, &content)
+                .unwrap()
+                .0
+        );
+        std::fs::set_permissions(root.path(), parent_permissions).unwrap();
+
+        std::fs::write(&target, b"modified Skill body\n").unwrap();
+        std::fs::File::open(&target)
+            .unwrap()
+            .set_times(std::fs::FileTimes::new().set_modified(original.modified().unwrap()))
+            .unwrap();
+        let changed = CanonicalDigest::of_bytes(b"modified Skill body\n");
+        assert_ne!(
+            confirmed.0,
+            content_bound_dependencies(None, &target, &changed)
+                .unwrap()
+                .0
+        );
+        std::fs::rename(&target, root.path().join("previous.md")).unwrap();
+        std::fs::write(&target, b"original Skill body\n").unwrap();
+        std::fs::set_permissions(&target, original.permissions()).unwrap();
+        std::fs::File::open(&target)
+            .unwrap()
+            .set_times(std::fs::FileTimes::new().set_modified(original.modified().unwrap()))
+            .unwrap();
+        assert_ne!(
+            confirmed.0,
+            content_bound_dependencies(None, &target, &content)
+                .unwrap()
+                .0
+        );
+    }
 
     #[test]
     fn parent_sibling_churn_does_not_change_native_dependency() {
