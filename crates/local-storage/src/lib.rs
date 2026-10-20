@@ -650,7 +650,7 @@ pub enum LocalStorageError {
     UpgradeSourceUnsupported,
     #[error("storage upgrade requires recovery: {recovery:?}: {source}")]
     Recovery {
-        recovery: hiroute_host_runtime::StorageRecovery,
+        recovery: Box<hiroute_host_runtime::StorageRecovery>,
         source: Box<LocalStorageError>,
     },
     #[error("stable storage upgrade failed at {stage}: {source}")]
@@ -686,7 +686,7 @@ impl LocalStorageError {
             StorageRecovery, StorageRecoveryAction as A, StorageRecoveryCause as C,
         };
         match self {
-            Self::Recovery { recovery, .. } => recovery.clone(),
+            Self::Recovery { recovery, .. } => recovery.as_ref().clone(),
             Self::UpgradeStage { source, .. } => {
                 let mut report = source.recovery();
                 if report.cause == C::UnknownState {
@@ -713,7 +713,7 @@ impl LocalStorageError {
         action: hiroute_host_runtime::StorageRecoveryAction,
     ) -> Self {
         Self::Recovery {
-            recovery: hiroute_host_runtime::StorageRecovery::new(cause, action),
+            recovery: Box::new(hiroute_host_runtime::StorageRecovery::new(cause, action)),
             source: Box::new(self),
         }
     }

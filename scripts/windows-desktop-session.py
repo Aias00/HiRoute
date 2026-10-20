@@ -611,6 +611,85 @@ def admit_nsis_install(request, helper, activity, manifest, root):
         raise ValueError('Fresh Desktop installation must not adopt an existing product')
 
 
+
+# The shell's installer adapter permits one 600-second native install request.
+# NSIS also extracts files and runs its prepare/commit hooks outside that request.
+# Keep this specific whole-installer watchdog outside that product deadline;
+# ordinary public CLI/UI actions retain their existing bounds.
+NSIS_INSTALL_TIMEOUT = 720
+
+
+def nsis_install(installer, run, locations):
+    """Wait for the actual NSIS child and retain bounded phase/timing evidence.
+
+    Observing a committed marker is never a substitute for installer exit. On
+    timeout stop only our owned NSIS process; its product transaction remains
+    available for inspection and normal recovery, without automatic replay.
+    """
+    observed = {
+        'shell': locations['shell_state'] / 'install-pending.json',
+        'standalone': locations['data'] / 'service/install-journal.json',
+        'installation': locations['data'] / 'standalone.json',
+        'outcome': locations['shell_state'] / 'update-outcome.json',
+    }
+    started = time.monotonic()
+    evidence = dict(watchdog_seconds=NSIS_INSTALL_TIMEOUT, events=[])
+    signatures = {}
+
+    def record(final=None):
+        changed = {}
+        for name, path in observed.items():
+            try:
+                info = path.stat()
+                signature = (info.st_mtime_ns, info.st_size)
+                if signature == signatures.get(name):
+                    continue
+                signatures[name] = signature
+                value = dict(present=True, bytes=info.st_size)
+                if info.st_size <= 1024 * 1024:
+                    with path.open('rb') as source:
+                        data = source.read(1024 * 1024 + 1)
+                    try:
+                        row = json.loads(data)
+                        value.update({k: row[k] for k in ('phase', 'status')
+                                      if isinstance(row.get(k), str) and len(row[k]) <= 64})
+                    except (ValueError, TypeError):
+                        value['incomplete_read'] = True
+                changed[name] = value
+            except FileNotFoundError:
+                if signatures.get(name) != 'absent':
+                    signatures[name] = 'absent'
+                    changed[name] = dict(present=False)
+            except OSError:
+                if signatures.get(name) != 'unavailable':
+                    signatures[name] = 'unavailable'
+                    changed[name] = dict(unavailable=True)
+        if changed and len(evidence['events']) < 256:
+            evidence['events'].append(dict(elapsed_seconds=round(time.monotonic()-started, 3),
+                                           changes=changed))
+        if final is not None:
+            evidence.update(final, elapsed_seconds=round(time.monotonic()-started, 3))
+        (run / 'installer-process.json').write_text(json.dumps(evidence, indent=2), encoding='utf-8')
+
+    with (run / 'installer.stdout').open('xb') as out, (run / 'installer.stderr').open('xb') as err:
+        child = subprocess.Popen([str(installer), '/S'], stdin=subprocess.DEVNULL, stdout=out, stderr=err)
+        evidence['pid'] = child.pid
+        while True:
+            code = child.poll()
+            record()
+            if code is not None:
+                record(dict(exit_code=code, timed_out=False))
+                if code:
+                    raise subprocess.CalledProcessError(code, [str(installer), '/S'])
+                return evidence
+            if time.monotonic()-started >= NSIS_INSTALL_TIMEOUT:
+                record(dict(timed_out=True))
+                child.kill()
+                child.wait(timeout=30)
+                raise subprocess.TimeoutExpired([str(installer), '/S'], NSIS_INSTALL_TIMEOUT)
+            time.sleep(0.5)
+
+
 def execute(request, run, product, pm, helper, activity, manifest, root):
     if activity.get('administrator_groups') is not False:
         raise ValueError('Native Desktop evidence requires a standard account, not a filtered administrator')
@@ -646,11 +725,11 @@ def execute(request, run, product, pm, helper, activity, manifest, root):
     if action == 'install':
         admit_nsis_install(request, helper, activity, manifest, root)
         previous = request.get('from_product')
-        with (run / 'installer.stdout').open('xb') as out, (run / 'installer.stderr').open('xb') as err:
-            done = subprocess.run([str(product / 'installer.exe'), '/S'], stdin=subprocess.DEVNULL,
-                                  stdout=out, stderr=err, timeout=150, check=True)
+        timing = nsis_install(product / 'installer.exe', run,
+                              helper.locations(Path.home(), Path(os.environ['LOCALAPPDATA'])))
         _, after, _ = installed(helper, product, pm)
-        return dict(native_entry='NSIS /S', exit_code=done.returncode, installation=after,
+        return dict(native_entry='NSIS /S', exit_code=timing['exit_code'], installation=after,
+                    elapsed_seconds=timing['elapsed_seconds'],
                     upgrade_from=previous, recovery_from=request.get('recover_product'),
                     installer_sha256=pm['files']['installer.exe']['sha256'])
     roots, facts, shell = installed(helper, product, pm)

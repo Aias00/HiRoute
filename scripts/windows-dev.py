@@ -426,7 +426,8 @@ def main():
                 if args.desktop_action == 'scroll' and args.scroll_direction is None:
                     raise ValueError('Scrolling requires an explicit direction')
             values.update(run_id=uuid.uuid4().hex, harness=args.product, binary='hiroute.exe',
-                          case='native_desktop_' + args.desktop_action.replace('-', '_'), operation='desktop', ignored=False, timeout=240)
+                          case='native_desktop_' + args.desktop_action.replace('-', '_'), operation='desktop', ignored=False,
+                          timeout=810 if args.desktop_action == 'install' else 240)
             values.pop('cli_args')
             if args.desktop_action == 'cli':
                 if args.cli_args is None:

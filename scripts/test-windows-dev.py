@@ -99,6 +99,51 @@ class Runner(unittest.TestCase):
             with self.assertRaisesRegex(ValueError, 'binary changed'):
                 desktop.installed(profiles, self.root, manifest)
 
+    def test_nsis_waits_for_exit_past_cli_watchdog_and_records_transaction_phases(self):
+        locations = {name: self.root / name for name in ('data', 'shell_state')}
+        for path in locations.values():
+            path.mkdir()
+        pending = locations['shell_state'] / 'install-pending.json'
+        pending.write_text(json.dumps(dict(phase='prepared')))
+        clock = [0.0]
+        child = unittest.mock.Mock(pid=42)
+        child.poll.side_effect = [None, None, 0]
+        def advance(_):
+            clock[0] += 80
+            if clock[0] == 160:
+                pending.unlink()
+                (locations['shell_state'] / 'update-outcome.json').write_text(json.dumps(dict(status='succeeded')))
+        with patch.object(desktop.subprocess, 'Popen', return_value=child), \
+             patch.object(desktop.time, 'monotonic', side_effect=lambda: clock[0]), \
+             patch.object(desktop.time, 'sleep', side_effect=advance):
+            result = desktop.nsis_install(self.root / 'installer.exe', self.root, locations)
+        self.assertEqual(result['elapsed_seconds'], 160)
+        self.assertEqual(result['exit_code'], 0)
+        self.assertFalse(result['timed_out'])
+        self.assertEqual(result['events'][0]['changes']['shell']['phase'], 'prepared')
+        self.assertEqual(result['events'][-1]['changes']['outcome']['status'], 'succeeded')
+        child.kill.assert_not_called()
+        self.assertEqual(json.loads((self.root / 'installer-process.json').read_text()), result)
+
+    def test_nsis_watchdog_records_failure_and_stops_only_the_held_child(self):
+        locations = {name: self.root / name for name in ('data', 'shell_state')}
+        clock = [0.0]
+        child = unittest.mock.Mock(pid=42)
+        child.poll.return_value = None
+        def advance(_):
+            clock[0] += 1
+        with patch.object(desktop, 'NSIS_INSTALL_TIMEOUT', 2), \
+             patch.object(desktop.subprocess, 'Popen', return_value=child), \
+             patch.object(desktop.time, 'monotonic', side_effect=lambda: clock[0]), \
+             patch.object(desktop.time, 'sleep', side_effect=advance), \
+             self.assertRaises(desktop.subprocess.TimeoutExpired):
+            desktop.nsis_install(self.root / 'installer.exe', self.root, locations)
+        child.kill.assert_called_once_with()
+        child.wait.assert_called_once_with(timeout=30)
+        result = json.loads((self.root / 'installer-process.json').read_text())
+        self.assertTrue(result['timed_out'])
+        self.assertNotIn('exit_code', result)
+
     def test_desktop_refuses_filtered_administrator_before_native_actions(self):
         with self.assertRaisesRegex(ValueError, 'filtered administrator'), patch.object(desktop.subprocess, 'run') as run:
             desktop.execute({}, self.root, self.root, {}, profiles, {'administrator_groups': True}, host.manifest, self.root)

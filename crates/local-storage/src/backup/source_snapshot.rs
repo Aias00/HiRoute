@@ -455,7 +455,7 @@ pub(crate) fn preflight_space(
             required_bytes: required,
             available_bytes: available,
         });
-        return Err(LocalStorageError::Recovery { recovery,
+        return Err(LocalStorageError::Recovery { recovery: Box::new(recovery),
             source: Box::new(LocalStorageError::InvalidData.at_upgrade_stage("Insufficient space for recovery material and startup headroom; preserve the source and free unrelated space before retrying")) });
     }
     Ok(required)

@@ -22,9 +22,10 @@ pub(crate) fn publish_failure(root: &Path, error: LocalStorageError) -> LocalSto
     }
     let _ = recovery.store(root);
     match error {
-        LocalStorageError::Recovery { source, .. } => {
-            LocalStorageError::Recovery { recovery, source }
-        }
+        LocalStorageError::Recovery { source, .. } => LocalStorageError::Recovery {
+            recovery: Box::new(recovery),
+            source,
+        },
         error => error,
     }
 }

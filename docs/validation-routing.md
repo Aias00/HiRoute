@@ -171,7 +171,13 @@ native Quit menu item, then requires that process to exit. It does not kill a
 process or stop the background service; an unavailable or ambiguous icon/menu
 is an observation failure that must be inspected before retrying.
 
-`--action install` runs the measured NSIS `/S` entry. For a different installed
+`--action install` runs the measured NSIS `/S` entry. Its specific 720-second
+whole-installer watchdog includes the product adapter's 600-second install request
+and NSIS extraction/hooks; CLI/UI watchdogs and product request deadlines stay
+unchanged. `installer-process.json` records elapsed time, bounded transaction
+phase changes and the actual installer exit. A committed marker without that exit
+does not pass installation. On timeout inspect the retained transaction and any
+remaining product children before recovery or another attempt. For a different installed
 candidate, `--from-product OLD_BUNDLE_ID` verifies the old images before invoking
 the new installer. Preserve existing data and identify both packages in the
 result. Different source revisions carrying the same semantic version prove a
