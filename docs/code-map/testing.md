@@ -16,6 +16,13 @@ and its [native executor](../../scripts/windows-dev-host.py), reached through
 the project owns artifact admission, exact-case execution and revision-bound evidence.
 Its four temporary-directory native artifact ACL/recovery cases can execute without
 replacing an existing installation; installed-product cases still require a fresh profile.
+Reusable Desktop Pilot build admission belongs to
+[pilot-builds.py](../../scripts/pilot-builds.py); its
+[lifecycle regressions](../../scripts/test-pilot-builds.py) cover manifest-content
+identity, frozen snapshots and checks before reuse/start using fake build/launch tools.
+The separate `--real-consumer` case is required by the affected CI selection and
+checks the production Rust build-script and embedding declaration; local default
+checks never compile or execute those temporary Rust programs.
 [Orphaned data preparation](../../scripts/windows-dev-profile.py) preserves complete
 backups after explicit user authorization; it does not establish a product scenario.
 [Native Desktop session actions](../../scripts/windows-desktop-session.py) admit

@@ -330,6 +330,26 @@ class SelectionTests(unittest.TestCase):
         self.assertTrue(mixed['rust'])
         self.assertIn('daemon', mixed['groups'])
 
+    def test_real_pilot_manifest_consumer_is_selected_only_for_applicable_ci_plans(self):
+        command = ['python3', 'scripts/test-pilot-builds.py', '--real-consumer']
+        inputs = ('scripts/pilot-builds.py', 'scripts/test-pilot-builds.py',
+                  'scripts/test-plan.py', 'scripts/test-test-plan.py',
+                  'apps/desktop/src-tauri/build.rs',
+                  'apps/desktop/src-tauri/src/development_cpa.rs',
+                  'apps/desktop/src-tauri/development-cpa-artifacts.v1.json')
+        with mock.patch.dict(plan.os.environ, {'GITHUB_ACTIONS': 'false'}):
+            for path in inputs:
+                self.assertNotIn(command, plan.select([path])['commands'])
+            self.assertNotIn(command, plan.select([], full=True)['commands'])
+        with mock.patch.dict(plan.os.environ, {'GITHUB_ACTIONS': 'true'}):
+            for path in inputs:
+                with self.subTest(path=path):
+                    self.assertIn(command, plan.select([path])['commands'])
+            self.assertIn(command, plan.select([], full=True)['commands'])
+            for path in ('docs/validation-routing.md', 'scripts/windows-dev.py'):
+                self.assertNotIn(command, plan.select([path])['commands'])
+
+
     def test_windows_development_runner_does_not_select_product_or_hosted_matrix(self):
         result = plan.select(['scripts/windows-dev.py', 'scripts/windows-dev-host.py',
                               'scripts/test-windows-dev.py', 'scripts/windows-desktop-session.py',

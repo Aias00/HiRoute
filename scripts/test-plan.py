@@ -35,6 +35,11 @@ DIAGNOSTIC_CONTRACTS = (
     "crates/diagnostics/src/identity.rs", "crates/diagnostics/src/error.rs",
 )
 SELECTION_TOOLING = {"scripts/test-plan.py", "scripts/test-test-plan.py"}
+PILOT_CONSUMER_INPUTS = SELECTION_TOOLING | {
+    "scripts/pilot-builds.py", "scripts/test-pilot-builds.py",
+    "apps/desktop/src-tauri/build.rs", "apps/desktop/src-tauri/src/development_cpa.rs",
+    "apps/desktop/src-tauri/development-cpa-artifacts.v1.json",
+}
 LOCAL_GC_TOOLING = {"scripts/local-rust-gc.py", "scripts/test-local-rust-gc.py"}
 WORKER_FIXTURE_TOOLING = {"scripts/test-agent-product-support.py",
                           "scripts/test-native-context-product.py",
@@ -560,6 +565,10 @@ def select(paths, full=False):
         commands.extend([["python3", "scripts/" + name] for name in
                          ("test-validation.py", "test-console-assets.py", "test-windows-dev.py", "test-validation-report.py", "test-local-rust.py", "test-remote-rust.py", "test-validation-schedule.py",
                           "test-ci-run.py", "test-ci-shards.py", "test-desktop-pilot.py", "test-pilot-builds.py")])
+    # Local script checks stay fixture-only. Actions runs this exact required case
+    # through the existing tooling/affected/full gate executor, never a skipped test.
+    if os.environ.get("GITHUB_ACTIONS") == "true" and (full or PILOT_CONSUMER_INPUTS.intersection(paths)):
+        commands.append(["python3", "scripts/test-pilot-builds.py", "--real-consumer"])
     if full or validation_tooling or local_gc_tooling:
         if ["python3", "scripts/test-local-rust.py"] not in commands:
             commands.append(["python3", "scripts/test-local-rust.py"])

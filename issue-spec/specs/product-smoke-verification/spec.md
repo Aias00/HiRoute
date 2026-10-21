@@ -79,6 +79,19 @@ current source/build/artifact proof rather than lower trust checks. Real process
 listener/protocol and independent outcome evidence are required; static goldens/
 fixture self-report/model success text are not actual user content or effects.
 
+Reusable native Desktop build identity MUST bind the exact CPA manifest bytes
+captured and validated at acquisition, resolving the default from the exact
+candidate or an explicit package-relative source. Compilation MUST consume a private
+build-owned snapshot of that same captured buffer. Equal bytes MUST permit reuse
+across source paths and default/explicit selection when all other build inputs
+match. Original source paths MUST NOT be retained in recipes, lease state or public
+evidence. Reuse and startup MUST verify the snapshot and existing artifact
+attestations; later source modification or deletion MUST NOT invalidate an acquired
+build or lease. A fresh acquisition MUST inspect its current input and reject
+missing, unreadable, symbolic-link, special-file or invalid UTF-8 JSON object input,
+including non-finite JSON constants, before starting the managed build. A hardlinked
+regular source is admissible by its captured contents.
+
 A missing essential publish/call step or substituted canned body MUST fail the
 relevant oracle. Evidence-generation integrity is verified before/after launch;
 large artifact verification time is runner overhead, not consumed from product-step
@@ -100,6 +113,16 @@ environment. Missing, changed or conflicting selected evidence MUST fail admissi
   runtime environment without removing or rewriting the other receipts
 - **AND** a missing, corrupt, escaping or conflicting selected receipt remains a
   failure even when another valid receipt has the same executable digest.
+
+#### Scenario: A changed CPA source selects a new build without invalidating an old lease
+
+- **WHEN** an explicit CPA manifest is selected for a reusable Desktop Pilot build and its bytes later change at the same path
+- **THEN** a fresh acquisition has a different build identity, while the old lease remains usable with its verified frozen snapshot even if the source is subsequently deleted.
+
+#### Scenario: Equivalent CPA sources reuse the same frozen build
+
+- **WHEN** different paths or default/explicit selections resolve to equal manifest bytes and all other build inputs match
+- **THEN** acquisition reuses the same verified build without retaining the original source path.
 
 ### Requirement: Validation tracks have independent evidence limits
 
@@ -169,6 +192,8 @@ complete validation when dependent targets were not admitted.
 - [Product control journey](../../../tools/product-e2e/tests/control_shell.rs),
   [oracle](../../../tools/product-e2e/tests/product_oracle.rs), and
   [controlled Gateway runtime](../../../tools/e2e-harness/tests/p0_gateway_runtime.rs).
+- [Desktop Pilot reusable build owner](../../../scripts/pilot-builds.py) and
+  [lifecycle regressions](../../../scripts/test-pilot-builds.py).
 - [Evidence/fixture map](../../../docs/code-map/testing.md) and
   [validation selection](../../../docs/test-selection.md).
 - [Smoke preparation](../../../tools/product-e2e/src/smoke/preparation.rs),
