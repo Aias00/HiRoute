@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Build/lease regressions with fake tools and one bounded real Rust manifest consumer."""
+"""Fixture-only local checks; --real-consumer selects the required bounded Rust CI case."""
 import importlib.util
 import json
 import os
@@ -18,6 +18,28 @@ m = importlib.util.module_from_spec(spec)
 spec.loader.exec_module(m)
 REAL_RUSTC = shutil.which('rustc')
 REAL_PATH = os.environ.get('PATH', '')
+CONSUMER_EVIDENCE = Path(__file__).resolve().parents[1] / 'artifacts/ci/pilot-manifest-consumer'
+
+
+def consumer_step(phase, argv, cwd, env, timeout):
+    """Keep each real-consumer subprocess result outside the disposable fixture."""
+    report = {'phase': phase, 'returncode': None}
+    try:
+        completed = subprocess.run(argv, cwd=cwd, env=env, capture_output=True, timeout=timeout)
+        report.update(returncode=completed.returncode, stdout=completed.stdout, stderr=completed.stderr)
+    except (OSError, subprocess.TimeoutExpired) as error:
+        report.update(error=str(error), stdout=getattr(error, 'stdout', None), stderr=getattr(error, 'stderr', None))
+    for key in ('stdout', 'stderr'):
+        value = report.get(key) or b''
+        report[key] = value.decode('utf-8', errors='replace') if isinstance(value, bytes) else value
+    CONSUMER_EVIDENCE.mkdir(parents=True, exist_ok=True)
+    evidence = CONSUMER_EVIDENCE / (phase + '.json')
+    evidence.write_text(json.dumps(report, indent=2) + '\n')
+    if report['returncode'] != 0:
+        message = 'Real consumer phase %s failed; diagnostics: %s' % (phase, evidence)
+        print(message, file=sys.stderr)
+        raise RuntimeError(message)
+    return completed.stdout
 
 
 class Lifecycle(unittest.TestCase):
@@ -304,8 +326,9 @@ print('fixture build completed')
                                                      data_root=None, process_home=None))
         launch.assert_not_called()
 
-    @unittest.skipUnless(REAL_RUSTC, 'real rustc is required for the bounded manifest consumer')
-    def test_production_build_script_and_embedded_constant_consume_the_captured_snapshot(self):
+    def real_consumer(self):
+        if not REAL_RUSTC:
+            raise RuntimeError('The required real-consumer case needs rustc; it cannot be skipped')
         native = Path(__file__).resolve().parents[1] / 'apps/desktop/src-tauri'
         manifest = self.root / 'private-cpa.json'
         original = b'{"fixture":"captured by real consumer"}\n'
@@ -326,13 +349,14 @@ print('fixture build completed')
             if argv == m.COMMAND:
                 manifest.unlink()  # The consumer must no longer need the ingestion source.
                 consumer_env = dict(env, PATH=REAL_PATH, OUT_DIR=str(output), PROFILE='debug')
-                for src, binary in ((native / 'build.rs', build_script), (source, consumer)):
-                    subprocess.run([REAL_RUSTC, '--edition=2024', str(src), '-o', str(binary)],
-                                   cwd=native, env=consumer_env, check=True, capture_output=True, timeout=60)
-                    if binary == build_script:
-                        subprocess.run([str(binary)], cwd=native, env=consumer_env,
-                                       check=True, capture_output=True, timeout=10)
-                observed.append(subprocess.check_output([str(consumer)], timeout=10))
+                consumer_step('build-script-compile',
+                              [REAL_RUSTC, '--edition=2024', str(native / 'build.rs'), '-o', str(build_script)],
+                              native, consumer_env, 60)
+                consumer_step('build-script-execute', [str(build_script)], native, consumer_env, 10)
+                consumer_step('embedding-compile',
+                              [REAL_RUSTC, '--edition=2024', str(source), '-o', str(consumer)],
+                              native, consumer_env, 60)
+                observed.append(consumer_step('embedding-execute', [str(consumer)], native, consumer_env, 10))
             return start_command(argv, checkout, env, log, handles)
 
         with patch.dict(os.environ, {'HIROUTE_CPA_MANIFEST': str(manifest)}), \
@@ -483,5 +507,57 @@ print('fixture build completed')
                 self.acquire('task-two')
 
 
+class ConsumerRouting(unittest.TestCase):
+    def test_default_discovery_does_not_select_the_real_consumer(self):
+        self.assertNotIn('test_production_build_script_and_embedded_constant_consume_the_captured_snapshot',
+                         unittest.defaultTestLoader.getTestCaseNames(Lifecycle))
+        self.assertNotIn('real_consumer', unittest.defaultTestLoader.getTestCaseNames(Lifecycle))
+
+    def test_required_consumer_fails_for_zero_skipped_or_failed_cases(self):
+        for count, skipped, successful in ((0, [], True), (2, [], True),
+                                           (1, [('case', 'skip')], True), (1, [], False), (1, [], True)):
+            result = types.SimpleNamespace(testsRun=count, skipped=skipped, wasSuccessful=lambda: successful)
+            with self.subTest(count=count, skipped=skipped, successful=successful), \
+                    patch.object(unittest.TextTestRunner, 'run', return_value=result):
+                self.assertEqual(run_real_consumer(), 0 if count == 1 and not skipped and successful else 1)
+
+    def test_missing_real_compiler_is_an_error_not_a_skip(self):
+        with patch.dict(Lifecycle.real_consumer.__globals__, {'REAL_RUSTC': None}):
+            with self.assertRaisesRegex(RuntimeError, 'needs rustc'):
+                Lifecycle('real_consumer').real_consumer()
+
+    def test_failed_subprocess_diagnostics_survive_fixture_cleanup(self):
+        outcomes = (
+            (subprocess.CompletedProcess(['synthetic-consumer'], -9, b'partial output', b'synthetic rejection'),
+             -9, 'partial output', 'synthetic rejection'),
+            (subprocess.TimeoutExpired(['synthetic-consumer'], 10, output=b'partial output', stderr=b'timed out'),
+             None, 'partial output', 'timed out'),
+            (OSError('synthetic launch failure'), None, '', ''),
+        )
+        for outcome, returncode, stdout, stderr in outcomes:
+            with self.subTest(outcome=outcome), tempfile.TemporaryDirectory() as root:
+                evidence = Path(root) / 'evidence'
+                with tempfile.TemporaryDirectory(dir=root) as fixture:
+                    with patch.dict(consumer_step.__globals__, {'CONSUMER_EVIDENCE': evidence}), \
+                            patch.object(subprocess, 'run', side_effect=[outcome]) as run, \
+                            self.assertRaisesRegex(RuntimeError, 'build-script-execute'):
+                        consumer_step('build-script-execute', ['synthetic-consumer'], fixture, {}, 10)
+                    run.assert_called_once()
+                report = json.loads((evidence / 'build-script-execute.json').read_text())
+                self.assertEqual(report['phase'], 'build-script-execute')
+                self.assertEqual(report['returncode'], returncode)
+                self.assertEqual(report['stdout'], stdout)
+                self.assertEqual(report['stderr'], stderr)
+                if isinstance(outcome, Exception):
+                    self.assertEqual(report['error'], str(outcome))
+
+
+def run_real_consumer():
+    result = unittest.TextTestRunner(verbosity=2).run(unittest.TestSuite([Lifecycle('real_consumer')]))
+    return 0 if result.wasSuccessful() and result.testsRun == 1 and not result.skipped else 1
+
+
 if __name__ == '__main__':
+    if sys.argv[1:] == ['--real-consumer']:
+        sys.exit(run_real_consumer())
     unittest.main()

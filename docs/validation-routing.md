@@ -653,6 +653,19 @@ a UTF-8 object without non-finite constants (`NaN` or `Infinity`); Python does n
 duplicate the native manifest schema. Hardlinked regular source files are admitted
 by their captured contents.
 
+`python3 scripts/test-pilot-builds.py` runs the default local fixture suite. It
+checks snapshot bytes/permissions, build-environment wiring, source changes,
+rejection paths and lease/cleanup ownership with fake build and launch tools, even
+when `rustc` is installed. It does not establish native product acceptance.
+The explicit `python3 scripts/test-pilot-builds.py --real-consumer` entry belongs
+to required CI validation, selected through `test-plan.py` for affected manifest
+producer/consumer/tooling paths and full CI plans. It must execute exactly one
+case with a real compiler; a missing compiler, skipped case, empty selection or
+failure is nonzero. Each subprocess phase retains exit, stdout and stderr in
+`artifacts/ci/pilot-manifest-consumer/` before temporary fixture cleanup. The case
+checks the production `build.rs` and embedding declaration after the original
+source is removed; it does not launch Desktop, CPA or a provider.
+
 Use `pilot-build start --lease LEASE --case CASE` to launch each scenario with
 the existing isolated Pilot launcher. It returns the session and socket for
 `pilot-cli`. All scenarios for that lease use the same build. These managed
