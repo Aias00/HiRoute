@@ -58,8 +58,7 @@ impl StartupCapture {
                     format!("{:?}", error.kind()),
                 ),
                 Ok(None) if Instant::now() >= deadline => {
-                    // Regression checkpoint: retain the old timeout's missing evidence.
-                    return Err("hirouted readiness timed out".into());
+                    ("hirouted readiness timed out", "running".to_owned())
                 }
                 Ok(None) => {
                     std::thread::sleep(Duration::from_millis(25));
