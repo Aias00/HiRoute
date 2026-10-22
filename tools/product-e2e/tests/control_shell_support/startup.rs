@@ -2,7 +2,7 @@
 
 use std::fs::{File, OpenOptions};
 use std::io::{self, Read, Seek, SeekFrom, Write};
-use std::os::unix::fs::{DirBuilderExt, FileTypeExt, OpenOptionsExt};
+use std::os::unix::fs::{DirBuilderExt, FileTypeExt, OpenOptionsExt, PermissionsExt};
 use std::path::{Path, PathBuf};
 use std::process::{Child, Command};
 use std::time::{Duration, Instant};
@@ -109,6 +109,7 @@ impl StartupCapture {
             .create(evidence_root)?;
         let directory = tempfile::Builder::new()
             .prefix("control-shell-startup-")
+            .permissions(std::fs::Permissions::from_mode(0o700))
             .tempdir_in(evidence_root)?;
         // Keep even an incomplete export if a later write fails.
         let destination = directory.keep();
