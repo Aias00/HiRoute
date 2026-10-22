@@ -232,6 +232,11 @@ and [Gateway preparation](../../tools/e2e-harness/src/p0/production/candidate.rs
 the exact receipts consumed by admission; same-byte caches from another recipe do
 not replace them. Failed admission retains independent results and missing coverage.
 
+Local/SSH cache admission in [remote-rust.py](../../scripts/remote-rust.py) connects/starts
+sccache under the existing capacity lease and probes effective scratch with a
+unique cache-miss compilation; [local lifecycle coverage](../../scripts/test-local-rust.py)
+includes isolated real-cache cleanup and obsolete-server refusal.
+
 Ordinary local/SSH totals and module reports share Cargo-target attribution in
 [validation-report.py](../../scripts/validation-report.py). The
 [runner regressions](../../scripts/test-remote-rust.py) exercise worker results and

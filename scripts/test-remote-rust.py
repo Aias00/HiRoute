@@ -249,6 +249,7 @@ sys.exit(101 if bad else 0)
                      patch.object(runner.tempfile, 'gettempdir', return_value=str(base.resolve())), \
                      patch.object(runner, 'console_assets') as console, \
                      patch.object(runner, 'MIN_FREE_BYTES', 0), \
+                     patch.object(runner, 'admit_cache_server', return_value={'state': 'ready'}), \
                      patch.object(runner, 'stats', return_value={'max_cache_size': 30 * 1024**3}):
                     console.return_value.preflight.return_value = dict(state='not_required', cases=[])
                     runner.worker(path)
@@ -308,6 +309,41 @@ sys.exit(101 if bad else 0)
                  patch('sys.stdin', io.StringIO(json.dumps(payload))), patch('os.umask'), \
                  self.assertRaisesRegex(RuntimeError, 'immutable report helper mismatch'):
                 exec(runner.BOOTSTRAP, {})
+
+    def test_cache_admission_requires_real_output_and_retains_failure(self):
+        with tempfile.TemporaryDirectory() as parent:
+            root = Path(parent)
+            env = runner.cache_server_environment(root)
+            for failure in (False, True):
+                calls = []
+                def execute(argv, **kwargs):
+                    calls.append(argv)
+                    self.assertEqual(kwargs['env'], env)
+                    self.assertEqual(kwargs['timeout'], 30)
+                    if not failure:
+                        (Path(argv[-1]) / 'libhiroute_cache_probe.rlib').write_bytes(b'library')
+                    return subprocess.CompletedProcess(argv, 0)
+                with patch.object(runner.subprocess, 'run', side_effect=execute):
+                    if failure:
+                        with self.assertRaisesRegex(runner.RunBlocked, 'not stopped'):
+                            runner.admit_cache_server(root, env)
+                    else:
+                        self.assertEqual(runner.admit_cache_server(root, env)['state'], 'ready')
+                self.assertEqual(len(calls), 1)
+                self.assertFalse(any('--stop-server' in call for call in calls))
+                record = json.loads((root / 'cache-admission.json').read_text())
+                self.assertEqual(record['state'], 'blocked' if failure else 'ready')
+                self.assertTrue((root / 'cache-probe.log').exists())
+                self.assertEqual(list(Path(env['TMPDIR']).iterdir()), [])
+
+    def test_cache_admission_bounds_probe_timeout(self):
+        with tempfile.TemporaryDirectory() as parent:
+            root = Path(parent)
+            env = runner.cache_server_environment(root)
+            with patch.object(runner.subprocess, 'run', side_effect=subprocess.TimeoutExpired('sccache', 30)), \
+                 self.assertRaises(runner.RunBlocked):
+                runner.admit_cache_server(root, env)
+            self.assertEqual(json.loads((root / 'cache-admission.json').read_text())['state'], 'blocked')
 
     def test_cache_server_temp_outlives_runs_and_does_not_change_test_environment(self):
         with tempfile.TemporaryDirectory() as parent:
@@ -731,6 +767,7 @@ sys.exit(int((home/'exit-code').read_text()))
                          patch.dict(os.environ, {}, clear=False), contextlib.redirect_stdout(io.StringIO()), \
                          patch.object(runner.tempfile, 'gettempdir', return_value=str(root.resolve())), \
                          patch.object(runner, 'MIN_FREE_BYTES', 0), \
+                         patch.object(runner, 'admit_cache_server', return_value={'state': 'ready'}), \
                          patch.object(runner, 'stats', return_value={'max_cache_size': 30 * 1024**3}):
                         runner.worker(run / 'request.json')
                     result = json.loads((run / 'result.json').read_text())
