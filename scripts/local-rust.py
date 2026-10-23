@@ -339,7 +339,8 @@ def run(store, args, prepare=None, on_record=None):
             row["capacity_acquired_at"] = time.time()
             if row["wait_for_lock"] and shutil.disk_usage(store.root).free < 30 * GIB:
                 raise ValueError("Less than 30 GiB free after waiting; build not started")
-            row["cache_admission"] = remote.admit_cache_server(store.record_path(key).parent, server_env, checkout)
+            row["cache_admission"] = remote.admit_cache_server(
+                store.record_path(key).parent, server_env, checkout, handles=handles)
             before = remote.stats(store.record_path(key).parent, "cache-before", server_env)
             info = private_temp()
             row["temporary_directory"] = info

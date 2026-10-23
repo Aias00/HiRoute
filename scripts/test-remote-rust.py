@@ -9,7 +9,7 @@ import sys
 import tempfile
 import time
 import unittest
-from unittest.mock import patch
+from unittest.mock import Mock, patch
 import hashlib
 import io
 import json
@@ -316,19 +316,19 @@ sys.exit(101 if bad else 0)
             env = runner.cache_server_environment(root)
             for failure in (False, True):
                 calls = []
-                def execute(argv, **kwargs):
+                def execute(argv, checkout, environment, output, handles):
                     calls.append(argv)
-                    self.assertEqual(kwargs['env'], env)
-                    self.assertEqual(kwargs['timeout'], 30)
+                    self.assertEqual(environment, env)
+                    self.assertEqual(handles, [])
                     if not failure:
                         (Path(argv[-1]) / 'libhiroute_cache_probe.rlib').write_bytes(b'library')
-                    return subprocess.CompletedProcess(argv, 0)
-                with patch.object(runner.subprocess, 'run', side_effect=execute):
+                    return Mock(wait=Mock(return_value=0), poll=Mock(return_value=0))
+                with patch.object(runner, 'start_locked_command', side_effect=execute):
                     if failure:
                         with self.assertRaisesRegex(runner.RunBlocked, 'not stopped'):
-                            runner.admit_cache_server(root, env)
+                            runner.admit_cache_server(root, env, handles=[])
                     else:
-                        self.assertEqual(runner.admit_cache_server(root, env)['state'], 'ready')
+                        self.assertEqual(runner.admit_cache_server(root, env, handles=[])['state'], 'ready')
                 self.assertEqual(len(calls), 1)
                 self.assertFalse(any('--stop-server' in call for call in calls))
                 record = json.loads((root / 'cache-admission.json').read_text())
@@ -340,10 +340,74 @@ sys.exit(101 if bad else 0)
         with tempfile.TemporaryDirectory() as parent:
             root = Path(parent)
             env = runner.cache_server_environment(root)
-            with patch.object(runner.subprocess, 'run', side_effect=subprocess.TimeoutExpired('sccache', 30)), \
+            process = Mock(pid=123, wait=Mock(side_effect=[subprocess.TimeoutExpired('sccache', 30), -9]),
+                           poll=Mock(return_value=None))
+            with patch.object(runner, 'start_locked_command', return_value=process), \
+                 patch.object(runner.os, 'killpg') as kill, \
                  self.assertRaises(runner.RunBlocked):
-                runner.admit_cache_server(root, env)
+                runner.admit_cache_server(root, env, handles=[])
+            self.assertEqual(process.wait.call_args_list[0].kwargs, {'timeout': 30})
+            self.assertEqual(process.wait.call_count, 2)
+            kill.assert_called_once_with(123, signal.SIGKILL)
             self.assertEqual(json.loads((root / 'cache-admission.json').read_text())['state'], 'blocked')
+
+    def test_cache_admission_retains_capacity_after_runner_crash(self):
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory)
+            binary = root / 'bin'
+            binary.mkdir()
+            probe = binary / 'sccache'
+            probe.write_text('#!' + sys.executable + '''
+import json,os,sys,time
+from pathlib import Path
+root=Path(os.environ['PROBE_ROOT'])
+try:
+ inherited=os.fstat(int(os.environ['LOCK_FD'])).st_ino==(root/'lock').stat().st_ino
+except OSError:
+ inherited=False
+(root/'ready').write_text(json.dumps({'pid':os.getpid(),'inherited':inherited}))
+while not (root/'release').exists(): time.sleep(.01)
+(Path(sys.argv[-1])/'libhiroute_cache_probe.rlib').write_bytes(b'library')
+''')
+            probe.chmod(0o700)
+            code = '''import fcntl,importlib.util,sys
+from pathlib import Path
+spec=importlib.util.spec_from_file_location('runner',sys.argv[1])
+runner=importlib.util.module_from_spec(spec); spec.loader.exec_module(runner)
+root=Path(sys.argv[2]); handle=(root/'lock').open('a'); fcntl.flock(handle,fcntl.LOCK_EX)
+env=runner.cache_server_environment(root); env['LOCK_FD']=str(handle.fileno())
+runner.admit_cache_server(root,env,handles=[handle])
+'''
+            env = dict(os.environ, PATH=str(binary) + os.pathsep + os.environ['PATH'], PROBE_ROOT=str(root))
+            owner = subprocess.Popen([sys.executable, '-c', code, runner.__file__, str(root)],
+                                     env=env, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+            try:
+                deadline = time.monotonic() + 5
+                while not (root / 'ready').exists() and owner.poll() is None and time.monotonic() < deadline:
+                    time.sleep(.01)
+                state = json.loads((root / 'ready').read_text())
+                self.assertFalse(state['inherited'], 'cache processes must not retain compiler locks')
+                owner.kill()
+                owner.wait(timeout=5)
+                os.kill(state['pid'], 0)
+                with (root / 'lock').open('a') as next_owner:
+                    with self.assertRaises(BlockingIOError):
+                        fcntl.flock(next_owner, fcntl.LOCK_EX | fcntl.LOCK_NB)
+                    (root / 'release').touch()
+                    deadline = time.monotonic() + 5
+                    while True:
+                        try:
+                            fcntl.flock(next_owner, fcntl.LOCK_EX | fcntl.LOCK_NB)
+                            break
+                        except BlockingIOError:
+                            if time.monotonic() >= deadline:
+                                self.fail('probe completion did not release capacity')
+                            time.sleep(.01)
+            finally:
+                (root / 'release').touch()
+                if owner.poll() is None:
+                    owner.kill()
+                owner.wait(timeout=5)
 
     def test_cache_server_temp_outlives_runs_and_does_not_change_test_environment(self):
         with tempfile.TemporaryDirectory() as parent:

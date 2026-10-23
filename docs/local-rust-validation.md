@@ -53,7 +53,10 @@ server's effective scratch; environment metadata and `--show-stats` alone do not
 prove that the server started or uses that directory. An already-running server
 is admitted only if the probe succeeds. No server is automatically stopped.
 Admission failure prevents Cargo execution and retains `cache-admission.json` and
-`cache-probe.log` beside the ordinary result. After all
+`cache-probe.log` beside the ordinary result. The same command monitor retains
+compiler and checkout locks until the probe exits if the runner crashes; cache
+clients and servers never inherit those lock descriptors. A timed-out probe's
+client process group is reaped before releasing capacity. After all
 compiler owners are idle, an operator may hold the host's exclusive capacity
 locks, preserve statistics and explicitly stop/start the server using the recorded
 stable scratch, `TMP`/`TEMP`, idle timeout zero and existing cache configuration.

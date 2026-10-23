@@ -46,7 +46,10 @@ that stable directory and `SCCACHE_IDLE_TIMEOUT=0`. This connects to the existin
 server or starts one using stable scratch, with a 30-second bound; statistics
 alone do not prove startup or scratch health. An
 existing server is never stopped automatically. Failed admission blocks Cargo and
-retains `cache-admission.json` and `cache-probe.log`. Recovery
+retains `cache-admission.json` and `cache-probe.log`.
+The command monitor retains capacity and checkout locks across a worker crash
+until the probe exits, without passing them to cache clients or servers. A
+timed-out probe's client process group is reaped before releasing capacity. Recovery
 requires all compiler owners idle, exclusive account-wide capacity locks, retained
 statistics and an explicit operator stop/start with stable scratch; never recreate
 a deleted run directory or clear cache objects. Before/after stats

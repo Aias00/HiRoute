@@ -185,7 +185,7 @@ def stats(run, name, server_env):
     return data
 
 
-def admit_cache_server(run, server_env, checkout=None):
+def admit_cache_server(run, server_env, checkout=None, *, handles):
     """Connect/start through a compile request and exercise effective server scratch.
 
     --show-stats can succeed with zero statistics when no server exists. A unique
@@ -204,12 +204,17 @@ def admit_cache_server(run, server_env, checkout=None):
             source.write_text("pub const ID: &str = " + json.dumps(uuid.uuid4().hex) + ";\n")
             artifact = directory / "libhiroute_cache_probe.rlib"
             with (run / "cache-probe.log").open("w") as output:
-                probe = subprocess.run(
+                probe = start_locked_command(
                     ["sccache", shutil.which("rustc") or "rustc", "--crate-name", "hiroute_cache_probe",
                      "--crate-type", "lib", "--emit=dep-info,link", str(source), "--out-dir", str(directory)],
-                    cwd=checkout, env=server_env, stdout=output, stderr=subprocess.STDOUT, timeout=30)
-            record["probe_exit"] = probe.returncode
-            if probe.returncode or not artifact.is_file():
+                    checkout, server_env, output, handles)
+                try:
+                    record["probe_exit"] = probe.wait(timeout=30)
+                finally:
+                    if probe.poll() is None:
+                        os.killpg(probe.pid, signal.SIGKILL)
+                        probe.wait()
+            if record["probe_exit"] or not artifact.is_file():
                 raise RuntimeError("cache-miss compilation did not produce a library")
         record["state"] = "ready"
     except (OSError, subprocess.SubprocessError, RuntimeError) as error:
@@ -673,7 +678,8 @@ def worker(request_path):
             result["cache_server_environment"] = {
                 "temporary_directory": server_env["TMPDIR"], "idle_timeout": "0",
             }
-            result["cache_admission"] = admit_cache_server(run, server_env, checkout)
+            result["cache_admission"] = admit_cache_server(
+                run, server_env, checkout, handles=[*slots, reused_lease])
             before = stats(run, "cache-before", server_env)
             if before.get("max_cache_size") != 30 * 1024**3:
                 raise RuntimeError("sccache server must be configured with a 30 GiB cache; do not restart a busy shared server")
