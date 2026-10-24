@@ -26,6 +26,7 @@ pub struct PriceSourceBinding {
     pub source_identity_digest: CanonicalDigest,
     pub source_origin: SourceOrigin,
     pub connection_option_id: Option<String>,
+    pub protocol_endpoint_id: Option<String>,
     pub binding_id: String,
     pub binding_revision: u64,
     pub model_configuration_id: String,
@@ -157,6 +158,7 @@ pub fn preview_source_price_change(
         Some(entry) => entry.source_override = Some(change.after),
         None => entries.push(PriceIndexEntryV1 {
             target: target.clone(),
+            execution_binding_id: Some(change.binding_id.clone()),
             actual_offer_ref: None,
             reference_model_offer_ref: None,
             catalog_rules: vec![],

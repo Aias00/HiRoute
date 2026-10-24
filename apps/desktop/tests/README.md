@@ -61,6 +61,28 @@ proves native authorization, persistence, process cleanup or real model calls.
 | Inspect a model or open its documentation | `desktop.models.documentation-retains-input`; [model-to-route scenario](v3/browser/model-to-route-scenarios.mjs) | Local readiness does not claim inference success; browser failure retains form input; web anchors retain their default action; route creation uses the selected model. |
 | Change model grouping or inspect page controls | `desktop.models.view-switch`, `desktop.presentation.control-layout`; [presentation scenarios](v3/browser/presentation-interactions.mjs) | Production styles preserve model/connection counts, selected model and visible selection. Chinese/English and light/dark checks reject browser-default buttons and horizontal overflow from long recent-session titles at the supported small window. |
 | Try a new model, judge its evidence and follow live routing | `timeline.initial-failure-retry-recovers.*`, `timeline.polls-only-while-displayed-and-visible`, `trust.scoring-states.both-groupings.*`, `quickstart.*.inline-connection-guard.model-change-and-back` in [trial scenarios](v3/visual/new-model-trial-active.mjs) | A failed timeline read keeps its tab, error and Retry until recovery, while only a confirmed empty read hides the tab; polling continues only while the timeline is shown and the window is visible, after one availability probe. Per-model and per-executor groupings both show scoring coverage and complete/partial/awaiting/unscored counts. Changing models, going back or leaving the quick start asks before discarding the inline connection form; Cancel keeps the model and input. `HIROUTE_BROWSER_TRANSPORT=console` runs the same scenarios over the console host. Real feed retrieval, saved trials and live sessions require native acceptance. |
+| Keep selected sessions and delayed excerpts current | [Live session refresh scenarios](v3/visual/session-live-refresh-active.mjs) | Narrow summary refresh preserves list pages, selection and scroll. Visible unresolved excerpts retry independently of timeline digests; hidden/inactive views pause. Production-shaped empty catalogs after cleanup, late responses, externally deleted/expired summaries, reopening and new-request revival preserve current body visibility. |
+| Read exact turn ranges and recover live timeline reads | [Timeline presentation scenarios](v3/visual/timeline-presentation-active.mjs) | Assessment Agent-turn IDs resolve to display coordinates across producer epochs; unavailable or ambiguous identities remain explicit. Transient reads preserve the last view and recover with bounded backoff; real capacity failures require Retry. An extension's selected group and reason survive timeout recovery and a full refresh when a late low score arrives, without a built-in floor or protection claim. Fixed labels occlude moving cards without hiding keyboard focus. |
+
+Run the focused production-component cases with
+`node tests/v3/visual/new-model-trial.mjs <evidence-directory> --session-live-refresh`
+or `--presentation` from the Desktop directory. They use production styles and
+controlled IPC; they do not establish native persistence or real model outcomes.
+
+The focused timeline pricing checks run with
+`node tests/v3/visual/new-model-trial.mjs <evidence-directory> --timeline-pricing`.
+They also run in the default trial suite. Production components must remove a
+provisional row absorbed by exact completed-request membership, retain selection,
+actual keyboard focus and correct counts, and show known API-equivalent subtotals alongside unknown
+contributions in Chinese and English. Mock IPC proves presentation, while the
+native model-save publication journey covers installed price edits, real Gateway
+valuation, frozen history and restart.
+
+Completion focus scenarios exercise overview and lane controls with real keyboard
+and mouse events, including visible keyboard focus. They retain focus on an
+unrelated search field, a surviving turn or the page body instead of moving it
+because selection changed. English/light at 755×600 and Chinese/dark at 1200×813
+use production components and styles; native WebView acceptance remains separate.
 
 The [historical protection and overview scenarios](v3/visual/new-model-trial-protection-active.mjs)
 run with `node tests/v3/visual/new-model-trial.mjs <evidence-directory> --protection`.
@@ -100,6 +122,17 @@ For an interactive presentation regression check, open
 `product-shell.html?checks=presentation` on the fixture server at 755×600 and
 click **Run presentation checks**. It runs the same two required presentation
 scenarios with production styles and reports each result; IPC remains mocked.
+
+The full model-information views run with `node tests/v3/visual/new-model-trial.mjs
+/path/to/evidence --metadata`. They mount production Models, default-intent controls,
+metadata directory and removal dialogs with synthetic IPC. The scenarios cover
+Chinese/English, light/dark, 755×600 and 1200×813, retained edits after read failures,
+stale-cursor restart, four price components and confirmation only after all impact
+pages are reviewed. Actual generated inferred and observed records cover visible
+field markers, linked source/rule reads bound to the selected snapshot, and retry
+after source-read failure. [Fact presentation tests](metadata-facts.test.mjs) preserve
+unknown, conditional, conflicting and not-applicable meanings. Installed CLI/daemon tests separately own persistence and
+actual feed/default/price effects.
 
 ## Session quality presentation
 

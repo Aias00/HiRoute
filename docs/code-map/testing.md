@@ -104,6 +104,11 @@ outside the host's outbound ephemeral range; the parent keeps that lease through
 the isolated child's Gateway shutdown. On Unix it shares the publication fixture's
 per-user address-lock namespace across worktrees and runner temporary directories.
 
+The [Gateway runtime fixture](../../tools/e2e-harness/tests/runtime_support/listeners.rs)
+holds its product and optional control listeners together during preparation,
+then releases both immediately before starting the child. Releasing a `bind(0)`
+probe before choosing the other address can assign both roles the same port.
+
 The [shared product session](../../crates/product-session/src) owns confirmation,
 exact-digest authority and command orchestration tests. Its permit-drop and
 broker-abort cases verify that cancelled callers can retry, while stale permits
@@ -210,6 +215,11 @@ HTTP path or old restore fixture does not prove route revocation or native execu
 Use [HiRoute validation](../../.agents/skills/hiroute-validation/SKILL.md) for the
 current selection, execution, failure or handoff operation. Its routes lead to
 the owning guides; branch convergence remains a separate integration responsibility.
+Hosted prerequisite installation belongs to
+[`ci-prerequisites.py`](../../scripts/ci-prerequisites.py), invoked by the shared
+[`ci-setup` action](../../.github/actions/ci-setup/action.yml).
+[`test-ci-setup.py`](../../scripts/test-ci-setup.py) covers Ubuntu source selection
+and bounded failure handling; the real hosted matrix verifies package installation.
 
 1. Run `python3 scripts/test-plan.py --base <exact-base>`; use `--integration` for
    branch integration. Review affected consumers and explain semantic adjustments.
@@ -436,3 +446,18 @@ still require consumer investigation. Repository ignore rules select publication
 regressions; optional ignored skills are not public-checkout test dependencies.
 See [instruction ownership](../../.agents/README.md)
 for pinned generation and actual host discovery, including the shared validation skill.
+
+Complete-model-data regressions cover [canonical wire identity](../../crates/integrations/src/model_feed/validation.rs),
+[manual versus scoped defaults](../../crates/integrations/src/compute/defaults.rs),
+[source/default commit and restart](../../crates/local-storage/src/control/compute/management/tests/defaults.rs),
+[defaults, metadata pagination and removal dialogs](../../apps/desktop/tests/v3/visual/model-metadata-active.mjs),
+[price activation races](../../crates/daemon/src/control/runtime/prices/tests.rs), and
+[slow shared-session reads](../../crates/product-session/src/commands/model_feed/tests.rs).
+The [producer regressions](../../tools/release-facts/src/feed/tests.rs) reject
+uncommitted and committed same-revision corrections and rollback during bootstrap;
+the [service reopen scenario](../../crates/daemon/src/model_feed/tests.rs) preserves
+settings, acceptance and a captured old snapshot across an embedded v2 data upgrade.
+Directory scenarios use real generated inferred and observed records, including
+snapshot-bound provenance reads and retry; IPC is mocked, not native acceptance.
+The installed HTTPS lifecycle uses complete v2 publications, exact documented cache components,
+frozen main/Worker/Continue execution, removal, restart and embedded absorption.
