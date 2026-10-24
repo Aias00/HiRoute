@@ -247,6 +247,12 @@ Ordinary local/SSH totals and module reports share Cargo-target attribution in
 [runner regressions](../../scripts/test-remote-rust.py) exercise worker results and
 compact waits with nested child summaries, failed and unfinished parents, and multiple targets.
 
+The [control-shell startup fixture](../../tools/product-e2e/tests/control_shell_support/startup.rs)
+retains bounded private failure evidence before temporary-root cleanup; its
+[regressions](../../tools/product-e2e/tests/control_shell_support/startup_tests.rs)
+cover timeout, early exit, normal readiness and incomplete diagnostics. Follow the
+[diagnostic guide](../diagnostic-troubleshooting.md) for retention and interpretation.
+
 Shared private filesystem behavior has one [platform contract suite](../../crates/platform/src/private_fs/tests.rs): exclusive creation, protected handle reads, permission preservation and identity-bound cleanup. Storage and Worker tests keep domain errors, recovery and lifecycle assertions; the native Windows cases additionally exercise ACLs and held handles.
 
 The [Windows iteration route](../validation-routing.md#windows-iteration-and-release-validation)
